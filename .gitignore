@@ -1,0 +1,50 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+.idea/
+.vscode/
+.cursor/
+*.iml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Secrets & local env (keep *.example)
+**/.env
+!**/.env.example
+
+# SQL dumps
+*.sql
+*.sql.bak
+*_backup*.sql
+
+# Node / Umi / Ant Design Pro
+node_modules/
+dist/
+coverage/
+.umi/
+.umi-production/
+.umi-test/
+.umi-undefined/
+.turbopack/
+.temp/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log
+yarn.lock
+.history
+.worktrees
+.wrangler
+requestRecord.mock.js
+screenshot
+.firebase
+.claude/settings.local.json

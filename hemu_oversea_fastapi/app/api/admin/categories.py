@@ -1,0 +1,104 @@
+"""管理端商品分类模块。"""
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.core.db import get_db
+from app.core.deps import require_admin_user
+from app.schemas.common import ApiResponse, success
+from app.schemas.product import (
+    DhCategoryAttrsPublic,
+    DhCategoryAttrsRequest,
+    DhCategoryListRequest,
+    DhCategoryPathPublic,
+    DhCategoryPathRequest,
+    DhCategoryPublic,
+    DhCategorySearchRequest,
+)
+from app.services import products as product_service
+
+router = APIRouter(
+    prefix="/categories",
+    tags=["admin:categories"],
+    dependencies=[Depends(require_admin_user)],
+)
+
+
+@router.post(
+    "/dh/list",
+    response_model=ApiResponse[list[DhCategoryPublic]],
+    summary="查询敦煌商品分类（按父级一层）",
+)
+def list_dh_categories(
+    payload: DhCategoryListRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[DhCategoryPublic]]:
+    """
+    按父类目 ID 查询直接子分类，供前端逐层展开。
+
+    - 不传 / 传空 parent_id：返回一级类目
+    - 传入某 cate_pub_id：返回该类目下的直接子类
+    """
+    items = product_service.list_dh_categories_by_parent(
+        db,
+        parent_id=payload.parent_id,
+    )
+    return success(items)
+
+
+@router.post(
+    "/dh/search",
+    response_model=ApiResponse[list[DhCategoryPublic]],
+    summary="搜索敦煌商品分类",
+)
+def search_dh_categories(
+    payload: DhCategorySearchRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[DhCategoryPublic]]:
+    """
+    按中英文类目名称（或 cate_pub_id）模糊搜索。
+
+    默认仅返回叶子类目，供商品详情下拉搜索选用。
+    """
+    items = product_service.search_dh_categories(
+        db,
+        keyword=payload.keyword,
+        leaf_only=payload.leaf_only,
+        limit=payload.limit,
+    )
+    return success(items)
+
+
+@router.post(
+    "/dh/path",
+    response_model=ApiResponse[DhCategoryPathPublic],
+    summary="查询敦煌商品分类全路径",
+)
+def get_dh_category_path(
+    payload: DhCategoryPathRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[DhCategoryPathPublic]:
+    """
+    按类目主键 ID 获取从根到当前类目的全路径。
+
+    内部调用 dh.category.path.get；失败时回退本地父子回溯。
+    path_name 格式：中文(英文) > 中文(英文) > …
+    """
+    return success(product_service.get_dh_category_path(db, payload.id))
+
+
+@router.post(
+    "/dh/attrs",
+    response_model=ApiResponse[DhCategoryAttrsPublic],
+    summary="查询敦煌叶子类目属性",
+)
+def get_dh_category_attrs(
+    payload: DhCategoryAttrsRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[DhCategoryAttrsPublic]:
+    """
+    按类目主键 ID 获取该叶子类目下的属性及可选/可填属性值。
+
+    内部调用 dh.category.get$2.0。
+    """
+    return success(product_service.get_dh_category_attrs(db, category_id=payload.id))

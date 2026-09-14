@@ -1,0 +1,215 @@
+import { PlusOutlined } from '@ant-design/icons';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { history, useIntl } from '@umijs/max';
+import { App, Button, Popconfirm } from 'antd';
+import React, { useRef } from 'react';
+import { PAGE_SIZE_DEFAULT } from '@/constants/api';
+import { deleteSupplier, fetchSupplierList } from '@/services/admin/suppliers';
+import type { SupplierPublic } from '@/types/api';
+import { formatDateTime } from '@/utils/datetime';
+import {
+  SUPPLIER_CREATE_PATH,
+  supplierDetailPath,
+  supplierEditPath,
+} from '../utils';
+
+type SupplierTableParams = {
+  current?: number;
+  pageSize?: number;
+  keyword?: string;
+};
+
+const SupplierList: React.FC = () => {
+  const intl = useIntl();
+  const { message } = App.useApp();
+  const actionRef = useRef<ActionType | null>(null);
+
+  const columns: ProColumns<SupplierPublic>[] = [
+    {
+      title: intl.formatMessage({
+        id: 'pages.supplier.field.keyword',
+        defaultMessage: '关键词',
+      }),
+      dataIndex: 'keyword',
+      hideInTable: true,
+      fieldProps: {
+        placeholder: intl.formatMessage({
+          id: 'pages.supplier.field.keywordPlaceholder',
+          defaultMessage: '名称 / 编码 / 邮箱 / 电话',
+        }),
+      },
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.supplier.field.code',
+        defaultMessage: '供应商编码',
+      }),
+      dataIndex: 'code',
+      search: false,
+      width: 120,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.supplier.field.name',
+        defaultMessage: '供应商名称',
+      }),
+      dataIndex: 'name',
+      search: false,
+      ellipsis: true,
+      render: (dom, entity) => (
+        <Button
+          type="link"
+          onClick={() => history.push(supplierDetailPath(entity.id))}
+        >
+          {dom}
+        </Button>
+      ),
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.supplier.field.phone',
+        defaultMessage: '联系电话',
+      }),
+      dataIndex: 'phone',
+      search: false,
+      width: 140,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.supplier.field.email',
+        defaultMessage: '邮件地址',
+      }),
+      dataIndex: 'email',
+      search: false,
+      ellipsis: true,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.supplier.field.createdAt',
+        defaultMessage: '创建时间',
+      }),
+      dataIndex: 'created_at',
+      search: false,
+      width: 180,
+      render: (_, record) => formatDateTime(record.created_at),
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.supplier.field.option',
+        defaultMessage: '操作',
+      }),
+      dataIndex: 'option',
+      valueType: 'option',
+      search: false,
+      width: 200,
+      render: (_, record) => [
+        <Button
+          type="link"
+          key="detail"
+          onClick={() => history.push(supplierDetailPath(record.id))}
+        >
+          {intl.formatMessage({
+            id: 'pages.supplier.action.detail',
+            defaultMessage: '查看',
+          })}
+        </Button>,
+        <Button
+          type="link"
+          key="edit"
+          onClick={() => history.push(supplierEditPath(record.id))}
+        >
+          {intl.formatMessage({
+            id: 'pages.supplier.action.edit',
+            defaultMessage: '编辑',
+          })}
+        </Button>,
+        <Popconfirm
+          key="delete"
+          title={intl.formatMessage({
+            id: 'pages.supplier.delete.confirm',
+            defaultMessage: '确认删除该供应商？删除后其下属账号将一并停用。',
+          })}
+          onConfirm={async () => {
+            try {
+              await deleteSupplier(record.id);
+              message.success(
+                intl.formatMessage({
+                  id: 'pages.supplier.delete.success',
+                  defaultMessage: '删除成功',
+                }),
+              );
+              actionRef.current?.reload();
+            } catch {
+              // 错误已由全局拦截器处理
+            }
+          }}
+        >
+          <Button type="link" danger>
+            {intl.formatMessage({
+              id: 'pages.supplier.action.delete',
+              defaultMessage: '删除',
+            })}
+          </Button>
+        </Popconfirm>,
+      ],
+    },
+  ];
+
+  return (
+    <PageContainer>
+      <ProTable<SupplierPublic, SupplierTableParams>
+        headerTitle={intl.formatMessage({
+          id: 'pages.supplier.list.title',
+          defaultMessage: '供应商列表',
+        })}
+        actionRef={actionRef}
+        rowKey="id"
+        search={{
+          labelWidth: 'auto',
+        }}
+        pagination={{
+          defaultPageSize: PAGE_SIZE_DEFAULT,
+          pageSizeOptions: [10, 20, 50, 100],
+          showSizeChanger: true,
+        }}
+        toolBarRender={() => [
+          <Button
+            type="primary"
+            key="create"
+            icon={<PlusOutlined />}
+            onClick={() => history.push(SUPPLIER_CREATE_PATH)}
+          >
+            {intl.formatMessage({
+              id: 'pages.supplier.action.create',
+              defaultMessage: '新建',
+            })}
+          </Button>,
+        ]}
+        request={async (params) => {
+          try {
+            const result = await fetchSupplierList({
+              page: params.current,
+              page_size: params.pageSize,
+              keyword: params.keyword?.trim() || undefined,
+            });
+            return {
+              data: result.items,
+              success: true,
+              total: result.total,
+            };
+          } catch {
+            return {
+              data: [],
+              success: false,
+              total: 0,
+            };
+          }
+        }}
+        columns={columns}
+      />
+    </PageContainer>
+  );
+};
+
+export default SupplierList;
