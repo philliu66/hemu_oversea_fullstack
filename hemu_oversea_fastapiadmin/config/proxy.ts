@@ -4,22 +4,22 @@
  * @doc https://umijs.org/docs/guides/proxy
  */
 export default {
-  /** 本地联调 FastAPI：http://127.0.0.1:8000 */
+  /** 本地联调 FastAPI：http://127.0.0.1:8600（避免与管理端开发端口 8000 冲突） */
   dev: {
     '/api/': {
-      target: 'http://127.0.0.1:8000',
+      target: 'http://127.0.0.1:8600',
       changeOrigin: true,
     },
   },
   test: {
     '/api/': {
-      target: 'http://127.0.0.1:8000',
+      target: 'http://127.0.0.1:8600',
       changeOrigin: true,
     },
   },
   pre: {
     '/api/': {
-      target: 'http://127.0.0.1:8000',
+      target: 'http://127.0.0.1:8600',
       changeOrigin: true,
     },
   },

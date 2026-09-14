@@ -197,7 +197,7 @@ export const layout: RunTimeLayoutConfig = ({
 
 /**
  * @name request 配置，可以配置错误处理
- * 开发环境走 config/proxy → FastAPI(127.0.0.1:8000)；
+ * 开发环境走 config/proxy → FastAPI(127.0.0.1:8600)；
  * 生产环境可改为真实 API 域名。
  * @doc https://umijs.org/docs/max/request#配置
  */

@@ -1,4 +1,4 @@
-# 合木海外 hemu_oversea_fullstack
+# 合木跨境系统 hemu_oversea_fullstack
 
 合木海外的前后端合仓：FastAPI 后端 + Ant Design Pro 管理端。
 
@@ -15,10 +15,12 @@ hemu_oversea_fullstack/
 
 ## 环境要求
 
-| 端 | 要求 |
-| --- | --- |
-| 后端 | Python 3.13+、[uv](https://docs.astral.sh/uv/)、Docker Desktop |
-| 前端 | Node.js 22+、npm |
+
+| 端   | 要求                                                           |
+| --- | ------------------------------------------------------------ |
+| 后端  | Python 3.13+、[uv](https://docs.astral.sh/uv/)、Docker Desktop |
+| 前端  | Node.js 22+、npm                                              |
+
 
 克隆后不要提交本机密钥。后端复制 `hemu_oversea_fastapi/.env.example` 为 `.env`。
 
@@ -40,8 +42,8 @@ alembic upgrade head
 uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8600
 ```
 
-- 探活：http://127.0.0.1:8600/health
-- 文档：http://127.0.0.1:8600/docs
+- 探活：[http://127.0.0.1:8600/health](http://127.0.0.1:8600/health)
+- 文档：[http://127.0.0.1:8600/docs](http://127.0.0.1:8600/docs)
 
 种子账号：`admin` / `admin123456`（管理端）、`operator` / `operator123456`、`user` / `user123456`（App）。
 
@@ -59,7 +61,7 @@ npm install
 npm start
 ```
 
-打开：http://localhost:8000
+打开：[http://localhost:8000](http://localhost:8000)
 
 管理端登录走 `/api/v1/admin/auth/login`，使用后端种子账号 `admin` / `admin123456`（需图形验证码）。
 
@@ -73,4 +75,4 @@ npm start
 - `.venv/`、`node_modules/`、`dist/`、`.umi/`
 - 数据库备份 `*.sql`
 
-远程仓库：https://gitcode.com/superman_1024/hemu_oversea_fullstack
+远程仓库：[https://gitcode.com/superman_1024/hemu_oversea_fullstack](https://gitcode.com/superman_1024/hemu_oversea_fullstack)
