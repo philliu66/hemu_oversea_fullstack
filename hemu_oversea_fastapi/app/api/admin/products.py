@@ -35,7 +35,8 @@ def list_dh_products(
 
     - type：0=全部，1=仅种子商品（默认）
     - state：可选，按状态编码筛选（如 100100）
-    - 支持 item_code / item_name / store_id 筛选
+    - 支持 item_code / item_name / store_id / cate_pub_id 筛选
+    - cate_pub_id：按种子商品分类树筛选，包含选中类目及其下级
     - sort：0=同步时间倒序（默认），1=同步时间正序
     """
     pagination = Pagination(page=payload.page, page_size=payload.page_size)
@@ -47,6 +48,7 @@ def list_dh_products(
             item_code=payload.item_code,
             item_name=payload.item_name,
             store_id=payload.store_id,
+            cate_pub_id=payload.cate_pub_id,
             sort=payload.sort,
             pagination=pagination,
         )

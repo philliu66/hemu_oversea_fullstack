@@ -65,6 +65,7 @@ export default {
   'menu.product.list': '商品列表',
   'menu.product.detail': '商品详情',
   'menu.product.category': '商品分类',
+  'menu.product.seedCategory': '种子商品分类',
   'menu.personnel': '人员管理',
   'menu.personnel.staff': '员工管理',
 
@@ -248,6 +249,12 @@ export default {
   'pages.product.category.loadFailed': '加载商品分类失败',
   'pages.product.category.loadChildrenFailed': '加载子分类失败',
 
+  // —— 种子商品分类 ——
+  'pages.product.seedCategory.title': '种子商品分类',
+  'pages.product.seedCategory.empty': '暂无种子商品分类数据',
+  'pages.product.seedCategory.loadFailed': '加载种子商品分类失败',
+  'pages.product.seedCategory.loadChildrenFailed': '加载子分类失败',
+
   // —— 商品列表 ——
   'pages.product.list.title': '商品列表',
   'pages.product.list.total': '共 {total} 条',
@@ -259,6 +266,9 @@ export default {
   'pages.product.list.field.itemCodePlaceholder': '精确匹配',
   'pages.product.list.field.itemName': '商品标题',
   'pages.product.list.field.itemNamePlaceholder': '模糊匹配',
+  'pages.product.list.field.category': '商品分类',
+  'pages.product.list.field.categoryPlaceholder': '全部',
+  'pages.product.list.loadCategoriesFailed': '加载商品分类失败',
   'pages.product.list.field.store': '店铺',
   'pages.product.list.field.storePlaceholder': '请选择店铺',
   'pages.product.list.field.storeId': '店铺 ID',

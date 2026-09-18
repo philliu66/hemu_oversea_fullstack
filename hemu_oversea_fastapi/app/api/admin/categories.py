@@ -14,6 +14,7 @@ from app.schemas.product import (
     DhCategoryPathRequest,
     DhCategoryPublic,
     DhCategorySearchRequest,
+    DhSeedCategoryPublic,
 )
 from app.services import products as product_service
 
@@ -40,6 +41,29 @@ def list_dh_categories(
     - 传入某 cate_pub_id：返回该类目下的直接子类
     """
     items = product_service.list_dh_categories_by_parent(
+        db,
+        parent_id=payload.parent_id,
+    )
+    return success(items)
+
+
+@router.post(
+    "/dh/seed-list",
+    response_model=ApiResponse[list[DhSeedCategoryPublic]],
+    summary="查询种子商品分类（按父级一层）",
+)
+def list_dh_seed_categories(
+    payload: DhCategoryListRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[DhSeedCategoryPublic]]:
+    """
+    按父类目 ID 查询种子商品（product_dh.is_seed=1）涉及的直接子分类。
+
+    - 不传 / 传空 parent_id：返回一级类目
+    - 传入某 cate_pub_id：返回该类目下仍包含种子商品的直接子类
+    - product_count：根类目由 groupby 汇总向上累计，其余类目为下级商品数合计
+    """
+    items = product_service.list_dh_seed_categories_by_parent(
         db,
         parent_id=payload.parent_id,
     )

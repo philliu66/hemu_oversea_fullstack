@@ -1,13 +1,29 @@
-"""物流相关 API 封装（对接官方 Logistics API 后在此扩展）。"""
+"""物流相关 API。
+
+文档：
+- dh.shipping.template.list$2.0（卖家获取运费模版列表）
+  https://open.dhgate.com/docs/api/detail/f0327a8a79684b138d324b30f39b6777
+"""
 
 from __future__ import annotations
 
-from app.core.errors import bad_request
+from typing import Any
+
 from app.services.dhgate.client import DhgateClient
 
 
-def list_logistics_methods(client: DhgateClient) -> dict:
-    """物流方式列表（待对接官方 method）。"""
-    raise bad_request(
-        "敦煌物流接口尚未对接：请在 app/services/dhgate/logistics.py 中配置官方 method"
+def list_shipping_templates(client: DhgateClient) -> dict[str, Any]:
+    """
+    获取运费模板列表基础信息。
+
+    method: dh.shipping.template.list
+    version: 2.0
+    官方无业务入参，仅公共参数；Java 示例为 POST。
+    列表项 shippingTempId 对应发布入参 shippingModelId。
+    """
+    return client.call(
+        "dh.shipping.template.list",
+        version="2.0",
+        params={},
+        http_method="POST",
     )

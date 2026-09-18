@@ -50,6 +50,15 @@ class DhCategoryPublic(BaseModel):
     is_leaf: bool = Field(description="是否叶子类目（便于前端判断可否继续下钻）")
 
 
+class DhSeedCategoryPublic(DhCategoryPublic):
+    """种子商品涉及的类目，带该类目下种子商品数量。"""
+
+    product_count: int = Field(
+        description="该类目下种子商品数量（含子类目汇总）",
+        ge=0,
+    )
+
+
 class DhCategoryPathRequest(BaseModel):
     id: int = Field(
         description="类目 ID（product_category_dh.id）",
@@ -172,6 +181,13 @@ class DhProductListRequest(BaseModel):
     store_id: int | None = Field(
         default=None,
         description="店铺 ID（精确匹配）",
+    )
+    cate_pub_id: str | None = Field(
+        default=None,
+        description=(
+            "发布类目 ID；传入后筛选该类目及其全部下级类目下的商品，"
+            "不传表示全部类目"
+        ),
     )
     sort: int = Field(
         default=0,

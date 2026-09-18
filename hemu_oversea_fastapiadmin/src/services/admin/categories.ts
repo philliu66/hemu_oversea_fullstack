@@ -6,6 +6,7 @@ import type {
   DhCategoryListParams,
   DhCategoryPathPublic,
   DhCategoryPublic,
+  DhSeedCategoryPublic,
 } from '@/types/api';
 import { unwrapApiData } from '@/utils/http';
 
@@ -39,6 +40,27 @@ export async function fetchDhCategories(
   return requireData(
     unwrapApiData<DhCategoryPublic[]>(res),
     '获取商品分类失败',
+  );
+}
+
+/** POST /api/v1/admin/categories/dh/seed-list */
+export async function fetchDhSeedCategories(
+  params: DhCategoryListParams = {},
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<DhSeedCategoryPublic[]>>(
+    AdminCategoryApi.DH_SEED_LIST,
+    {
+      method: 'POST',
+      data: {
+        parent_id: params.parent_id ?? null,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhSeedCategoryPublic[]>(res),
+    '获取种子商品分类失败',
   );
 }
 

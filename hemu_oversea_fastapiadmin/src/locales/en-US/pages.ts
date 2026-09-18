@@ -65,6 +65,7 @@ export default {
   'menu.product.list': 'Product List',
   'menu.product.detail': 'Product Detail',
   'menu.product.category': 'Categories',
+  'menu.product.seedCategory': 'Seed Categories',
   'menu.personnel': 'Personnel',
   'menu.personnel.staff': 'Staff',
 
@@ -258,6 +259,14 @@ export default {
   'pages.product.category.loadChildrenFailed':
     'Failed to load child categories',
 
+  // —— Seed product category ——
+  'pages.product.seedCategory.title': 'Seed Product Categories',
+  'pages.product.seedCategory.empty': 'No seed product categories',
+  'pages.product.seedCategory.loadFailed':
+    'Failed to load seed product categories',
+  'pages.product.seedCategory.loadChildrenFailed':
+    'Failed to load child categories',
+
   // —— Product list ——
   'pages.product.list.title': 'Product List',
   'pages.product.list.total': '{total} items',
@@ -269,6 +278,9 @@ export default {
   'pages.product.list.field.itemCodePlaceholder': 'Exact match',
   'pages.product.list.field.itemName': 'Title',
   'pages.product.list.field.itemNamePlaceholder': 'Fuzzy match',
+  'pages.product.list.field.category': 'Category',
+  'pages.product.list.field.categoryPlaceholder': 'All',
+  'pages.product.list.loadCategoriesFailed': 'Failed to load categories',
   'pages.product.list.field.store': 'Store',
   'pages.product.list.field.storePlaceholder': 'Select a store',
   'pages.product.list.field.storeId': 'Store ID',

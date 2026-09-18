@@ -2,12 +2,14 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useIntl, useModel } from '@umijs/max';
 import { App, Image, Space, Typography } from 'antd';
+import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import { DH_PRODUCT_STATE_LABEL, DH_PRODUCT_STATES } from '@/constants/product';
+import { fetchDhSeedCategories } from '@/services/admin/categories';
 import { fetchDhProductList } from '@/services/admin/products';
 import { fetchStoreList } from '@/services/admin/stores';
-import type { DhProductPublic, StorePublic } from '@/types/api';
+import type { DhProductPublic, DhSeedCategoryPublic, StorePublic } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
 import { productDetailPath } from '../utils';
 
@@ -18,7 +20,65 @@ type ProductTableParams = {
   item_code?: string;
   item_name?: string;
   store_id?: number | string;
+  cate_pub_id?: string | string[];
 };
+
+type SeedCategoryOption = DefaultOptionType & {
+  isLeaf?: boolean;
+  loading?: boolean;
+  children?: SeedCategoryOption[];
+};
+
+function categoryTitle(item: DhSeedCategoryPublic): string {
+  const cn = item.pub_name_cn?.trim();
+  if (cn) {
+    return cn;
+  }
+  return item.pub_name;
+}
+
+function toSeedCategoryOption(item: DhSeedCategoryPublic): SeedCategoryOption {
+  return {
+    value: item.cate_pub_id,
+    label: `${categoryTitle(item)}（${item.product_count}）`,
+    isLeaf: item.is_leaf,
+  };
+}
+
+function updateCascaderChildren(
+  list: SeedCategoryOption[],
+  targetValue: string,
+  children: SeedCategoryOption[],
+): SeedCategoryOption[] {
+  return list.map((node) => {
+    if (node.value === targetValue) {
+      return {
+        ...node,
+        loading: false,
+        children,
+        isLeaf: children.length === 0 ? true : node.isLeaf,
+      };
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: updateCascaderChildren(node.children, targetValue, children),
+      };
+    }
+    return node;
+  });
+}
+
+function resolveCatePubId(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (Array.isArray(value)) {
+    const last = value.filter(Boolean).at(-1);
+    return last || undefined;
+  }
+  const text = value?.trim();
+  return text || undefined;
+}
 
 function formatPrice(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === '') {
@@ -53,6 +113,74 @@ const ProductList: React.FC = () => {
   const supplierId = initialState?.currentUser?.supplier_id;
   const actionRef = useRef<ActionType | null>(null);
   const [stores, setStores] = useState<StorePublic[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<SeedCategoryOption[]>(
+    [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const items = await fetchDhSeedCategories({});
+        if (!cancelled) {
+          setCategoryOptions(items.map(toSeedCategoryOption));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCategoryOptions([]);
+          message.error(
+            error instanceof Error
+              ? error.message
+              : intl.formatMessage({
+                  id: 'pages.product.list.loadCategoriesFailed',
+                  defaultMessage: '加载商品分类失败',
+                }),
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [intl, message]);
+
+  const loadCategoryData: CascaderProps<SeedCategoryOption>['loadData'] = (
+    selectedOptions,
+  ) => {
+    const targetOption = selectedOptions[selectedOptions.length - 1];
+    if (!targetOption || targetOption.isLeaf || targetOption.children) {
+      return;
+    }
+
+    targetOption.loading = true;
+    setCategoryOptions((prev) => [...prev]);
+
+    void (async () => {
+      try {
+        const items = await fetchDhSeedCategories({
+          parent_id: String(targetOption.value),
+        });
+        setCategoryOptions((prev) =>
+          updateCascaderChildren(
+            prev,
+            String(targetOption.value),
+            items.map(toSeedCategoryOption),
+          ),
+        );
+      } catch (error) {
+        targetOption.loading = false;
+        setCategoryOptions((prev) => [...prev]);
+        message.error(
+          error instanceof Error
+            ? error.message
+            : intl.formatMessage({
+                id: 'pages.product.list.loadCategoriesFailed',
+                defaultMessage: '加载商品分类失败',
+              }),
+        );
+      }
+    })();
+  };
 
   useEffect(() => {
     if (!supplierId) {
@@ -153,6 +281,26 @@ const ProductList: React.FC = () => {
           id: 'pages.product.list.field.itemNamePlaceholder',
           defaultMessage: '模糊匹配',
         }),
+      },
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.product.list.field.category',
+        defaultMessage: '商品分类',
+      }),
+      dataIndex: 'cate_pub_id',
+      hideInTable: true,
+      valueType: 'cascader',
+      fieldProps: {
+        options: categoryOptions,
+        loadData: loadCategoryData,
+        changeOnSelect: true,
+        allowClear: true,
+        placeholder: intl.formatMessage({
+          id: 'pages.product.list.field.categoryPlaceholder',
+          defaultMessage: '全部',
+        }),
+        styles: { popup: { listItem: { width: 180, maxWidth: 180 } } },
       },
     },
     {
@@ -340,6 +488,7 @@ const ProductList: React.FC = () => {
             storeIdRaw === undefined || storeIdRaw === null || storeIdRaw === ''
               ? undefined
               : Number(storeIdRaw);
+          const catePubId = resolveCatePubId(params.cate_pub_id);
 
           const data = await fetchDhProductList({
             type: 1,
@@ -350,6 +499,7 @@ const ProductList: React.FC = () => {
               storeId !== undefined && Number.isInteger(storeId) && storeId > 0
                 ? storeId
                 : undefined,
+            cate_pub_id: catePubId,
             sort: 0,
             page: params.current ?? 1,
             page_size: params.pageSize ?? PAGE_SIZE_DEFAULT,

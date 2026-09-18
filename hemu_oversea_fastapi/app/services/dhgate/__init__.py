@@ -7,8 +7,16 @@ from app.services.dhgate.categories import (
     list_all_categories,
     list_category,
 )
+from app.services.dhgate.album import tweak_and_upload_main_image
 from app.services.dhgate.client import DhgateCallRecord, DhgateClient
-from app.services.dhgate.items import get_item
+from app.services.dhgate.items import (
+    add_item,
+    fission_add_item,
+    get_item,
+    get_item_html,
+    list_item_aftersale,
+)
+from app.services.dhgate.logistics import list_shipping_templates
 from app.services.dhgate.oauth import (
     build_frontend_redirect,
     create_authorize_url,
@@ -37,11 +45,17 @@ __all__ = [
     "get_dhgate_client_by_identifier",
     "get_dhgate_store",
     "get_dhgate_store_by_identifier",
+    "add_item",
+    "fission_add_item",
     "get_item",
+    "get_item_html",
+    "list_item_aftersale",
+    "list_shipping_templates",
     "handle_oauth_callback",
     "list_all_categories",
     "list_category",
     "list_punish",
     "list_punish_brand",
     "refresh_access_token",
+    "tweak_and_upload_main_image",
 ]

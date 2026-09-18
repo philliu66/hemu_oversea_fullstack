@@ -36,6 +36,7 @@ export async function fetchDhProductList(
         item_code: params.item_code,
         item_name: params.item_name,
         store_id: params.store_id,
+        cate_pub_id: params.cate_pub_id,
         sort: params.sort ?? 0,
         page: params.page ?? 1,
         page_size: params.page_size ?? 10,

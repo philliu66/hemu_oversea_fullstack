@@ -120,6 +120,11 @@ export default [
         name: 'category',
         component: './product/category',
       },
+      {
+        path: '/product/seed-category',
+        name: 'seedCategory',
+        component: './product/seed-category',
+      },
     ],
   },
   {

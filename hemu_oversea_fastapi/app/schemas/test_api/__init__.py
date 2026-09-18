@@ -6,6 +6,8 @@ from app.schemas.test_api.commerce import (
 from app.schemas.test_api.dhgate import (
     CategoryGetTestRequest,
     CategoryListTestRequest,
+    ItemFissionAddTestRequest,
+    ItemFissionUpdateInfo,
     ItemGetTestRequest,
     PunishBrandListTestRequest,
     PunishListTestRequest,
@@ -14,6 +16,8 @@ from app.schemas.test_api.dhgate import (
 __all__ = [
     "CategoryGetTestRequest",
     "CategoryListTestRequest",
+    "ItemFissionAddTestRequest",
+    "ItemFissionUpdateInfo",
     "ItemGetTestRequest",
     "ProductSyncItem",
     "ProductSyncTestRequest",

@@ -62,6 +62,7 @@ export const AdminProductApi = {
 /** 管理端商品分类相关路径 */
 export const AdminCategoryApi = {
   DH_LIST: '/api/v1/admin/categories/dh/list',
+  DH_SEED_LIST: '/api/v1/admin/categories/dh/seed-list',
   DH_SEARCH: '/api/v1/admin/categories/dh/search',
   DH_PATH: '/api/v1/admin/categories/dh/path',
   DH_ATTRS: '/api/v1/admin/categories/dh/attrs',

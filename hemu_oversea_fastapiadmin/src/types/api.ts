@@ -217,6 +217,12 @@ export type DhCategoryPublic = {
   is_leaf: boolean;
 };
 
+/** 种子商品分类（与后端 DhSeedCategoryPublic 对齐） */
+export type DhSeedCategoryPublic = DhCategoryPublic & {
+  /** 该类目下种子商品数量（含子类目汇总） */
+  product_count: number;
+};
+
 /** POST /api/v1/admin/categories/dh/path */
 export type DhCategoryPathPublic = {
   id: number;
@@ -312,6 +318,8 @@ export type DhProductListParams = {
   item_code?: string;
   item_name?: string;
   store_id?: number;
+  /** 发布类目 ID；传入后筛选该类目及其下级 */
+  cate_pub_id?: string;
   sort?: DhProductSort;
   page?: number;
   page_size?: number;

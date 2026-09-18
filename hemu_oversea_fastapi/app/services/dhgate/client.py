@@ -29,6 +29,7 @@ logger = logging.getLogger("app")
 HttpMethod = Literal["GET", "POST"]
 _RAW_LOG_MAX_CHARS = 4000
 _SENSITIVE_PARAM_KEYS = frozenset({"access_token", "client_secret"})
+_OMIT_VALUE_PARAM_KEYS = frozenset({"imgBase64"})
 
 
 @dataclass
@@ -50,7 +51,16 @@ def _dhgate_api_url() -> str:
 
 
 def _stringify_params(params: dict) -> dict[str, str]:
-    return {key: str(value) for key, value in params.items() if value is not None}
+    """标量转字符串；dict / list 按敦煌入参要求 JSON 序列化。"""
+    encoded: dict[str, str] = {}
+    for key, value in params.items():
+        if value is None:
+            continue
+        if isinstance(value, (dict, list)):
+            encoded[key] = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        else:
+            encoded[key] = str(value)
+    return encoded
 
 
 def _request_timestamp_ms() -> str:
@@ -69,7 +79,15 @@ def _safe_json_preview(data: dict) -> str:
 
 
 def _public_params(params: dict[str, str]) -> dict[str, str]:
-    return {k: v for k, v in params.items() if k not in _SENSITIVE_PARAM_KEYS}
+    public: dict[str, str] = {}
+    for key, value in params.items():
+        if key in _SENSITIVE_PARAM_KEYS:
+            continue
+        if key in _OMIT_VALUE_PARAM_KEYS:
+            public[key] = f"<omitted len={len(value)}>"
+            continue
+        public[key] = value
+    return public
 
 
 class DhgateClient:
@@ -102,6 +120,7 @@ class DhgateClient:
         version: str,
         params: dict | None = None,
         http_method: HttpMethod = "GET",
+        timeout: float = 30.0,
     ) -> dict:
         access_token = ensure_valid_access_token(self.db, self.store)
         return self._call_once(
@@ -110,6 +129,7 @@ class DhgateClient:
             params=params or {},
             access_token=access_token,
             http_method=http_method,
+            timeout=timeout,
             retried=False,
         )
 
@@ -142,6 +162,7 @@ class DhgateClient:
         params: dict,
         access_token: str,
         http_method: HttpMethod,
+        timeout: float,
         retried: bool,
     ) -> dict:
         request_params = _stringify_params(
@@ -160,13 +181,13 @@ class DhgateClient:
                 response = httpx.get(
                     api_url,
                     params=request_params,
-                    timeout=30.0,
+                    timeout=timeout,
                 )
             else:
                 response = httpx.post(
                     api_url,
                     data=request_params,
-                    timeout=30.0,
+                    timeout=timeout,
                 )
         except httpx.HTTPError as exc:
             logger.exception(
@@ -204,6 +225,7 @@ class DhgateClient:
                 params=params,
                 access_token=self.store.access_token,
                 http_method=http_method,
+                timeout=timeout,
                 retried=True,
             )
 

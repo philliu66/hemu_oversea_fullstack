@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -31,6 +32,7 @@ from app.schemas.product import (
     DhProductSelectedAttrValPublic,
     DhProductSkuPublic,
     DhProductSpecSelfDefPublic,
+    DhSeedCategoryPublic,
 )
 from app.services.dhgate import get_category, get_category_path, get_dhgate_client, get_item
 from app.services.products_dh import _attr_combo_text, _spec_self_def_lookup
@@ -359,6 +361,227 @@ def list_dh_categories_by_parent(
     return [_to_dh_category_public(row) for row in rows]
 
 
+def _to_dh_seed_category_public(
+    row: ProductCategoryDh,
+    *,
+    product_count: int,
+    is_leaf: bool,
+) -> DhSeedCategoryPublic:
+    return DhSeedCategoryPublic(
+        id=row.id,
+        cate_pub_id=row.cate_pub_id,
+        pub_name=row.pub_name,
+        pub_name_cn=row.pub_name_cn,
+        remark=row.remark,
+        leaf=row.leaf,
+        pare_cate_pub_id=row.pare_cate_pub_id,
+        is_leaf=is_leaf,
+        product_count=product_count,
+    )
+
+
+def _orphan_dh_seed_category(
+    cate_pub_id: str,
+    product_count: int,
+) -> DhSeedCategoryPublic:
+    return DhSeedCategoryPublic(
+        id=0,
+        cate_pub_id=cate_pub_id,
+        pub_name=cate_pub_id,
+        pub_name_cn=None,
+        remark=None,
+        leaf="1",
+        pare_cate_pub_id=None,
+        is_leaf=True,
+        product_count=product_count,
+    )
+
+
+def _seed_product_counts_by_cate_pub_id(db: Session) -> dict[str, int]:
+    """product_dh 中 is_seed=1 按 cate_pub_id groupby 的商品数。"""
+    rows = db.execute(
+        select(ProductDh.cate_pub_id, func.count())
+        .where(
+            ProductDh.is_seed == "1",
+            ProductDh.cate_pub_id.isnot(None),
+            ProductDh.cate_pub_id != "",
+        )
+        .group_by(ProductDh.cate_pub_id)
+    ).all()
+    counts: dict[str, int] = {}
+    for cate_pub_id, total in rows:
+        key = str(cate_pub_id or "").strip()
+        if not key:
+            continue
+        counts[key] = int(total or 0)
+    return counts
+
+
+def _build_dh_seed_category_index(
+    db: Session,
+) -> tuple[
+    dict[str, int],
+    dict[str, ProductCategoryDh],
+    dict[str, list[ProductCategoryDh]],
+    dict[str, int],
+]:
+    """
+    构建种子商品类目索引。
+
+    返回：
+    - own_counts: 叶子/商品所属类目的 groupby 数量
+    - by_pub_id: cate_pub_id → 类目行
+    - children_map: 父 cate_pub_id → 直接子类目
+    - subtree_counts: 各类目种子商品数（含全部下级汇总）
+    """
+    own_counts = _seed_product_counts_by_cate_pub_id(db)
+    rows = db.scalars(select(ProductCategoryDh)).all()
+    by_pub_id: dict[str, ProductCategoryDh] = {
+        row.cate_pub_id: row for row in rows
+    }
+    children_map: dict[str, list[ProductCategoryDh]] = defaultdict(list)
+    for row in rows:
+        parent_key = (
+            (row.pare_cate_pub_id or "").strip() or DHGATE_ROOT_PARE_CATE_PUB_ID
+        )
+        children_map[parent_key].append(row)
+
+    subtree_counts: dict[str, int] = defaultdict(int)
+    for cate_pub_id, total in own_counts.items():
+        current = cate_pub_id
+        seen: set[str] = set()
+        while current and current not in seen:
+            seen.add(current)
+            subtree_counts[current] += total
+            row = by_pub_id.get(current)
+            if row is None:
+                break
+            parent = (row.pare_cate_pub_id or "").strip()
+            if not parent or parent == DHGATE_ROOT_PARE_CATE_PUB_ID:
+                break
+            if parent not in by_pub_id:
+                break
+            current = parent
+
+    return own_counts, by_pub_id, children_map, dict(subtree_counts)
+
+
+def _seed_category_sort_key(item: DhSeedCategoryPublic) -> tuple[str, str, str]:
+    return (item.pub_name_cn or "", item.pub_name, item.cate_pub_id)
+
+
+def _seed_category_has_visible_child(
+    cate_pub_id: str,
+    children_map: dict[str, list[ProductCategoryDh]],
+    subtree_counts: dict[str, int],
+) -> bool:
+    return any(
+        subtree_counts.get(child.cate_pub_id, 0) > 0
+        for child in children_map.get(cate_pub_id, [])
+    )
+
+
+def list_dh_seed_categories_by_parent(
+    db: Session,
+    *,
+    parent_id: str | None,
+) -> list[DhSeedCategoryPublic]:
+    """
+    按父类目查询种子商品涉及的直接子类目（一层）。
+
+    仅返回子树中存在 is_seed=1 商品的类目。
+    子类目 product_count 为下级汇总；根类目 product_count 由
+    product_dh groupby cate_pub_id 向上累计得到。
+    """
+    if parent_id is None or not str(parent_id).strip():
+        parent_key = DHGATE_ROOT_PARE_CATE_PUB_ID
+        is_root = True
+    else:
+        parent_key = str(parent_id).strip()
+        is_root = False
+
+    own_counts, by_pub_id, children_map, subtree_counts = (
+        _build_dh_seed_category_index(db)
+    )
+
+    items: list[DhSeedCategoryPublic] = []
+    attached: set[str] = set()
+    for row in children_map.get(parent_key, []):
+        product_count = subtree_counts.get(row.cate_pub_id, 0)
+        if product_count <= 0:
+            continue
+        items.append(
+            _to_dh_seed_category_public(
+                row,
+                product_count=product_count,
+                is_leaf=not _seed_category_has_visible_child(
+                    row.cate_pub_id,
+                    children_map,
+                    subtree_counts,
+                ),
+            )
+        )
+        attached.add(row.cate_pub_id)
+
+    if is_root:
+        for cate_pub_id, product_count in own_counts.items():
+            if product_count <= 0 or cate_pub_id in attached or cate_pub_id in by_pub_id:
+                continue
+            items.append(_orphan_dh_seed_category(cate_pub_id, product_count))
+            attached.add(cate_pub_id)
+
+        for cate_pub_id, product_count in subtree_counts.items():
+            if product_count <= 0 or cate_pub_id in attached:
+                continue
+            row = by_pub_id.get(cate_pub_id)
+            if row is None:
+                continue
+            parent = (
+                (row.pare_cate_pub_id or "").strip()
+                or DHGATE_ROOT_PARE_CATE_PUB_ID
+            )
+            if parent == DHGATE_ROOT_PARE_CATE_PUB_ID or parent in by_pub_id:
+                continue
+            items.append(
+                _to_dh_seed_category_public(
+                    row,
+                    product_count=product_count,
+                    is_leaf=not _seed_category_has_visible_child(
+                        row.cate_pub_id,
+                        children_map,
+                        subtree_counts,
+                    ),
+                )
+            )
+            attached.add(cate_pub_id)
+
+    items.sort(key=_seed_category_sort_key)
+    return items
+
+
+def _cate_pub_ids_for_product_filter(db: Session, cate_pub_id: str) -> list[str]:
+    """选中类目及其全部下级 cate_pub_id（含自身）。"""
+    selected = str(cate_pub_id).strip()
+    if not selected:
+        return []
+
+    _own_counts, _by_pub_id, children_map, _subtree_counts = (
+        _build_dh_seed_category_index(db)
+    )
+    collected: list[str] = []
+    seen: set[str] = set()
+    stack = [selected]
+    while stack:
+        current = stack.pop()
+        if not current or current in seen:
+            continue
+        seen.add(current)
+        collected.append(current)
+        for child in children_map.get(current, []):
+            stack.append(child.cate_pub_id)
+    return collected
+
+
 def search_dh_categories(
     db: Session,
     *,
@@ -650,6 +873,7 @@ def list_dh_products(
     item_code: str | None,
     item_name: str | None,
     store_id: int | None,
+    cate_pub_id: str | None,
     sort: int,
     pagination: Pagination,
 ) -> PageData[DhProductPublic]:
@@ -667,6 +891,12 @@ def list_dh_products(
         filters.append(ProductDh.item_name.ilike(f"%{str(item_name).strip()}%"))
     if store_id is not None:
         filters.append(ProductDh.store_id == store_id)
+    if cate_pub_id is not None and str(cate_pub_id).strip():
+        cate_ids = _cate_pub_ids_for_product_filter(db, str(cate_pub_id).strip())
+        if cate_ids:
+            filters.append(ProductDh.cate_pub_id.in_(cate_ids))
+        else:
+            filters.append(ProductDh.cate_pub_id == str(cate_pub_id).strip())
 
     count_stmt = select(func.count()).select_from(ProductDh)
     stmt = select(ProductDh)
