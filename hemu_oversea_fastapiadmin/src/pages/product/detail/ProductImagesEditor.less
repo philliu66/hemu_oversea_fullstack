@@ -1,0 +1,71 @@
+.product-detail-img-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.product-detail-img-tile {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.product-detail-img-tile .ant-image,
+.product-detail-img-tile .ant-image-img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+}
+
+.product-detail-img-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.product-detail-img-tile:hover .product-detail-img-mask,
+.product-detail-img-tile.is-busy .product-detail-img-mask {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.product-detail-img-mask .ant-btn {
+  color: #fff;
+  width: 28px;
+  height: 28px;
+}
+
+.product-detail-img-mask .ant-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18) !important;
+}
+
+.product-detail-img-diff {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+}
+
+.product-detail-img-diff-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.product-detail-img-diff-item .ant-image-img {
+  max-width: 280px;
+  max-height: 280px;
+  object-fit: contain;
+}

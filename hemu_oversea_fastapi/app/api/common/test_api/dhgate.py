@@ -29,6 +29,7 @@ from app.schemas.test_api.dhgate import (
     ItemAftersaleListTestRequest,
     ItemFissionAddTestRequest,
     ItemGetTestRequest,
+    ItemGroupListTestRequest,
     PunishBrandListTestRequest,
     PunishListTestRequest,
     ShippingTemplateListTestRequest,
@@ -42,6 +43,7 @@ from app.services.dhgate import (
     get_item,
     get_item_html,
     list_item_aftersale,
+    list_item_groups,
     list_punish,
     list_punish_brand,
     list_shipping_templates,
@@ -210,6 +212,34 @@ def test_get_item(
 
 
 @router.post(
+    "/item/group/list",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调] dh.item.group.list$2.0（获取产品组列表）",
+)
+def test_list_item_groups(
+    payload: ItemGroupListTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    获取当前店铺产品组列表（itemGroupList）。
+
+    官方必填 pageNo、pageSize；其余筛选可选。
+    列表项 groupId 对应发布入参 itemGroupId。
+    """
+    client = _test_client(db, payload.store_id)
+    data = list_item_groups(
+        client,
+        page_no=payload.page_no,
+        page_size=payload.page_size,
+        contain_child_group=payload.contain_child_group,
+        parent_group_id=payload.parent_group_id,
+        group_cn_name=payload.group_cn_name,
+        group_en_name=payload.group_en_name,
+    )
+    return success_with_dhgate_raw(client, data)
+
+
+@router.post(
     "/item/html/get",
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调] dh.product.html.get$1.0（产品长描）",
@@ -358,11 +388,11 @@ def test_fission_add_item(
     - target_store_id：目标店铺，发布用该店 token
     - pid：product_dh.id，用于取源店 store_id / item_code / site_id
     - update_info：覆盖种子详情后再组装 dh.item.add 入参（含标题、售后模板、运费模板）
-    - 额外调用 dh.product.html.get 取长描，原样写入发布体 itemBase.htmlContent
+    - 额外调用 dh.product.html.get 取长描，写入发布体 itemBase.htmlContent，接口响应不回传长描
     - 发布前用目标店 token 微调上传第一张主图，替换 itemImgList[0] 的 imgUrl/imgMd5
     - update_info.afterSaleTemplateId / shippingTempId 有值则直接使用，不再拉对应模板列表
     - 未传模板 ID 时：同店沿用原值，跨店取目标店默认售后模板及新手运费模板（modelType=10）
-    - 返回 original_detail、html_content、aftersale_list、shipping_template_list、tweaked_main_image、add_payload、duration_ms
+    - 返回 original_detail、aftersale_list、shipping_template_list、tweaked_main_image、add_payload、duration_ms
     """
     started = time.perf_counter()
     row = db.get(ProductDh, payload.pid)
@@ -387,7 +417,6 @@ def test_fission_add_item(
                 "target_store_id": payload.target_store_id,
                 "update_info": update_info,
                 "original_detail": None,
-                "html_content": None,
                 "aftersale_list": None,
                 "shipping_template_list": None,
                 "tweaked_main_image": None,
@@ -419,7 +448,6 @@ def test_fission_add_item(
         "target_store_id": payload.target_store_id,
         "update_info": update_info,
         "original_detail": result.get("original_detail"),
-        "html_content": result.get("html_content"),
         "aftersale_list": result.get("aftersale_list"),
         "shipping_template_list": result.get("shipping_template_list"),
         "tweaked_main_image": result.get("tweaked_main_image"),

@@ -366,6 +366,30 @@ export type DhProductSkuPublic = {
   attr_combo_text: string | null;
 };
 
+/** 敦煌商品图片（对应 dh.item.get itemImgList） */
+export type DhProductImgPublic = {
+  img_url: string | null;
+  img_md5: string | null;
+  type: string | null;
+  /** 首次微调前的原图；有值且现图也有值则视为已微调 */
+  original?: DhProductImgPublic | null;
+};
+
+/** POST /api/v1/common/utils/dhgate/uploadimg */
+export type DhgateUploadImgPublic = {
+  original: DhProductImgPublic;
+  tweaked: DhProductImgPublic;
+};
+
+export type DhgateUploadImgParams = {
+  store_id: number;
+  img_url?: string | null;
+  img_md5?: string | null;
+  type?: string | null;
+  file?: File | Blob | null;
+  filename?: string;
+};
+
 /** 敦煌商品详情（与后端 DhProductDetailPublic 对齐） */
 export type DhProductDetailPublic = {
   id: number;
@@ -406,10 +430,38 @@ export type DhProductDetailPublic = {
   sync_state_desc: string | null;
   created_at: string;
   updated_at: string;
-  img_list: string[];
+  item_img_list: DhProductImgPublic[];
   sku_list: DhProductSkuPublic[];
   category: DhCategoryPublic | null;
+  item_group_id?: string | null;
   attr_list?: DhProductSelectedAttrPublic[];
   /** 自定义规格（对应 dh.item.get itemSpecSelfDefList） */
   item_spec_self_def_list?: DhProductSpecSelfDefPublic[];
+};
+
+/** 敦煌产品分组（与后端 DhProductGroupPublic 对齐） */
+export type DhProductGroupPublic = {
+  group_id: string;
+  parent_group_id: string | null;
+  group_name: string | null;
+  group_en_name: string | null;
+  remark: string | null;
+  item_count: number;
+  show_in_store: number | null;
+  update_date: string | null;
+  children?: DhProductGroupPublic[];
+};
+
+/** POST /api/v1/admin/product/dh/group/get */
+export type DhProductGroupGetParams = {
+  store_id: number;
+  group_id: string;
+};
+
+/** POST /api/v1/admin/product/dh/group/list */
+export type DhProductGroupListParams = {
+  store_id: number;
+  keyword?: string;
+  page?: number;
+  page_size?: number;
 };

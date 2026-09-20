@@ -120,6 +120,80 @@ def tweak_and_upload_main_image(
     }
 
 
+def _as_relative_img_url(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    for prefix in (
+        "https://image.dhgate.com/",
+        "http://image.dhgate.com/",
+        "https://image.dhgate.com",
+        "http://image.dhgate.com",
+    ):
+        if text.startswith(prefix):
+            text = text[len(prefix) :].lstrip("/")
+            break
+    return text or None
+
+
+def _img_public(
+    *,
+    img_url: Any = None,
+    img_md5: Any = None,
+    img_type: Any = None,
+) -> dict[str, str | None]:
+    md5 = str(img_md5).strip() if img_md5 not in (None, "") else None
+    kind = str(img_type).strip() if img_type not in (None, "") else None
+    return {
+        "img_url": _as_relative_img_url(img_url),
+        "img_md5": md5 or None,
+        "type": kind or None,
+    }
+
+
+def tweak_product_image(
+    client: DhgateClient,
+    *,
+    image_url: str | None = None,
+    image_bytes: bytes | None = None,
+    image_filename: str | None = None,
+    original_img_url: str | None = None,
+    original_img_md5: str | None = None,
+    original_type: str | None = None,
+) -> dict[str, Any]:
+    """微调并上传产品图，返回不加前缀的原图 / 微调后图片信息。"""
+    source_url = str(image_url or original_img_url or "").strip() or None
+    if source_url:
+        result = tweak_and_upload_from_url(
+            client,
+            image_url=source_url,
+            image_filename=image_filename,
+        )
+    elif image_bytes:
+        result = tweak_and_upload_main_image(
+            client,
+            image_bytes=image_bytes,
+            image_filename=image_filename,
+        )
+    else:
+        raise bad_request("请上传 img_base64 文件，或传入 img_url")
+
+    uploaded = result.get("upload") if isinstance(result.get("upload"), dict) else {}
+    original = _img_public(
+        img_url=original_img_url or source_url or result.get("original_image_url"),
+        img_md5=original_img_md5,
+        img_type=original_type,
+    )
+    tweaked = _img_public(
+        img_url=uploaded.get("imgUrl"),
+        img_md5=uploaded.get("imgMd5"),
+        img_type=original_type or uploaded.get("type"),
+    )
+    if not tweaked.get("img_url"):
+        raise bad_request("微调上传成功但未返回 imgUrl")
+    return {"original": original, "tweaked": tweaked}
+
+
 def tweak_and_upload_from_url(
     client: DhgateClient,
     *,

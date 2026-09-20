@@ -7,7 +7,11 @@ from app.services.dhgate.categories import (
     list_all_categories,
     list_category,
 )
-from app.services.dhgate.album import tweak_and_upload_main_image
+from app.services.dhgate.album import (
+    tweak_and_upload_main_image,
+    tweak_product_image,
+    upload_album_image,
+)
 from app.services.dhgate.client import DhgateCallRecord, DhgateClient
 from app.services.dhgate.items import (
     add_item,
@@ -15,6 +19,7 @@ from app.services.dhgate.items import (
     get_item,
     get_item_html,
     list_item_aftersale,
+    list_item_groups,
 )
 from app.services.dhgate.logistics import list_shipping_templates
 from app.services.dhgate.oauth import (
@@ -50,6 +55,7 @@ __all__ = [
     "get_item",
     "get_item_html",
     "list_item_aftersale",
+    "list_item_groups",
     "list_shipping_templates",
     "handle_oauth_callback",
     "list_all_categories",
@@ -58,4 +64,6 @@ __all__ = [
     "list_punish_brand",
     "refresh_access_token",
     "tweak_and_upload_main_image",
+    "tweak_product_image",
+    "upload_album_image",
 ]

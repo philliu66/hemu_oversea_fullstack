@@ -10,7 +10,6 @@ import {
   App,
   Card,
   Cascader,
-  Descriptions,
   Form,
   Image,
   Input,
@@ -22,7 +21,6 @@ import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -31,24 +29,54 @@ import {
   fetchDhCategoryAttrs,
   fetchDhCategoryPath,
 } from '@/services/admin/categories';
-import { fetchDhProductDetail } from '@/services/admin/products';
+import {
+  fetchDhProductDetail,
+  fetchDhProductGroup,
+  fetchDhProductGroupList,
+} from '@/services/admin/products';
 import { fetchStoreList } from '@/services/admin/stores';
 import type {
   DhCategoryAttrPublic,
   DhCategoryPathPublic,
   DhCategoryPublic,
   DhProductDetailPublic,
+  DhProductGroupPublic,
   DhProductSelectedAttrPublic,
   DhProductSkuPublic,
   DhProductSpecSelfDefPublic,
 } from '@/types/api';
+import {
+  DH_PRODUCT_STATE_LABEL,
+  DH_PRODUCT_STATES,
+  type DhProductStateCode,
+} from '@/constants/product';
 import { formatDateTime } from '@/utils/datetime';
+import { buildDhImageUrl } from '@/utils/dhImage';
 import { PRODUCT_LIST_PATH, parseProductId } from '../utils';
 import CategoryAttrsFields from './CategoryAttrsFields';
+import ProductImagesEditor from './ProductImagesEditor';
+
+/** 与敦煌 itemName / 裂变 update_info.item_name 上限一致 */
+const ITEM_NAME_MAX_LENGTH = 140;
 
 type BasicFormValues = {
   store_id?: number;
   category_path?: string[];
+};
+
+type ProductInfoFormValues = {
+  item_name?: string;
+  key_word1?: string;
+  key_word2?: string;
+  key_word3?: string;
+  item_group_path?: string[];
+};
+
+type ItemGroupCascaderOption = DefaultOptionType & {
+  value: string;
+  label: string;
+  isLeaf?: boolean;
+  children?: ItemGroupCascaderOption[];
 };
 
 type CategoryOption = DefaultOptionType & {
@@ -58,13 +86,6 @@ type CategoryOption = DefaultOptionType & {
   isLeaf?: boolean;
   loading?: boolean;
   children?: CategoryOption[];
-};
-
-const displayText = (value?: string | number | null) => {
-  if (value === undefined || value === null || value === '') {
-    return '-';
-  }
-  return value;
 };
 
 /** 官方：自定义产品属性 attrId 默认为 11 */
@@ -117,19 +138,69 @@ function formatPrice(value: string | number | null | undefined): string {
   return num.toFixed(2);
 }
 
-function formatPriceRange(
-  min: string | number | null | undefined,
-  max: string | number | null | undefined,
+function formatProductState(
+  state: string | null | undefined,
+  t: (id: string, defaultMessage: string) => string,
 ): string {
-  const minText = formatPrice(min);
-  const maxText = formatPrice(max);
-  if (minText === '-' && maxText === '-') {
+  const code = String(state || '').trim();
+  if (!code) {
     return '-';
   }
-  if (minText === maxText) {
-    return minText;
+  if ((DH_PRODUCT_STATES as readonly string[]).includes(code)) {
+    return t(
+      `pages.product.list.state.${code}`,
+      DH_PRODUCT_STATE_LABEL[code as DhProductStateCode],
+    );
   }
-  return `${minText} ~ ${maxText}`;
+  return code;
+}
+
+function groupDisplayName(group: DhProductGroupPublic): string {
+  return (group.group_name || group.group_en_name || group.group_id).trim();
+}
+
+function toItemGroupCascaderOption(
+  group: DhProductGroupPublic,
+  formatLabel: (name: string, count: number) => string,
+): ItemGroupCascaderOption {
+  const children = (group.children || [])
+    .filter((item) => Boolean(item.group_id))
+    .map((item) => toItemGroupCascaderOption(item, formatLabel));
+  return {
+    value: group.group_id,
+    label: formatLabel(groupDisplayName(group), group.item_count ?? 0),
+    isLeaf: children.length === 0,
+    children: children.length ? children : undefined,
+  };
+}
+
+function toItemGroupCascaderOptions(
+  groups: DhProductGroupPublic[],
+  formatLabel: (name: string, count: number) => string,
+): ItemGroupCascaderOption[] {
+  return groups
+    .filter((item) => Boolean(item.group_id))
+    .map((item) => toItemGroupCascaderOption(item, formatLabel));
+}
+
+function findItemGroupPath(
+  options: ItemGroupCascaderOption[],
+  targetId: string,
+  path: string[] = [],
+): string[] | undefined {
+  for (const option of options) {
+    const next = [...path, option.value];
+    if (option.value === targetId) {
+      return next;
+    }
+    if (option.children?.length) {
+      const found = findItemGroupPath(option.children, targetId, next);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return undefined;
 }
 
 function formatCategoryLabel(category: DhCategoryPublic): string {
@@ -224,12 +295,77 @@ const ProductDetailPage: React.FC = () => {
   const [attrsLoading, setAttrsLoading] = useState(false);
   const attrsReqRef = useRef(0);
   const originalCategoryIdRef = useRef<number>();
+  const productInfoFormRef = useRef<ProFormInstance<ProductInfoFormValues>>(null);
+  const [itemGroupOptions, setItemGroupOptions] = useState<
+    ItemGroupCascaderOption[]
+  >([]);
+  const itemGroupReqRef = useRef(0);
+  const itemGroupTreeLoadedRef = useRef(false);
+  const [selectedStoreId, setSelectedStoreId] = useState<number>();
 
   const applyCategoryPath = useCallback(async (categoryLocalId: number) => {
     const pathData = await fetchDhCategoryPath(categoryLocalId);
     setCategoryPath(formatCategoryPathDisplay(pathData));
     return pathData;
   }, []);
+
+  const formatItemGroupLabel = useCallback(
+    (name: string, count: number) =>
+      intl.formatMessage(
+        {
+          id: 'pages.product.detail.field.itemGroupOption',
+          defaultMessage: '{name}（{count}）',
+        },
+        { name, count },
+      ),
+    [intl],
+  );
+
+  const loadItemGroups = useCallback(async () => {
+    if (!detail?.store_id || itemGroupTreeLoadedRef.current) {
+      return;
+    }
+    const reqId = itemGroupReqRef.current + 1;
+    itemGroupReqRef.current = reqId;
+    try {
+      const data = await fetchDhProductGroupList({
+        store_id: detail.store_id,
+        page: 1,
+        page_size: 100,
+      });
+      if (itemGroupReqRef.current !== reqId) {
+        return;
+      }
+      const options = toItemGroupCascaderOptions(
+        data.items,
+        formatItemGroupLabel,
+      );
+      itemGroupTreeLoadedRef.current = true;
+      setItemGroupOptions(options);
+      const currentId =
+        productInfoFormRef.current
+          ?.getFieldValue('item_group_path')
+          ?.at(-1) || detail.item_group_id;
+      if (currentId) {
+        const path = findItemGroupPath(options, currentId);
+        if (path) {
+          productInfoFormRef.current?.setFieldValue('item_group_path', path);
+        }
+      }
+    } catch (error) {
+      if (itemGroupReqRef.current !== reqId) {
+        return;
+      }
+      message.error(
+        error instanceof Error
+          ? error.message
+          : intl.formatMessage({
+              id: 'pages.product.detail.itemGroupLoadFailed',
+              defaultMessage: '加载产品分组失败',
+            }),
+      );
+    }
+  }, [detail?.item_group_id, detail?.store_id, formatItemGroupLabel, intl, message]);
 
   const loadCategoryAttrs = useCallback(
     async (
@@ -312,6 +448,7 @@ const ProductDetailPage: React.FC = () => {
 
       setCascaderOptions(nextOptions);
       setInitialCategoryPath(nextCategoryPath);
+      setSelectedStoreId(data.store_id);
       setDetail(data);
       setCustomAttrDrafts(toCustomAttrDrafts(data.attr_list));
       originalCategoryIdRef.current = data.category?.id;
@@ -321,6 +458,7 @@ const ProductDetailPage: React.FC = () => {
       );
     } catch (error) {
       setDetail(undefined);
+      setSelectedStoreId(undefined);
       setCategoryPath(undefined);
       setCascaderOptions([]);
       setInitialCategoryPath(undefined);
@@ -345,14 +483,46 @@ const ProductDetailPage: React.FC = () => {
     void loadDetail();
   }, [loadDetail]);
 
-  const keywords = useMemo(() => {
-    if (!detail) {
-      return [];
+  useEffect(() => {
+    itemGroupTreeLoadedRef.current = false;
+    if (!detail?.store_id || !detail.item_group_id) {
+      setItemGroupOptions([]);
+      return;
     }
-    return [detail.key_word1, detail.key_word2, detail.key_word3].filter(
-      (item): item is string => !!item && item.trim().length > 0,
-    );
-  }, [detail]);
+    const storeId = detail.store_id;
+    const groupId = detail.item_group_id;
+    let cancelled = false;
+    void fetchDhProductGroup(
+      {
+        store_id: storeId,
+        group_id: groupId,
+      },
+      { skipErrorHandler: true },
+    )
+      .then((group) => {
+        if (cancelled || itemGroupTreeLoadedRef.current) {
+          return;
+        }
+        setItemGroupOptions([
+          toItemGroupCascaderOption(group, formatItemGroupLabel),
+        ]);
+      })
+      .catch(() => {
+        if (cancelled || itemGroupTreeLoadedRef.current) {
+          return;
+        }
+        setItemGroupOptions([
+          {
+            value: groupId,
+            label: groupId,
+            isLeaf: true,
+          },
+        ]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.item_group_id, detail?.store_id, formatItemGroupLabel]);
 
   const patchCustomAttrDraft = (
     key: string,
@@ -659,6 +829,11 @@ const ProductDetailPage: React.FC = () => {
                 store_id: detail.store_id,
                 category_path: initialCategoryPath,
               }}
+              onValuesChange={(changed) => {
+                if ('store_id' in changed) {
+                  setSelectedStoreId(changed.store_id);
+                }
+              }}
             >
               <ProFormSelect
                 name="store_id"
@@ -954,200 +1129,186 @@ const ProductDetailPage: React.FC = () => {
           loading={loading}
         >
           {detail ? (
-            <Descriptions
-              column={{ xs: 1, sm: 2, md: 3 }}
-              items={[
-                {
-                  key: 'item_code',
-                  label: intl.formatMessage({
-                    id: 'pages.product.list.field.itemCode',
-                    defaultMessage: '商品编码',
-                  }),
-                  children: (
-                    <Typography.Text copyable>
-                      {detail.item_code}
-                    </Typography.Text>
-                  ),
-                },
-                {
-                  key: 'state',
-                  label: intl.formatMessage({
-                    id: 'pages.product.list.field.state',
-                    defaultMessage: '状态',
-                  }),
-                  children: displayText(detail.state),
-                },
-                {
-                  key: 'price',
-                  label: intl.formatMessage({
-                    id: 'pages.product.list.field.price',
-                    defaultMessage: '价格',
-                  }),
-                  children: formatPriceRange(
-                    detail.price_min,
-                    detail.price_max,
-                  ),
-                },
-                {
-                  key: 'sku_count',
-                  label: intl.formatMessage({
-                    id: 'pages.product.list.field.skuCount',
-                    defaultMessage: 'SKU 数量',
-                  }),
-                  children: displayText(detail.sku_count),
-                },
-                {
-                  key: 'total_inventory',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.inventory',
-                    defaultMessage: '库存合计',
-                  }),
-                  children: displayText(detail.total_inventory),
-                },
-                {
-                  key: 'min_wholesale_qty',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.minWholesaleQty',
-                    defaultMessage: '最小起批量',
-                  }),
-                  children: displayText(detail.min_wholesale_qty),
-                },
-                {
-                  key: 'max_sale_qty',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.maxSaleQty',
-                    defaultMessage: '单次最大购买量',
-                  }),
-                  children: displayText(detail.max_sale_qty),
-                },
-                {
-                  key: 'leading_time',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.leadingTime',
-                    defaultMessage: '备货天数',
-                  }),
-                  children: displayText(detail.leading_time),
-                },
-                {
-                  key: 'site_id',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.siteId',
-                    defaultMessage: '站点',
-                  }),
-                  children: displayText(detail.site_id),
-                },
-                {
-                  key: 'is_seed',
-                  label: intl.formatMessage({
-                    id: 'pages.product.list.field.isSeed',
-                    defaultMessage: '种子',
-                  }),
-                  children:
-                    detail.is_seed === '1'
-                      ? intl.formatMessage({
-                          id: 'pages.product.list.seed.yes',
-                          defaultMessage: '是',
-                        })
-                      : intl.formatMessage({
-                          id: 'pages.product.list.seed.no',
-                          defaultMessage: '否',
-                        }),
-                },
-                {
-                  key: 'keywords',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.keywords',
-                    defaultMessage: '关键词',
-                  }),
-                  span: 3,
-                  children:
-                    keywords.length > 0 ? (
-                      <Space wrap size={[4, 4]}>
-                        {keywords.map((word) => (
-                          <Tag key={word}>{word}</Tag>
-                        ))}
-                      </Space>
-                    ) : (
-                      '-'
+            <ProForm<ProductInfoFormValues>
+              key={`product-info-${detail.id}`}
+              formRef={productInfoFormRef}
+              submitter={false}
+              layout="horizontal"
+              labelCol={{ flex: '110px' }}
+              wrapperCol={{ flex: 1 }}
+              style={{ maxWidth: 920 }}
+              initialValues={{
+                item_name: detail.item_name || '',
+                key_word1: detail.key_word1 || '',
+                key_word2: detail.key_word2 || '',
+                key_word3: detail.key_word3 || '',
+                item_group_path: detail.item_group_id
+                  ? [detail.item_group_id]
+                  : undefined,
+              }}
+            >
+              <Form.Item
+                name="item_name"
+                label={intl.formatMessage({
+                  id: 'pages.product.detail.field.itemName',
+                  defaultMessage: '产品标题',
+                })}
+                required
+                rules={[
+                  {
+                    required: true,
+                    whitespace: true,
+                    message: intl.formatMessage({
+                      id: 'pages.product.detail.field.itemNameRequired',
+                      defaultMessage: '请输入产品标题',
+                    }),
+                  },
+                  {
+                    max: ITEM_NAME_MAX_LENGTH,
+                    message: intl.formatMessage(
+                      {
+                        id: 'pages.product.detail.field.itemNameMax',
+                        defaultMessage: '产品标题最多 {max} 个字符',
+                      },
+                      { max: ITEM_NAME_MAX_LENGTH },
                     ),
-                },
-                {
-                  key: 'short_desc',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.shortDesc',
-                    defaultMessage: '简短介绍',
-                  }),
-                  span: 3,
-                  children: displayText(detail.short_desc),
-                },
-                {
-                  key: 'package',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.package',
-                    defaultMessage: '包装规格',
-                  }),
-                  span: 3,
-                  children: intl.formatMessage(
-                    {
-                      id: 'pages.product.detail.field.packageValue',
-                      defaultMessage:
-                        '{length} × {width} × {height} cm / {weight} kg / {qty} 件',
-                    },
-                    {
-                      length: displayText(detail.length),
-                      width: displayText(detail.width),
-                      height: displayText(detail.height),
-                      weight: displayText(detail.gross_weight),
-                      qty: displayText(detail.packing_quantity),
-                    },
-                  ),
-                },
-                {
-                  key: 'last_synced_at',
-                  label: intl.formatMessage({
-                    id: 'pages.product.list.field.lastSyncedAt',
-                    defaultMessage: '同步时间',
-                  }),
-                  children: formatDateTime(detail.last_synced_at),
-                },
-                {
-                  key: 'sync_state',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.syncState',
-                    defaultMessage: '同步状态',
-                  }),
-                  children:
-                    detail.sync_state_desc ||
-                    (detail.sync_state === '1'
-                      ? intl.formatMessage({
-                          id: 'pages.product.detail.sync.success',
-                          defaultMessage: '成功',
-                        })
-                      : detail.sync_state === '0'
-                        ? intl.formatMessage({
-                            id: 'pages.product.detail.sync.fail',
-                            defaultMessage: '失败',
-                          })
-                        : displayText(detail.sync_state)),
-                },
-                {
-                  key: 'operate_date',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.operateDate',
-                    defaultMessage: '平台修改时间',
-                  }),
-                  children: formatDateTime(detail.operate_date),
-                },
-                {
-                  key: 'expire_date',
-                  label: intl.formatMessage({
-                    id: 'pages.product.detail.field.expireDate',
-                    defaultMessage: '过期时间',
-                  }),
-                  children: formatDateTime(detail.expire_date),
-                },
-              ]}
-            />
+                  },
+                ]}
+                extra={
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(prev, next) =>
+                      prev.item_name !== next.item_name
+                    }
+                  >
+                    {({ getFieldValue }) => {
+                      const used = String(
+                        getFieldValue('item_name') || '',
+                      ).length;
+                      const remaining = Math.max(
+                        0,
+                        ITEM_NAME_MAX_LENGTH - used,
+                      );
+                      return (
+                        <Typography.Text type="secondary">
+                          {intl.formatMessage(
+                            {
+                              id: 'pages.product.detail.field.itemNameRemaining',
+                              defaultMessage: '您还可以输入{count}个字符',
+                            },
+                            { count: remaining },
+                          )}
+                        </Typography.Text>
+                      );
+                    }}
+                  </Form.Item>
+                }
+              >
+                <Input
+                  maxLength={ITEM_NAME_MAX_LENGTH}
+                  allowClear
+                  style={{ width: '100%' }}
+                  placeholder={intl.formatMessage({
+                    id: 'pages.product.detail.field.itemNamePlaceholder',
+                    defaultMessage: '请输入产品标题',
+                  })}
+                />
+              </Form.Item>
+              <Form.Item
+                label={intl.formatMessage({
+                  id: 'pages.product.detail.field.keywords',
+                  defaultMessage: '关键词',
+                })}
+              >
+                <Space size={12} wrap style={{ width: '100%' }}>
+                  <Form.Item name="key_word1" noStyle>
+                    <Input
+                      allowClear
+                      style={{ width: 240 }}
+                      placeholder={intl.formatMessage({
+                        id: 'pages.product.detail.field.keywordPlaceholder',
+                        defaultMessage: '关键词 1',
+                      })}
+                    />
+                  </Form.Item>
+                  <Form.Item name="key_word2" noStyle>
+                    <Input
+                      allowClear
+                      style={{ width: 240 }}
+                      placeholder={intl.formatMessage({
+                        id: 'pages.product.detail.field.keywordPlaceholder2',
+                        defaultMessage: '关键词 2',
+                      })}
+                    />
+                  </Form.Item>
+                  <Form.Item name="key_word3" noStyle>
+                    <Input
+                      allowClear
+                      style={{ width: 240 }}
+                      placeholder={intl.formatMessage({
+                        id: 'pages.product.detail.field.keywordPlaceholder3',
+                        defaultMessage: '关键词 3',
+                      })}
+                    />
+                  </Form.Item>
+                </Space>
+              </Form.Item>
+              <Form.Item
+                name="item_group_path"
+                label={intl.formatMessage({
+                  id: 'pages.product.detail.field.itemGroup',
+                  defaultMessage: '产品分组',
+                })}
+              >
+                <Cascader
+                  options={itemGroupOptions}
+                  changeOnSelect
+                  allowClear
+                  displayRender={(labels) => labels.join(' / ')}
+                  placeholder={intl.formatMessage({
+                    id: 'pages.product.detail.field.itemGroupPlaceholder',
+                    defaultMessage: '请选择产品分组',
+                  })}
+                  style={{ maxWidth: 480, width: '100%' }}
+                  popupMenuColumnStyle={{
+                    width: 220,
+                    maxWidth: 220,
+                  }}
+                  showSearch={{
+                    filter: (inputValue, path) =>
+                      path.some((option) =>
+                        String(option.label ?? '')
+                          .toLowerCase()
+                          .includes(inputValue.trim().toLowerCase()),
+                      ),
+                  }}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      void loadItemGroups();
+                    }
+                  }}
+                />
+              </Form.Item>
+              <Form.Item
+                label={intl.formatMessage({
+                  id: 'pages.product.detail.field.productState',
+                  defaultMessage: '商品状态',
+                })}
+              >
+                {formatProductState(detail.state, (id, defaultMessage) =>
+                  intl.formatMessage({ id, defaultMessage }),
+                )}
+              </Form.Item>
+              <Form.Item
+                label={intl.formatMessage({
+                  id: 'pages.product.list.field.lastSyncedAt',
+                  defaultMessage: '同步时间',
+                })}
+                style={{ marginBottom: 0 }}
+              >
+                {formatDateTime(detail.last_synced_at)}
+              </Form.Item>
+            </ProForm>
           ) : (
             !loading &&
             intl.formatMessage({
@@ -1164,27 +1325,17 @@ const ProductDetailPage: React.FC = () => {
           })}
           loading={loading}
         >
-          {detail?.img_list?.length ? (
-            <Image.PreviewGroup>
-              <Space wrap size={12}>
-                {detail.img_list.map((url) => (
-                  <Image
-                    key={url}
-                    src={url}
-                    alt={detail.item_name || detail.item_code}
-                    width={96}
-                    height={96}
-                    style={{ objectFit: 'cover', borderRadius: 6 }}
-                  />
-                ))}
-              </Space>
-            </Image.PreviewGroup>
-          ) : (
-            !loading &&
-            intl.formatMessage({
-              id: 'pages.product.detail.imagesEmpty',
-              defaultMessage: '暂无图片',
-            })
+          {loading ? null : (
+            <ProductImagesEditor
+              images={detail?.item_img_list}
+              storeId={selectedStoreId ?? detail?.store_id}
+              alt={detail?.item_name || detail?.item_code}
+              onChange={(next) => {
+                setDetail((prev) =>
+                  prev ? { ...prev, item_img_list: next } : prev,
+                );
+              }}
+            />
           )}
         </Card>
 

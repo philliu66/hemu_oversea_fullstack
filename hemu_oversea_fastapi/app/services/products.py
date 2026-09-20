@@ -27,6 +27,8 @@ from app.schemas.product import (
     DhCategoryPathPublic,
     DhCategoryPublic,
     DhProductDetailPublic,
+    DhProductGroupPublic,
+    DhProductImgPublic,
     DhProductPublic,
     DhProductSelectedAttrPublic,
     DhProductSelectedAttrValPublic,
@@ -34,7 +36,13 @@ from app.schemas.product import (
     DhProductSpecSelfDefPublic,
     DhSeedCategoryPublic,
 )
-from app.services.dhgate import get_category, get_category_path, get_dhgate_client, get_item
+from app.services.dhgate import (
+    get_category,
+    get_category_path,
+    get_dhgate_client,
+    get_item,
+    list_item_groups,
+)
 from app.services.products_dh import _attr_combo_text, _spec_self_def_lookup
 
 logger = logging.getLogger("app")
@@ -43,6 +51,8 @@ _DH_IMAGE_PREFIX = "http://image.dhgate.com/100x100/"
 _DH_DETAIL_IMAGE_PREFIX = "https://image.dhgate.com/"
 _DH_CATEGORY_PATH_SEP = " > "
 _BJ = ZoneInfo("Asia/Shanghai")
+_DH_GROUP_SCAN_PAGE_SIZE = 50
+_DH_GROUP_SCAN_MAX_PAGES = 20
 
 # dh.item.get state 编码 → 状态描述
 _DH_PRODUCT_STATE_LABELS: dict[str, str] = {
@@ -130,18 +140,27 @@ def _join_category_path_name(segments: list[str]) -> str:
     return _DH_CATEGORY_PATH_SEP.join(s for s in segments if s)
 
 
-def _list_product_img_urls(detail: dict[str, Any]) -> list[str]:
+def _list_product_item_imgs(detail: dict[str, Any]) -> list[DhProductImgPublic]:
     images = detail.get("itemImgList")
     if not isinstance(images, list):
         return []
-    urls: list[str] = []
+    items: list[DhProductImgPublic] = []
     for img in images:
         if not isinstance(img, dict):
             continue
-        url = _build_dh_detail_image_url(_as_str(img.get("imgUrl")))
-        if url:
-            urls.append(url)
-    return urls
+        img_url = _as_str(img.get("imgUrl"))
+        img_md5 = _as_str(img.get("imgMd5"))
+        img_type = _as_str(img.get("type"))
+        if not img_url and not img_md5:
+            continue
+        items.append(
+            DhProductImgPublic(
+                img_url=img_url,
+                img_md5=img_md5,
+                type=img_type,
+            )
+        )
+    return items
 
 
 def _list_product_skus(detail: dict[str, Any]) -> list[DhProductSkuPublic]:
@@ -999,9 +1018,10 @@ def _to_dh_product_detail_public(
         sync_state_desc=row.sync_state_desc,
         created_at=row.created_at,
         updated_at=row.updated_at,
-        img_list=_list_product_img_urls(detail),
+        item_img_list=_list_product_item_imgs(detail),
         sku_list=sku_list,
         category=_get_product_category(db, cate_pub_id),
+        item_group_id=_as_str(detail.get("itemGroupId")),
         attr_list=_list_product_selected_attrs(detail),
         item_spec_self_def_list=_list_product_spec_self_defs(detail),
     )
@@ -1019,3 +1039,140 @@ def get_dh_product_detail(
     client = get_dhgate_client(db, row.store_id)
     detail = get_item(client, item_code=row.item_code, site_id=row.site_id or "EN")
     return _to_dh_product_detail_public(db, row, detail)
+
+
+def _flatten_item_groups(raw_list: Any) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    if not isinstance(raw_list, list):
+        return items
+    for raw in raw_list:
+        if not isinstance(raw, dict):
+            continue
+        items.append(raw)
+        children = raw.get("itemChildGroupList")
+        if isinstance(children, list) and children:
+            items.extend(_flatten_item_groups(children))
+    return items
+
+
+def _to_dh_product_group_public(raw: dict[str, Any]) -> DhProductGroupPublic:
+    group_id = _as_str(raw.get("groupId"))
+    if not group_id:
+        raise bad_request("敦煌产品分组缺少 groupId")
+    children: list[DhProductGroupPublic] = []
+    raw_children = raw.get("itemChildGroupList")
+    if isinstance(raw_children, list):
+        for child in raw_children:
+            if isinstance(child, dict) and _as_str(child.get("groupId")):
+                children.append(_to_dh_product_group_public(child))
+    return DhProductGroupPublic(
+        group_id=group_id,
+        parent_group_id=_as_str(raw.get("parentGroupId")),
+        group_name=_as_str(raw.get("groupName")),
+        group_en_name=_as_str(raw.get("groupEnName")),
+        remark=_as_str(raw.get("remark")),
+        item_count=_as_int(raw.get("itemCount")) or 0,
+        show_in_store=_as_int(raw.get("showInStore")),
+        update_date=_as_str(raw.get("updateDate")),
+        children=children,
+    )
+
+
+def _group_public_name_hit(item: DhProductGroupPublic, keyword: str) -> bool:
+    query = keyword.strip().lower()
+    if not query:
+        return True
+    names = (item.group_name or "", item.group_en_name or "")
+    return any(query in name.lower() for name in names)
+
+
+def _filter_group_tree(
+    item: DhProductGroupPublic,
+    keyword: str,
+) -> DhProductGroupPublic | None:
+    """保留自身或任一子分组名称命中关键词的节点。"""
+    children = [
+        kept
+        for child in item.children
+        if (kept := _filter_group_tree(child, keyword)) is not None
+    ]
+    if _group_public_name_hit(item, keyword) or children:
+        return item.model_copy(update={"children": children})
+    return None
+
+
+def get_dh_product_group(
+    db: Session,
+    *,
+    store_id: int,
+    group_id: str,
+) -> DhProductGroupPublic:
+    """按分组 ID 查找当前店铺产品分组详情。"""
+    target = str(group_id or "").strip()
+    if not target:
+        raise bad_request("group_id 不能为空")
+
+    client = get_dhgate_client(db, store_id)
+    page = 1
+    while page <= _DH_GROUP_SCAN_MAX_PAGES:
+        data = list_item_groups(
+            client,
+            page_no=page,
+            page_size=_DH_GROUP_SCAN_PAGE_SIZE,
+            contain_child_group=True,
+        )
+        groups = _flatten_item_groups(data.get("itemGroupList"))
+        for raw in groups:
+            if _as_str(raw.get("groupId")) == target:
+                return _to_dh_product_group_public(raw)
+
+        count = _as_int(data.get("count")) or 0
+        page_total = _as_int(data.get("pageTotal")) or 0
+        if not groups:
+            break
+        if page_total and page >= page_total:
+            break
+        if page * _DH_GROUP_SCAN_PAGE_SIZE >= count > 0:
+            break
+        page += 1
+
+    raise not_found("产品分组不存在")
+
+
+def list_dh_product_groups(
+    db: Session,
+    *,
+    store_id: int,
+    keyword: str | None,
+    pagination: Pagination,
+) -> PageData[DhProductGroupPublic]:
+    """分页查询当前店铺产品分组（默认含子分组）。"""
+    client = get_dhgate_client(db, store_id)
+    query = str(keyword or "").strip() or None
+    data = list_item_groups(
+        client,
+        page_no=pagination.page,
+        page_size=pagination.page_size,
+        contain_child_group=True,
+    )
+    items: list[DhProductGroupPublic] = []
+    raw_list = data.get("itemGroupList")
+    if isinstance(raw_list, list):
+        for raw in raw_list:
+            if isinstance(raw, dict) and _as_str(raw.get("groupId")):
+                items.append(_to_dh_product_group_public(raw))
+    if query:
+        items = [
+            kept
+            for item in items
+            if (kept := _filter_group_tree(item, query)) is not None
+        ]
+    total = _as_int(data.get("count"))
+    if total is None or query:
+        total = len(items)
+    return PageData(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )

@@ -3,6 +3,8 @@
 文档：
 - dh.item.get$2.0（卖家获取产品详情）
   https://open.dhgate.com/docs/api/detail/7ef9fd6dd5374492babbe5a74894b343
+- dh.item.group.list$2.0（获取产品组列表）
+  https://open.dhgate.com/docs/api/detail/79ddc34ed44347058fda6f7742db63b9
 - dh.product.html.get$1.0（获取产品长描内容）
   https://open.dhgate.com/docs/api/detail/0c7a6c7045f44a5c97cc44bc0e822fce
 - dh.item.add$2.0（卖家发布产品信息）
@@ -156,6 +158,54 @@ def get_item(
     )
 
 
+def list_item_groups(
+    client: DhgateClient,
+    *,
+    page_no: int = 1,
+    page_size: int = 20,
+    contain_child_group: bool | None = None,
+    parent_group_id: str | None = None,
+    group_cn_name: str | None = None,
+    group_en_name: str | None = None,
+) -> dict[str, Any]:
+    """
+    获取卖家产品组列表。
+
+    method: dh.item.group.list
+    version: 2.0
+    官方必填 pageNo、pageSize；Java 示例为 POST。
+    返回 itemGroupList、count、pageTotal；列表项 groupId 对应发布入参 itemGroupId。
+    containChildGroup=true 时列表项带 itemChildGroupList 子分组。
+    """
+    if page_no < 1:
+        raise bad_request("page_no 不能小于 1")
+    if page_size < 1 or page_size > 200:
+        raise bad_request("page_size 须在 1～200 之间")
+
+    include_children = True if contain_child_group is None else contain_child_group
+    params: dict[str, Any] = {
+        "pageNo": page_no,
+        "pageSize": page_size,
+        "containChildGroup": "true" if include_children else "false",
+    }
+    parent_id = str(parent_group_id or "").strip()
+    if parent_id:
+        params["parentGroupId"] = parent_id
+    cn_name = str(group_cn_name or "").strip()
+    if cn_name:
+        params["groupCnName"] = cn_name
+    en_name = str(group_en_name or "").strip()
+    if en_name:
+        params["groupEnName"] = en_name
+
+    return client.call(
+        "dh.item.group.list",
+        version="2.0",
+        params=params,
+        http_method="POST",
+    )
+
+
 def get_item_html(
     client: DhgateClient,
     *,
@@ -247,7 +297,6 @@ def fission_add_item(
     不抛业务异常：失败时 error 为原因，同时尽量带回 original_detail / add_payload。
     """
     original_detail: dict[str, Any] | None = None
-    html_content: Any = None
     add_payload: dict[str, Any] | None = None
     aftersale_list: Any = None
     shipping_template_list: Any = None
@@ -264,6 +313,7 @@ def fission_add_item(
             item_code=item_code,
             site_id=site_id,
         )
+        html_content = None
         if isinstance(html_data, dict) and "htmlContent" in html_data:
             html_content = html_data.get("htmlContent")
         updated = apply_fission_update_info(original_detail, update_info)
@@ -295,11 +345,10 @@ def fission_add_item(
         added = add_item(target_client, add_payload)
         return {
             "original_detail": original_detail,
-            "html_content": html_content,
             "aftersale_list": aftersale_list,
             "shipping_template_list": shipping_template_list,
             "tweaked_main_image": tweaked_main_image,
-            "add_payload": add_payload,
+            "add_payload": _public_add_payload(add_payload),
             "added": added,
             "error": None,
             "error_detail": None,
@@ -307,15 +356,25 @@ def fission_add_item(
     except AppError as exc:
         return {
             "original_detail": original_detail,
-            "html_content": html_content,
             "aftersale_list": aftersale_list,
             "shipping_template_list": shipping_template_list,
             "tweaked_main_image": tweaked_main_image,
-            "add_payload": add_payload,
+            "add_payload": _public_add_payload(add_payload),
             "added": added,
             "error": _fission_error_message(exc),
             "error_detail": _fission_error_detail(exc),
         }
+
+
+def _public_add_payload(add_payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    """接口回传发布体时去掉长描，避免把 htmlContent 打印出来。"""
+    if not isinstance(add_payload, dict):
+        return add_payload
+    public = deepcopy(add_payload)
+    item_base = public.get("itemBase")
+    if isinstance(item_base, dict):
+        item_base.pop("htmlContent", None)
+    return public
 
 
 def _apply_aftersale_template_for_target(

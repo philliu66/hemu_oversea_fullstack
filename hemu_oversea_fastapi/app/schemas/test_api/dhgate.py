@@ -48,6 +48,32 @@ class CategoryPathGetTestRequest(StoreIdBody):
     )
 
 
+class ItemGroupListTestRequest(StoreIdBody):
+    """获取当前店铺产品组列表。"""
+
+    page_no: int = Field(default=1, ge=1, description="当前页页码，从 1 开始")
+    page_size: int = Field(default=20, ge=1, le=200, description="每页条数，1～200")
+    contain_child_group: bool | None = Field(
+        default=None,
+        description="是否包含子组；true 含子组，false 不含，不传则走官方默认 false",
+    )
+    parent_group_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="产品组父类 ID（parentGroupId）",
+    )
+    group_cn_name: str | None = Field(
+        default=None,
+        max_length=128,
+        description="产品组中文名称",
+    )
+    group_en_name: str | None = Field(
+        default=None,
+        max_length=128,
+        description="产品组英文名称",
+    )
+
+
 class ItemAftersaleListTestRequest(StoreIdBody):
     """获取当前店铺售后模板列表，无额外业务入参。"""
 

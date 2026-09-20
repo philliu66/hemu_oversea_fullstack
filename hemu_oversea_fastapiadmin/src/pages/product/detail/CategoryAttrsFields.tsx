@@ -6,9 +6,9 @@ import type {
   DhCategoryAttrValPublic,
   DhProductSelectedAttrPublic,
 } from '@/types/api';
+import { buildDhImageUrl } from '@/utils/dhImage';
 
 const CUSTOM_NAME_SET = new Set(['custom', '自定义', 'other', '其它', '其他']);
-const DH_IMAGE_PREFIX = 'https://image.dhgate.com/';
 
 type CustomAttrRow = {
   key: string;
@@ -105,17 +105,6 @@ function pickValueAttrName(item: {
     item.attr_name?.trim() ||
     ''
   );
-}
-
-function toImageUrl(path?: string | null): string | undefined {
-  const text = path?.trim();
-  if (!text) {
-    return undefined;
-  }
-  if (text.startsWith('http://') || text.startsWith('https://')) {
-    return text;
-  }
-  return `${DH_IMAGE_PREFIX}${text.replace(/^\//, '')}`;
 }
 
 function emptyDraft(): AttrDraft {
@@ -547,7 +536,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                       .filter((item) => !isCustomOption(item))
                       .map((item) => {
                         const pic = showPic
-                          ? toImageUrl(item.pic_url)
+                          ? buildDhImageUrl(item.pic_url)
                           : undefined;
                         return (
                           <Checkbox

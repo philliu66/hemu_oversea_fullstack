@@ -57,6 +57,8 @@ export const AdminStoreApi = {
 export const AdminProductApi = {
   DH_PRODUCT_LIST: '/api/v1/admin/product/dh/list',
   DH_PRODUCT_DETAIL: '/api/v1/admin/product/dh/detail',
+  DH_PRODUCT_GROUP_GET: '/api/v1/admin/product/dh/group/get',
+  DH_PRODUCT_GROUP_LIST: '/api/v1/admin/product/dh/group/list',
 } as const;
 
 /** 管理端商品分类相关路径 */
@@ -66,6 +68,11 @@ export const AdminCategoryApi = {
   DH_SEARCH: '/api/v1/admin/categories/dh/search',
   DH_PATH: '/api/v1/admin/categories/dh/path',
   DH_ATTRS: '/api/v1/admin/categories/dh/attrs',
+} as const;
+
+/** 全局工具类路径 */
+export const CommonUtilsApi = {
+  DHGATE_UPLOAD_IMG: '/api/v1/common/utils/dhgate/uploadimg',
 } as const;
 
 /** 列表默认分页大小 */

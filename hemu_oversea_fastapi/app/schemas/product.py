@@ -324,6 +324,17 @@ class DhProductSkuPublic(BaseModel):
     )
 
 
+class DhProductImgPublic(BaseModel):
+    """产品图片（对应 dh.item.get itemImgList）。"""
+
+    img_url: str | None = Field(
+        default=None,
+        description="官方 imgUrl，相对路径原样返回、不加前缀",
+    )
+    img_md5: str | None = Field(default=None, description="官方 imgMd5")
+    type: str | None = Field(default=None, description="官方 type")
+
+
 class DhProductDetailPublic(BaseModel):
     """敦煌商品详情（前端展示必要字段，不含 raw/ext 等大字段）。"""
 
@@ -379,9 +390,12 @@ class DhProductDetailPublic(BaseModel):
     sync_state_desc: str | None = Field(default=None, description="同步状态描述")
     created_at: datetime
     updated_at: datetime
-    img_list: list[str] = Field(
+    item_img_list: list[DhProductImgPublic] = Field(
         default_factory=list,
-        description="商品图片完整 URL 列表（按 sort 升序，前缀 https://image.dhgate.com/）",
+        description=(
+            "产品图片列表（对应 dh.item.get itemImgList）："
+            "img_url / img_md5 / type 为官方原值，img_url 不加前缀"
+        ),
     )
     sku_list: list[DhProductSkuPublic] = Field(
         default_factory=list,
@@ -390,6 +404,10 @@ class DhProductDetailPublic(BaseModel):
     category: DhCategoryPublic | None = Field(
         default=None,
         description="所属发布类目（按 cate_pub_id 关联 product_category_dh）",
+    )
+    item_group_id: str | None = Field(
+        default=None,
+        description="产品分组 ID（itemGroupId）",
     )
     attr_list: list[DhProductSelectedAttrPublic] = Field(
         default_factory=list,
@@ -401,4 +419,44 @@ class DhProductDetailPublic(BaseModel):
     item_spec_self_def_list: list[DhProductSpecSelfDefPublic] = Field(
         default_factory=list,
         description="自定义规格列表（itemSpecSelfDefList）",
+    )
+
+
+class DhProductGroupGetRequest(BaseModel):
+    store_id: int = Field(description="店铺 ID，用于取该店 token", ge=1)
+    group_id: str = Field(
+        min_length=1,
+        max_length=64,
+        description="产品分组 ID（groupId / itemGroupId）",
+    )
+
+
+class DhProductGroupListRequest(BaseModel):
+    store_id: int = Field(description="店铺 ID，用于取该店 token", ge=1)
+    keyword: str | None = Field(
+        default=None,
+        max_length=128,
+        description="按分组中英文名称筛选，含子分组（可选）",
+    )
+    page: int = Field(default=1, ge=1, description="页码，从 1 开始")
+    page_size: int = Field(default=20, ge=1, le=100, description="每页条数")
+
+
+class DhProductGroupPublic(BaseModel):
+    """敦煌产品分组（对应 dh.item.group.list itemGroupList）。"""
+
+    group_id: str = Field(description="产品分组 ID（groupId，对应发布 itemGroupId）")
+    parent_group_id: str | None = Field(default=None, description="父分组 ID")
+    group_name: str | None = Field(default=None, description="分组中文名称")
+    group_en_name: str | None = Field(default=None, description="分组英文名称")
+    remark: str | None = Field(default=None, description="备注")
+    item_count: int = Field(default=0, ge=0, description="分组下产品数量")
+    show_in_store: int | None = Field(
+        default=None,
+        description="是否在店铺展示：1=是，0=否",
+    )
+    update_date: str | None = Field(default=None, description="平台更新时间")
+    children: list["DhProductGroupPublic"] = Field(
+        default_factory=list,
+        description="子分组列表（对应 itemChildGroupList）",
     )
