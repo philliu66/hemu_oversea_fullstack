@@ -11,6 +11,7 @@ from app.services.dhgate.album import (
     tweak_and_upload_main_image,
     tweak_product_image,
     upload_album_image,
+    upload_product_image,
 )
 from app.services.dhgate.client import DhgateCallRecord, DhgateClient
 from app.services.dhgate.items import (
@@ -66,4 +67,5 @@ __all__ = [
     "tweak_and_upload_main_image",
     "tweak_product_image",
     "upload_album_image",
+    "upload_product_image",
 ]

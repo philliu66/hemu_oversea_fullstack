@@ -1,20 +1,20 @@
-import type { ProColumns, ProFormInstance } from '@ant-design/pro-components';
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   PageContainer,
   ProForm,
   ProFormSelect,
-  ProTable,
 } from '@ant-design/pro-components';
 import { history, useIntl, useModel, useParams } from '@umijs/max';
 import {
   App,
+  Button,
   Card,
   Cascader,
+  Divider,
   Form,
-  Image,
   Input,
   Space,
-  Tag,
   Typography,
 } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
@@ -42,8 +42,6 @@ import type {
   DhProductDetailPublic,
   DhProductGroupPublic,
   DhProductSelectedAttrPublic,
-  DhProductSkuPublic,
-  DhProductSpecSelfDefPublic,
 } from '@/types/api';
 import {
   DH_PRODUCT_STATE_LABEL,
@@ -51,10 +49,11 @@ import {
   type DhProductStateCode,
 } from '@/constants/product';
 import { formatDateTime } from '@/utils/datetime';
-import { buildDhImageUrl } from '@/utils/dhImage';
 import { PRODUCT_LIST_PATH, parseProductId } from '../utils';
 import CategoryAttrsFields from './CategoryAttrsFields';
 import ProductImagesEditor from './ProductImagesEditor';
+import SpecAttrsFields from './SpecAttrsFields';
+import SpecSkuTable from './SpecSkuTable';
 
 /** 与敦煌 itemName / 裂变 update_info.item_name 上限一致 */
 const ITEM_NAME_MAX_LENGTH = 140;
@@ -90,13 +89,85 @@ type CategoryOption = DefaultOptionType & {
 
 /** 官方：自定义产品属性 attrId 默认为 11 */
 const DH_CUSTOM_PRODUCT_ATTR_ID = '11';
+/** 发布接口：自定义属性最多 20 个，名称/值不超过 40 字符 */
+const DH_CUSTOM_ATTR_MAX_COUNT = 20;
+const DH_CUSTOM_ATTR_MAX_LENGTH = 40;
 
 function isCustomProductAttr(attr: DhProductSelectedAttrPublic) {
   return String(attr.attr_id) === DH_CUSTOM_PRODUCT_ATTR_ID;
 }
 
+function isPriceProductAttr(attr: DhProductSelectedAttrPublic) {
+  return String(attr.is_price_attr) === '1';
+}
+
 function categoryProductAttrs(list?: DhProductSelectedAttrPublic[]) {
   return (list || []).filter((item) => !isCustomProductAttr(item));
+}
+
+/** 影响 SKU 的价格规格属性（is_price_attr=1） */
+function priceProductAttrs(list?: DhProductSelectedAttrPublic[]) {
+  return categoryProductAttrs(list).filter(isPriceProductAttr);
+}
+
+/** 普通产品属性（非价格规格、非自定义 attrId=11） */
+function nonPriceProductAttrs(list?: DhProductSelectedAttrPublic[]) {
+  return categoryProductAttrs(list).filter((item) => !isPriceProductAttr(item));
+}
+
+/** 写入 / 覆盖指定属性值的 pic_url；若属性值不存在则追加 */
+function patchAttrValuePic(
+  list: DhProductSelectedAttrPublic[] | undefined,
+  attrId: string,
+  attrValId: string,
+  picUrl: string | null,
+): DhProductSelectedAttrPublic[] {
+  const source = list || [];
+  let foundAttr = false;
+  const next = source.map((attr) => {
+    if (String(attr.attr_id) !== String(attrId)) {
+      return attr;
+    }
+    foundAttr = true;
+    let foundVal = false;
+    const values = (attr.values || []).map((item) => {
+      if (String(item.attr_val_id) !== String(attrValId)) {
+        return item;
+      }
+      foundVal = true;
+      return { ...item, pic_url: picUrl };
+    });
+    if (!foundVal) {
+      values.push({
+        attr_val_id: attrValId,
+        attr_name: attr.attr_name,
+        attr_name_cn: attr.attr_name_cn,
+        line_attrval_name: null,
+        line_attrval_name_cn: null,
+        pic_url: picUrl,
+      });
+    }
+    return { ...attr, values };
+  });
+  if (!foundAttr) {
+    next.push({
+      attr_id: attrId,
+      attr_name: null,
+      attr_name_cn: null,
+      is_price_attr: '1',
+      values: [
+        {
+          attr_val_id: attrValId,
+          attr_name: null,
+          attr_name_cn: null,
+          line_attrval_name: null,
+          line_attrval_name_cn: null,
+          pic_url: picUrl,
+        },
+      ],
+    });
+  }
+  return next;
 }
 
 function customProductAttrValues(list?: DhProductSelectedAttrPublic[]) {
@@ -107,7 +178,7 @@ function customProductAttrValues(list?: DhProductSelectedAttrPublic[]) {
 
 type CustomAttrDraft = {
   key: string;
-  attr_val_id: string;
+  attr_val_id: string | null;
   attr_name: string;
   content: string;
 };
@@ -117,7 +188,7 @@ function toCustomAttrDrafts(
 ): CustomAttrDraft[] {
   return customProductAttrValues(list).map((item, index) => ({
     key: item.attr_val_id || `custom-${index}`,
-    attr_val_id: item.attr_val_id,
+    attr_val_id: item.attr_val_id ?? null,
     attr_name: (item.attr_name_cn || item.attr_name || '').trim(),
     content: (
       item.line_attrval_name_cn ||
@@ -127,15 +198,35 @@ function toCustomAttrDrafts(
   }));
 }
 
-function formatPrice(value: string | number | null | undefined): string {
-  if (value === undefined || value === null || value === '') {
-    return '-';
+/** 将自定义属性草稿写回 attr_list（attr_id=11，发布时可不传 attrValId） */
+function applyCustomAttrDraftsToAttrList(
+  list: DhProductSelectedAttrPublic[] | undefined,
+  drafts: CustomAttrDraft[],
+): DhProductSelectedAttrPublic[] {
+  const others = (list || []).filter((item) => !isCustomProductAttr(item));
+  const values = drafts
+    .map((item, index) => ({
+      attr_id: DH_CUSTOM_PRODUCT_ATTR_ID,
+      attr_val_id: item.attr_val_id || String(index + 1),
+      attr_name: item.attr_name.trim() || null,
+      attr_name_cn: null,
+      line_attrval_name: item.content.trim() || null,
+      line_attrval_name_cn: null,
+      pic_url: null,
+    }))
+    .filter((item) => item.attr_name || item.line_attrval_name);
+  if (!values.length) {
+    return others;
   }
-  const num = typeof value === 'number' ? value : Number(value);
-  if (Number.isNaN(num)) {
-    return String(value);
-  }
-  return num.toFixed(2);
+  return [
+    ...others,
+    {
+      attr_id: DH_CUSTOM_PRODUCT_ATTR_ID,
+      attr_name: null,
+      attr_name_cn: null,
+      values,
+    },
+  ];
 }
 
 function formatProductState(
@@ -161,14 +252,13 @@ function groupDisplayName(group: DhProductGroupPublic): string {
 
 function toItemGroupCascaderOption(
   group: DhProductGroupPublic,
-  formatLabel: (name: string, count: number) => string,
 ): ItemGroupCascaderOption {
   const children = (group.children || [])
     .filter((item) => Boolean(item.group_id))
-    .map((item) => toItemGroupCascaderOption(item, formatLabel));
+    .map((item) => toItemGroupCascaderOption(item));
   return {
     value: group.group_id,
-    label: formatLabel(groupDisplayName(group), group.item_count ?? 0),
+    label: groupDisplayName(group),
     isLeaf: children.length === 0,
     children: children.length ? children : undefined,
   };
@@ -176,11 +266,10 @@ function toItemGroupCascaderOption(
 
 function toItemGroupCascaderOptions(
   groups: DhProductGroupPublic[],
-  formatLabel: (name: string, count: number) => string,
 ): ItemGroupCascaderOption[] {
   return groups
     .filter((item) => Boolean(item.group_id))
-    .map((item) => toItemGroupCascaderOption(item, formatLabel));
+    .map((item) => toItemGroupCascaderOption(item));
 }
 
 function findItemGroupPath(
@@ -309,18 +398,6 @@ const ProductDetailPage: React.FC = () => {
     return pathData;
   }, []);
 
-  const formatItemGroupLabel = useCallback(
-    (name: string, count: number) =>
-      intl.formatMessage(
-        {
-          id: 'pages.product.detail.field.itemGroupOption',
-          defaultMessage: '{name}（{count}）',
-        },
-        { name, count },
-      ),
-    [intl],
-  );
-
   const loadItemGroups = useCallback(async () => {
     if (!detail?.store_id || itemGroupTreeLoadedRef.current) {
       return;
@@ -336,10 +413,7 @@ const ProductDetailPage: React.FC = () => {
       if (itemGroupReqRef.current !== reqId) {
         return;
       }
-      const options = toItemGroupCascaderOptions(
-        data.items,
-        formatItemGroupLabel,
-      );
+      const options = toItemGroupCascaderOptions(data.items);
       itemGroupTreeLoadedRef.current = true;
       setItemGroupOptions(options);
       const currentId =
@@ -365,7 +439,7 @@ const ProductDetailPage: React.FC = () => {
             }),
       );
     }
-  }, [detail?.item_group_id, detail?.store_id, formatItemGroupLabel, intl, message]);
+  }, [detail?.item_group_id, detail?.store_id, intl, message]);
 
   const loadCategoryAttrs = useCallback(
     async (
@@ -503,9 +577,7 @@ const ProductDetailPage: React.FC = () => {
         if (cancelled || itemGroupTreeLoadedRef.current) {
           return;
         }
-        setItemGroupOptions([
-          toItemGroupCascaderOption(group, formatItemGroupLabel),
-        ]);
+        setItemGroupOptions([toItemGroupCascaderOption(group)]);
       })
       .catch(() => {
         if (cancelled || itemGroupTreeLoadedRef.current) {
@@ -522,14 +594,85 @@ const ProductDetailPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [detail?.item_group_id, detail?.store_id, formatItemGroupLabel]);
+  }, [detail?.item_group_id, detail?.store_id]);
 
   const patchCustomAttrDraft = (
     key: string,
     patch: Partial<Pick<CustomAttrDraft, 'attr_name' | 'content'>>,
   ) => {
-    setCustomAttrDrafts((prev) =>
-      prev.map((item) => (item.key === key ? { ...item, ...patch } : item)),
+    setCustomAttrDrafts((prev) => {
+      const next = prev.map((item) =>
+        item.key === key ? { ...item, ...patch } : item,
+      );
+      setDetail((detailPrev) =>
+        detailPrev
+          ? {
+              ...detailPrev,
+              attr_list: applyCustomAttrDraftsToAttrList(
+                detailPrev.attr_list,
+                next,
+              ),
+            }
+          : detailPrev,
+      );
+      setAttrFillValues((fillPrev) =>
+        fillPrev
+          ? applyCustomAttrDraftsToAttrList(fillPrev, next)
+          : fillPrev,
+      );
+      return next;
+    });
+  };
+
+  const addCustomAttrDraft = () => {
+    if (customAttrDrafts.length >= DH_CUSTOM_ATTR_MAX_COUNT) {
+      message.warning(
+        intl.formatMessage(
+          {
+            id: 'pages.product.detail.customAttrs.maxCount',
+            defaultMessage: '自定义属性最多 {max} 个',
+          },
+          { max: DH_CUSTOM_ATTR_MAX_COUNT },
+        ),
+      );
+      return;
+    }
+    const next: CustomAttrDraft[] = [
+      ...customAttrDrafts,
+      {
+        key: `custom-new-${Date.now()}`,
+        attr_val_id: null,
+        attr_name: '',
+        content: '',
+      },
+    ];
+    setCustomAttrDrafts(next);
+    setDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            attr_list: applyCustomAttrDraftsToAttrList(prev.attr_list, next),
+          }
+        : prev,
+    );
+    setAttrFillValues((prev) =>
+      prev ? applyCustomAttrDraftsToAttrList(prev, next) : prev,
+    );
+  };
+
+  const removeCustomAttrDraft = (key: string) => {
+    const next = customAttrDrafts.filter((item) => item.key !== key);
+    setCustomAttrDrafts(next);
+    setDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            attr_list: applyCustomAttrDraftsToAttrList(prev.attr_list, next),
+          }
+        : prev,
+    );
+    setAttrFillValues((prev) =>
+      prev ? applyCustomAttrDraftsToAttrList(prev, next) : prev,
     );
   };
 
@@ -632,164 +775,6 @@ const ProductDetailPage: React.FC = () => {
     })();
   };
 
-  const specSelfDefColumns: ProColumns<DhProductSpecSelfDefPublic>[] = [
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.specSelfDef.pic',
-        defaultMessage: '图片',
-      }),
-      dataIndex: 'pic_url',
-      width: 72,
-      search: false,
-      render: (_, record) =>
-        record.pic_url ? (
-          <Image
-            src={record.pic_url}
-            alt={record.attr_val_name || record.attr_val_id || 'spec'}
-            width={40}
-            height={40}
-            style={{ objectFit: 'cover', borderRadius: 4 }}
-          />
-        ) : (
-          '-'
-        ),
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.specSelfDef.specAttrName',
-        defaultMessage: '规格名称',
-      }),
-      dataIndex: 'spec_attr_name',
-      width: 160,
-      ellipsis: true,
-      search: false,
-      render: (_, record) => record.spec_attr_name || '-',
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.specSelfDef.attrValName',
-        defaultMessage: '规格值',
-      }),
-      dataIndex: 'attr_val_name',
-      ellipsis: true,
-      search: false,
-      render: (_, record) => record.attr_val_name || '-',
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.specSelfDef.attrValId',
-        defaultMessage: '规格值 ID',
-      }),
-      dataIndex: 'attr_val_id',
-      width: 140,
-      ellipsis: true,
-      search: false,
-      render: (_, record) => record.attr_val_id || '-',
-    },
-  ];
-
-  const skuColumns: ProColumns<DhProductSkuPublic>[] = [
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.sku.pic',
-        defaultMessage: '图片',
-      }),
-      dataIndex: 'pic_url',
-      width: 72,
-      search: false,
-      render: (_, record) =>
-        record.pic_url ? (
-          <Image
-            src={record.pic_url}
-            alt={record.sku_code || record.sku_id || 'sku'}
-            width={40}
-            height={40}
-            style={{ objectFit: 'cover', borderRadius: 4 }}
-          />
-        ) : (
-          '-'
-        ),
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.sku.attr',
-        defaultMessage: '规格',
-      }),
-      dataIndex: 'attr_combo_text',
-      ellipsis: true,
-      search: false,
-      render: (_, record) => record.attr_combo_text || '-',
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.sku.code',
-        defaultMessage: 'SKU 编码',
-      }),
-      dataIndex: 'sku_code',
-      width: 140,
-      ellipsis: true,
-      search: false,
-      render: (_, record) => record.sku_code || record.sku_id || '-',
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.sku.price',
-        defaultMessage: '零售价',
-      }),
-      dataIndex: 'retail_price',
-      width: 100,
-      align: 'right',
-      search: false,
-      render: (_, record) => formatPrice(record.retail_price),
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.sku.inventory',
-        defaultMessage: '库存',
-      }),
-      dataIndex: 'inventory',
-      width: 90,
-      align: 'right',
-      search: false,
-      render: (_, record) =>
-        record.inventory === null || record.inventory === undefined
-          ? '-'
-          : record.inventory,
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.sku.saleStatus',
-        defaultMessage: '可售',
-      }),
-      dataIndex: 'sale_status',
-      width: 90,
-      search: false,
-      render: (_, record) => {
-        if (record.sale_status === '1') {
-          return (
-            <Tag color="success">
-              {intl.formatMessage({
-                id: 'pages.product.detail.sku.saleYes',
-                defaultMessage: '可售',
-              })}
-            </Tag>
-          );
-        }
-        if (record.sale_status === '0') {
-          return (
-            <Tag>
-              {intl.formatMessage({
-                id: 'pages.product.detail.sku.saleNo',
-                defaultMessage: '不可售',
-              })}
-            </Tag>
-          );
-        }
-        return '-';
-      },
-    },
-  ];
-
   if (!productId) {
     return (
       <PageContainer
@@ -805,6 +790,24 @@ const ProductDetailPage: React.FC = () => {
       </PageContainer>
     );
   }
+
+  const priceSelectedAttrs = priceProductAttrs(
+    attrFillValues || detail?.attr_list,
+  );
+  const priceAttrIdSet = new Set(
+    priceSelectedAttrs.map((item) => String(item.attr_id)),
+  );
+  const priceCategoryAttrs = priceSelectedAttrs
+    .map((item) =>
+      categoryAttrs.find((attr) => String(attr.attr_id) === String(item.attr_id)),
+    )
+    .filter((item): item is DhCategoryAttrPublic => Boolean(item));
+  const normalCategoryAttrs = categoryAttrs.filter(
+    (attr) => !priceAttrIdSet.has(String(attr.attr_id)),
+  );
+  const normalSelectedAttrs = nonPriceProductAttrs(
+    attrFillValues || detail?.attr_list,
+  );
 
   return (
     <PageContainer title={false} onBack={() => history.push(PRODUCT_LIST_PATH)}>
@@ -907,27 +910,18 @@ const ProductDetailPage: React.FC = () => {
                       defaultMessage: '请选择分类',
                     })}
                     style={{ maxWidth: 480, width: '100%' }}
-                    // 限制每列宽度，长文案省略，避免多级菜单横向撑出视口
-                    popupMenuColumnStyle={{
-                      width: 180,
-                      maxWidth: 180,
-                    }}
-                    styles={{
-                      popup: {
-                        root: {
-                          maxWidth: 'min(100vw - 24px, 560px)',
-                          overflowX: 'auto',
-                        },
-                        listItem: {
-                          maxWidth: 180,
+                    optionRender={(option) => (
+                      <span
+                        title={String(option.label ?? '')}
+                        style={{
+                          display: 'inline-block',
+                          maxWidth: 150,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
-                        },
-                      },
-                    }}
-                    optionRender={(option) => (
-                      <span title={String(option.label ?? '')}>
+                          verticalAlign: 'bottom',
+                        }}
+                      >
                         {option.label}
                       </span>
                     )}
@@ -960,35 +954,90 @@ const ProductDetailPage: React.FC = () => {
         <Card
           title={intl.formatMessage({
             id: 'pages.product.detail.section.attrs',
-            defaultMessage: '属性信息',
+            defaultMessage: '商品属性',
           })}
           loading={loading || attrsLoading}
         >
-          {categoryAttrs.length > 0 ? (
-            <CategoryAttrsFields
-              attrs={categoryAttrs}
-              selectedAttrs={attrFillValues}
-            />
-          ) : null}
-          {customAttrDrafts.length > 0 ? (
+          <div style={{ marginBottom: 20 }}>
+            <Typography.Text
+              strong
+              style={{ display: 'block', marginBottom: 12 }}
+            >
+              {intl.formatMessage({
+                id: 'pages.product.detail.categoryAttrs.title',
+                defaultMessage: '类目属性',
+              })}
+            </Typography.Text>
+            {normalCategoryAttrs.length > 0 ? (
+              <CategoryAttrsFields
+                attrs={normalCategoryAttrs}
+                selectedAttrs={normalSelectedAttrs}
+              />
+            ) : (
+              !loading &&
+              !attrsLoading && (
+                <Typography.Text type="secondary">
+                  {intl.formatMessage({
+                    id: 'pages.product.detail.categoryAttrs.empty',
+                    defaultMessage: '暂无类目属性',
+                  })}
+                </Typography.Text>
+              )
+            )}
+          </div>
+
+          <Divider style={{ margin: '8px 0 16px' }} />
+
+          <div>
             <div
               style={{
-                marginTop: categoryAttrs.length > 0 ? 16 : 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 8,
+                gap: 12,
               }}
             >
-              <Typography.Text
-                strong
-                style={{ display: 'block', marginBottom: 8 }}
-              >
+              <Typography.Text strong>
                 {intl.formatMessage({
                   id: 'pages.product.detail.customAttrs.title',
                   defaultMessage: '自定义属性',
                 })}
               </Typography.Text>
+              <Button
+                type="dashed"
+                size="small"
+                icon={<PlusOutlined />}
+                disabled={customAttrDrafts.length >= DH_CUSTOM_ATTR_MAX_COUNT}
+                onClick={addCustomAttrDraft}
+              >
+                {intl.formatMessage({
+                  id: 'pages.product.detail.customAttrs.add',
+                  defaultMessage: '新增属性',
+                })}
+              </Button>
+            </div>
+            <Typography.Paragraph
+              type="secondary"
+              style={{ marginBottom: 12, fontSize: 12 }}
+            >
+              {intl.formatMessage(
+                {
+                  id: 'pages.product.detail.customAttrs.hint',
+                  defaultMessage:
+                    '对应发布接口 itemAttrList 中 attrId=11；属性名/属性值不超过 {maxLen} 字符，最多 {maxCount} 个。',
+                },
+                {
+                  maxLen: DH_CUSTOM_ATTR_MAX_LENGTH,
+                  maxCount: DH_CUSTOM_ATTR_MAX_COUNT,
+                },
+              )}
+            </Typography.Paragraph>
+            {customAttrDrafts.length > 0 ? (
               <table
                 style={{
                   borderCollapse: 'collapse',
-                  maxWidth: 640,
+                  maxWidth: 720,
                   width: '100%',
                   fontSize: 13,
                 }}
@@ -1024,6 +1073,21 @@ const ProductDetailPage: React.FC = () => {
                         defaultMessage: '属性值',
                       })}
                     </th>
+                    <th
+                      style={{
+                        border: '1px solid #d9d9d9',
+                        background: '#fafafa',
+                        padding: '6px 10px',
+                        fontWeight: 500,
+                        width: 72,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {intl.formatMessage({
+                        id: 'pages.product.detail.customAttrs.action',
+                        defaultMessage: '操作',
+                      })}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1038,6 +1102,8 @@ const ProductDetailPage: React.FC = () => {
                         <Input
                           value={item.attr_name}
                           allowClear
+                          maxLength={DH_CUSTOM_ATTR_MAX_LENGTH}
+                          showCount
                           placeholder={intl.formatMessage({
                             id: 'pages.product.detail.attrsCustomNamePlaceholder',
                             defaultMessage: '请输入属性名',
@@ -1058,6 +1124,8 @@ const ProductDetailPage: React.FC = () => {
                         <Input
                           value={item.content}
                           allowClear
+                          maxLength={DH_CUSTOM_ATTR_MAX_LENGTH}
+                          showCount
                           placeholder={intl.formatMessage({
                             id: 'pages.product.detail.attrsCustomValuePlaceholder',
                             defaultMessage: '请输入属性值',
@@ -1069,56 +1137,39 @@ const ProductDetailPage: React.FC = () => {
                           }
                         />
                       </td>
+                      <td
+                        style={{
+                          border: '1px solid #d9d9d9',
+                          padding: 6,
+                          textAlign: 'center',
+                        }}
+                      >
+                        <Button
+                          type="link"
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => removeCustomAttrDraft(item.key)}
+                        >
+                          {intl.formatMessage({
+                            id: 'pages.product.detail.customAttrs.delete',
+                            defaultMessage: '删除',
+                          })}
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          ) : null}
-          {categoryAttrs.length === 0 &&
-          customAttrDrafts.length === 0 &&
-          !loading &&
-          !attrsLoading
-            ? intl.formatMessage({
-                id: 'pages.product.detail.attrsEmpty',
-                defaultMessage: '暂无属性',
-              })
-            : null}
-        </Card>
-
-        <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.specSelfDef',
-            defaultMessage: '自定义规格',
-          })}
-          loading={loading}
-        >
-          <ProTable<DhProductSpecSelfDefPublic>
-            rowKey={(record) =>
-              [
-                record.attr_val_id,
-                record.spec_attr_name,
-                record.attr_val_name,
-                record.pic_url,
-              ]
-                .filter(Boolean)
-                .join('|') || 'spec'
-            }
-            search={false}
-            options={false}
-            toolBarRender={false}
-            pagination={false}
-            dataSource={detail?.item_spec_self_def_list || []}
-            columns={specSelfDefColumns}
-            size="small"
-            scroll={{ x: 560 }}
-            locale={{
-              emptyText: intl.formatMessage({
-                id: 'pages.product.detail.specSelfDef.empty',
-                defaultMessage: '暂无自定义规格',
-              }),
-            }}
-          />
+            ) : (
+              <Typography.Text type="secondary">
+                {intl.formatMessage({
+                  id: 'pages.product.detail.customAttrs.empty',
+                  defaultMessage: '暂无自定义属性',
+                })}
+              </Typography.Text>
+            )}
+          </div>
         </Card>
 
         <Card
@@ -1341,26 +1392,76 @@ const ProductDetailPage: React.FC = () => {
 
         <Card
           title={intl.formatMessage({
-            id: 'pages.product.detail.section.sku',
-            defaultMessage: 'SKU 列表',
+            id: 'pages.product.detail.section.specAttrs',
+            defaultMessage: '商品规格',
           })}
-          loading={loading}
+          loading={loading || attrsLoading}
         >
-          <ProTable<DhProductSkuPublic>
-            rowKey="id"
-            search={false}
-            options={false}
-            toolBarRender={false}
-            pagination={false}
-            dataSource={detail?.sku_list || []}
-            columns={skuColumns}
-            size="small"
-            scroll={{ x: 720 }}
-            locale={{
-              emptyText: intl.formatMessage({
-                id: 'pages.product.detail.skuEmpty',
-                defaultMessage: '暂无 SKU',
-              }),
+          <SpecAttrsFields
+            priceCategoryAttrs={priceCategoryAttrs}
+            priceSelectedAttrs={priceSelectedAttrs}
+            specSelfDefs={detail?.item_spec_self_def_list}
+            storeId={selectedStoreId ?? detail?.store_id}
+            onSpecSelfDefsChange={(next) => {
+              setDetail((prev) =>
+                prev ? { ...prev, item_spec_self_def_list: next } : prev,
+              );
+            }}
+            onValuePicChange={(attrId, attrValId, picUrl) => {
+              setAttrFillValues((prev) =>
+                patchAttrValuePic(
+                  prev || detail?.attr_list,
+                  attrId,
+                  attrValId,
+                  picUrl,
+                ),
+              );
+              setDetail((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      attr_list: patchAttrValuePic(
+                        prev.attr_list,
+                        attrId,
+                        attrValId,
+                        picUrl,
+                      ),
+                    }
+                  : prev,
+              );
+            }}
+          />
+          <Divider
+            orientation="left"
+            plain
+            style={{ marginTop: 24, marginBottom: 16 }}
+          >
+            <Typography.Text strong>
+              {intl.formatMessage({
+                id: 'pages.product.detail.specSku.title',
+                defaultMessage: '规格生成的商品 SKU',
+              })}
+            </Typography.Text>
+          </Divider>
+          <Typography.Paragraph
+            type="secondary"
+            style={{ marginTop: -8, marginBottom: 12 }}
+          >
+            {intl.formatMessage({
+              id: 'pages.product.detail.specSku.hint',
+              defaultMessage:
+                '以下列表由上方规格属性组合生成，可批量设置销售状态与预计收入。',
+            })}
+          </Typography.Paragraph>
+          <SpecSkuTable
+            skuList={detail?.sku_list}
+            priceSelectedAttrs={priceSelectedAttrs}
+            specSelfDefs={detail?.item_spec_self_def_list}
+            itemCode={detail?.item_code}
+            onChange={(next) => {
+              setDetail((prev) =>
+                prev ? { ...prev, sku_list: next } : prev,
+              );
             }}
           />
         </Card>

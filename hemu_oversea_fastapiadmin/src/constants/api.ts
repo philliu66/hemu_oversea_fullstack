@@ -73,6 +73,7 @@ export const AdminCategoryApi = {
 /** 全局工具类路径 */
 export const CommonUtilsApi = {
   DHGATE_UPLOAD_IMG: '/api/v1/common/utils/dhgate/uploadimg',
+  DHGATE_TWEAK_IMG: '/api/v1/common/utils/dhgate/tweakimg',
 } as const;
 
 /** 列表默认分页大小 */

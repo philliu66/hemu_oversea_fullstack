@@ -13,7 +13,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import Pagination
-from app.core.errors import bad_request, not_found
+from app.core.errors import AppError, bad_request, not_found
 from app.core.store_types import StoreType
 from app.models.product_category_dh import ProductCategoryDh
 from app.models.product_dh import ProductDh
@@ -26,6 +26,17 @@ from app.schemas.product import (
     DhCategoryAttrValPublic,
     DhCategoryPathPublic,
     DhCategoryPublic,
+    DhItemAttrGroupDetailPublic,
+    DhItemAttrGroupPublic,
+    DhItemCustomTypeInfoPublic,
+    DhItemInventoryLocationPublic,
+    DhItemInventoryPublic,
+    DhItemShiptoSettingPublic,
+    DhItemShiptoSkuPricePublic,
+    DhItemSkuAttrValPublic,
+    DhItemSkuInventoryPublic,
+    DhItemWeightRangePublic,
+    DhItemWholesaleRangePublic,
     DhProductDetailPublic,
     DhProductGroupPublic,
     DhProductImgPublic,
@@ -41,6 +52,7 @@ from app.services.dhgate import (
     get_category_path,
     get_dhgate_client,
     get_item,
+    get_item_html,
     list_item_groups,
 )
 from app.services.products_dh import _attr_combo_text, _spec_self_def_lookup
@@ -173,18 +185,51 @@ def _list_product_skus(detail: dict[str, Any]) -> list[DhProductSkuPublic]:
         if not isinstance(sku, dict):
             continue
         combo = sku.get("itemSkuAttrValueList")
+        if not isinstance(combo, list):
+            combo = sku.get("itemSkuAttrvalList")
         combo_list = combo if isinstance(combo, list) else []
         normalized_combo = [x for x in combo_list if isinstance(x, dict)]
+        attr_values: list[DhItemSkuAttrValPublic] = []
+        for raw_val in normalized_combo:
+            attr_values.append(
+                DhItemSkuAttrValPublic(
+                    attr_id=_as_str(raw_val.get("attrId")),
+                    attr_val_id=_as_str(raw_val.get("attrValId")),
+                    attr_val_code=_as_str(raw_val.get("attrValCode")),
+                    size_spec_type=_as_str(raw_val.get("sizeSpecType")),
+                )
+            )
+        inventory_list: list[DhItemSkuInventoryPublic] = []
+        raw_inven = sku.get("itemSkuInventoryList")
+        if not isinstance(raw_inven, list):
+            raw_inven = sku.get("itemSkuInvenList")
+        if isinstance(raw_inven, list):
+            for raw_inv in raw_inven:
+                if not isinstance(raw_inv, dict):
+                    continue
+                inventory_list.append(
+                    DhItemSkuInventoryPublic(
+                        sku_md5=_as_str(raw_inv.get("skuMD5")),
+                        inventory_location=_as_str(raw_inv.get("inventoryLocation")),
+                        sku_inventory_qty=_as_int(raw_inv.get("skuInventoryQty")),
+                    )
+                )
         items.append(
             DhProductSkuPublic(
                 id=index,
                 sku_id=_as_str(sku.get("skuId")),
                 sku_code=_as_str(sku.get("skuCode")),
+                sku_md5=_as_str(sku.get("skuMD5")),
                 retail_price=_as_decimal(sku.get("retailPrice")),
                 inventory=_as_int(sku.get("inventory")),
                 sale_status=_as_str(sku.get("saleStatus")),
-                pic_url=_build_dh_detail_image_url(_as_str(sku.get("picUrl"))),
+                pic_url=_as_str(sku.get("picUrl")),
                 attr_combo_text=_attr_combo_text(normalized_combo, spec_lookup),
+                item_sku_attr_value_list=attr_values,
+                item_sku_inventory_list=inventory_list,
+                shipto_country_price_list=_parse_shipto_sku_prices(
+                    sku.get("shiptoCountryPriceList")
+                ),
             )
         )
     return items
@@ -699,6 +744,160 @@ def _flag01(value: Any, default: str = "0") -> str:
     return text if text in {"0", "1"} else default
 
 
+def _as_str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for raw in value:
+        text = _as_str(raw)
+        if text:
+            items.append(text)
+    return items
+
+
+def _parse_wholesale_ranges(raw_list: Any) -> list[DhItemWholesaleRangePublic]:
+    if not isinstance(raw_list, list):
+        return []
+    items: list[DhItemWholesaleRangePublic] = []
+    for raw in raw_list:
+        if not isinstance(raw, dict):
+            continue
+        items.append(
+            DhItemWholesaleRangePublic(
+                discount=_as_decimal(raw.get("discount")),
+                start_qty=_as_int(raw.get("startQty")),
+            )
+        )
+    return items
+
+
+def _parse_shipto_sku_prices(raw_list: Any) -> list[DhItemShiptoSkuPricePublic]:
+    if not isinstance(raw_list, list):
+        return []
+    items: list[DhItemShiptoSkuPricePublic] = []
+    for raw in raw_list:
+        if not isinstance(raw, dict):
+            continue
+        items.append(
+            DhItemShiptoSkuPricePublic(
+                region_code=_as_str(raw.get("regionCode")),
+                retail_price=_as_decimal(raw.get("retailPrice")),
+            )
+        )
+    return items
+
+
+def _parse_weight_range(raw: Any) -> DhItemWeightRangePublic | None:
+    if not isinstance(raw, dict):
+        return None
+    parsed = DhItemWeightRangePublic(
+        base_qt=_as_int(raw.get("baseQt")),
+        step_qt=_as_int(raw.get("stepQt")),
+        step_weight=_as_decimal(raw.get("stepWeight")),
+    )
+    if parsed.base_qt is None and parsed.step_qt is None and parsed.step_weight is None:
+        return None
+    return parsed
+
+
+def _parse_item_inventory(raw: Any) -> DhItemInventoryPublic | None:
+    if not isinstance(raw, dict):
+        return None
+    locations: list[DhItemInventoryLocationPublic] = []
+    raw_locations = raw.get("inventoryLocationList")
+    if isinstance(raw_locations, list):
+        for loc in raw_locations:
+            if not isinstance(loc, dict):
+                continue
+            locations.append(
+                DhItemInventoryLocationPublic(
+                    sort_val=_as_int(loc.get("sortVal")),
+                    leading_time=_as_int(loc.get("leadingTime")),
+                    inventory_location=_as_str(loc.get("inventoryLocation")),
+                    if_in_transit=_as_str(loc.get("ifInTransit")),
+                )
+            )
+    return DhItemInventoryPublic(
+        inventory_location=_as_str(raw.get("inventoryLocation")),
+        inventory_status=_as_str(raw.get("inventoryStatus")),
+        subtract_stock_type=_as_str(raw.get("subtractStockType")),
+        inventory_ori_qty=_as_int(raw.get("inventoryOriQty")),
+        inventory_qty=_as_int(raw.get("inventoryQty")),
+        inventory_location_list=locations,
+    )
+
+
+def _parse_shipto_settings(raw_list: Any) -> list[DhItemShiptoSettingPublic]:
+    if not isinstance(raw_list, list):
+        return []
+    items: list[DhItemShiptoSettingPublic] = []
+    for raw in raw_list:
+        if not isinstance(raw, dict):
+            continue
+        items.append(
+            DhItemShiptoSettingPublic(
+                region_code=_as_str(raw.get("regionCode")),
+                shipto_country_list=_as_str_list(raw.get("shiptoCountryList")),
+                item_wholesale_range_list=_parse_wholesale_ranges(
+                    raw.get("itemWholesaleRangeList")
+                ),
+            )
+        )
+    return items
+
+
+def _parse_custom_type_info(raw: Any) -> DhItemCustomTypeInfoPublic | None:
+    if not isinstance(raw, dict):
+        return None
+    return DhItemCustomTypeInfoPublic(
+        custom_type=_as_str(raw.get("customType")),
+        retail_price=_as_decimal(raw.get("retailPrice")),
+        min_wholesale_qty=_as_int(raw.get("minWholesaleQty")),
+        max_sale_qty=_as_int(raw.get("maxSaleQty")),
+        leading_time=_as_int(raw.get("leadingTime")),
+        sku_code=_as_str(raw.get("skuCode")),
+        sale_status=_as_str(raw.get("saleStatus")),
+        shipto_country_price_list=_parse_shipto_sku_prices(
+            raw.get("shiptoCountryPriceList")
+        ),
+    )
+
+
+def _parse_attr_groups(raw_list: Any) -> list[DhItemAttrGroupPublic]:
+    if not isinstance(raw_list, list):
+        return []
+    groups: list[DhItemAttrGroupPublic] = []
+    for raw in raw_list:
+        # 官方类型为 ItemAttrgroupUpdate[][]：元素可能是组对象或明细数组
+        if isinstance(raw, list):
+            details_raw = raw
+            group_obj: dict[str, Any] = {}
+        elif isinstance(raw, dict):
+            group_obj = raw
+            details_raw = raw.get("itemAttrgroupDetailList")
+        else:
+            continue
+        details: list[DhItemAttrGroupDetailPublic] = []
+        if isinstance(details_raw, list):
+            for detail in details_raw:
+                if not isinstance(detail, dict):
+                    continue
+                details.append(
+                    DhItemAttrGroupDetailPublic(
+                        attr_id=_as_str(detail.get("attrId")),
+                        attr_val_id=_as_str(detail.get("attrValId")),
+                        attr_name=_as_str(detail.get("attrName")),
+                        attr_name_cn=_as_str(detail.get("attrNameCn")),
+                        line_attrval_name=_as_str(detail.get("lineAttrvalName")),
+                        line_attrval_name_cn=_as_str(detail.get("lineAttrvalNameCn")),
+                    )
+                )
+        if not details and not group_obj:
+            continue
+        groups.append(DhItemAttrGroupPublic(item_attrgroup_detail_list=details))
+    return groups
+
+
 def _parse_category_attr_values(raw_list: Any) -> list[DhCategoryAttrValPublic]:
     if not isinstance(raw_list, list):
         return []
@@ -782,15 +981,17 @@ def get_dh_category_attrs(
 
 
 def _parse_product_attr_value(raw: dict[str, Any]) -> DhProductSelectedAttrValPublic | None:
+    attr_id = _as_str(raw.get("attrId"))
     attr_val_id = _as_str(raw.get("attrValId"))
     attr_name = _as_str(raw.get("attrName"))
     attr_name_cn = _as_str(raw.get("attrNameCn"))
     line_attrval_name = _as_str(raw.get("lineAttrvalName"))
     line_attrval_name_cn = _as_str(raw.get("lineAttrvalNameCn"))
-    pic_url = _build_dh_detail_image_url(_as_str(raw.get("picUrl")))
+    pic_url = _as_str(raw.get("picUrl"))
     brand_id = _as_str(raw.get("brandId"))
     if not any(
         [
+            attr_id,
             attr_val_id,
             attr_name,
             attr_name_cn,
@@ -802,6 +1003,7 @@ def _parse_product_attr_value(raw: dict[str, Any]) -> DhProductSelectedAttrValPu
     ):
         return None
     return DhProductSelectedAttrValPublic(
+        attr_id=attr_id,
         attr_val_id=attr_val_id,
         attr_name=attr_name,
         attr_name_cn=attr_name_cn,
@@ -846,6 +1048,7 @@ def _list_product_selected_attrs(
                     if attr.get("isbrand") is not None
                     else attr.get("isBrand")
                 ),
+                is_price_attr=_as_str(attr.get("isPriceAttr")),
                 values=values,
             )
         )
@@ -856,7 +1059,7 @@ def _parse_spec_self_def_item(raw: dict[str, Any]) -> DhProductSpecSelfDefPublic
     attr_val_id = _as_str(raw.get("attrValId"))
     spec_attr_name = _as_str(raw.get("specAttrName"))
     attr_val_name = _as_str(raw.get("attrValName"))
-    pic_url = _build_dh_detail_image_url(_as_str(raw.get("picUrl")))
+    pic_url = _as_str(raw.get("picUrl"))
     if not any([attr_val_id, spec_attr_name, attr_val_name, pic_url]):
         return None
     return DhProductSpecSelfDefPublic(
@@ -965,6 +1168,8 @@ def _to_dh_product_detail_public(
     db: Session,
     row: ProductDh,
     detail: dict[str, Any],
+    *,
+    html_content: str | None = None,
 ) -> DhProductDetailPublic:
     """用敦煌 dh.item.get 结果组装详情，不写库。"""
     item_base = detail.get("itemBase") if isinstance(detail.get("itemBase"), dict) else {}
@@ -979,18 +1184,24 @@ def _to_dh_product_detail_public(
     sku_list = _list_product_skus(detail)
     price_min, price_max, sku_count, total_inventory = _sku_price_stats(sku_list)
     cate_pub_id = _as_str(detail.get("catePubId"))
+    content = html_content if html_content else _as_str(item_base.get("htmlContent"))
     return DhProductDetailPublic(
         id=row.id,
         store_id=row.store_id,
-        item_code=row.item_code,
-        site_id=row.site_id,
+        item_code=_as_str(detail.get("itemCode")) or row.item_code,
+        site_id=_as_str(detail.get("siteId")) or row.site_id,
         is_seed=row.is_seed,
         supplier_id=_as_str(detail.get("supplierId")),
         cate_pub_id=cate_pub_id,
-        state=_dh_product_state_label(_as_str(detail.get("state"))),
+        state=_as_str(detail.get("state")),
         item_name=_as_str(item_base.get("itemName")),
         short_desc=_as_str(item_base.get("shortDesc")),
-        html_content=_as_str(item_base.get("htmlContent")),
+        short_desc1=_as_str(item_base.get("shortDesc1")),
+        short_desc2=_as_str(item_base.get("shortDesc2")),
+        short_desc3=_as_str(item_base.get("shortDesc3")),
+        short_desc4=_as_str(item_base.get("shortDesc4")),
+        short_desc5=_as_str(item_base.get("shortDesc5")),
+        html_content=content,
         key_word1=_as_str(item_base.get("keyWord1")),
         key_word2=_as_str(item_base.get("keyWord2")),
         key_word3=_as_str(item_base.get("keyWord3")),
@@ -1003,7 +1214,13 @@ def _to_dh_product_detail_public(
         length=_as_decimal(package.get("length")),
         width=_as_decimal(package.get("width")),
         height=_as_decimal(package.get("height")),
+        measure_id=_as_str(package.get("measureId")),
         packing_quantity=_as_int(package.get("packingQuantity")),
+        item_weight_range=_parse_weight_range(package.get("itemWeigthRange")),
+        shipping_model_id=_as_str(detail.get("shippingModelId")),
+        after_sale_template_id=_as_str(detail.get("afterSaleTemplateId")),
+        size_template_id=_as_str(detail.get("sizeTemplateId")),
+        item_group_id=_as_str(detail.get("itemGroupId")),
         price_min=price_min,
         price_max=price_max,
         sku_count=sku_count,
@@ -1021,9 +1238,17 @@ def _to_dh_product_detail_public(
         item_img_list=_list_product_item_imgs(detail),
         sku_list=sku_list,
         category=_get_product_category(db, cate_pub_id),
-        item_group_id=_as_str(detail.get("itemGroupId")),
         attr_list=_list_product_selected_attrs(detail),
         item_spec_self_def_list=_list_product_spec_self_defs(detail),
+        item_wholesale_range_list=_parse_wholesale_ranges(
+            detail.get("itemWholesaleRangeList")
+        ),
+        item_inventory=_parse_item_inventory(detail.get("itemInventory")),
+        item_attr_group_list=_parse_attr_groups(detail.get("itemAttrGroupList")),
+        item_shipto_setting_list=_parse_shipto_settings(
+            detail.get("itemShiptoSettingList")
+        ),
+        item_custom_type_info=_parse_custom_type_info(detail.get("itemCustomTypeInfo")),
     )
 
 
@@ -1036,9 +1261,27 @@ def get_dh_product_detail(
     if row is None:
         raise not_found("商品不存在")
 
+    site_id = row.site_id or "EN"
     client = get_dhgate_client(db, row.store_id)
-    detail = get_item(client, item_code=row.item_code, site_id=row.site_id or "EN")
-    return _to_dh_product_detail_public(db, row, detail)
+    detail = get_item(client, item_code=row.item_code, site_id=site_id)
+    item_base = detail.get("itemBase") if isinstance(detail.get("itemBase"), dict) else {}
+    html_content = _as_str(item_base.get("htmlContent"))
+    if not html_content:
+        try:
+            html_data = get_item_html(
+                client, item_code=row.item_code, site_id=site_id
+            )
+            if isinstance(html_data, dict):
+                html_content = _as_str(html_data.get("htmlContent"))
+        except AppError:
+            logger.warning(
+                "获取商品长描失败 product_id=%s item_code=%s",
+                row.id,
+                row.item_code,
+            )
+    return _to_dh_product_detail_public(
+        db, row, detail, html_content=html_content
+    )
 
 
 def _flatten_item_groups(raw_list: Any) -> list[dict[str, Any]]:

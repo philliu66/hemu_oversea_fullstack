@@ -75,6 +75,36 @@ def upload_album_image(
     )
 
 
+def upload_product_image(
+    client: DhgateClient,
+    *,
+    image_bytes: bytes,
+    image_filename: str | None = None,
+) -> dict[str, Any]:
+    """将本地图片文件上传到敦煌相册，返回不加前缀的图片信息。"""
+    if not image_bytes:
+        raise bad_request("上传文件为空")
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        raise bad_request("图片超过 2MB，无法上传敦煌相册")
+    img_name = _ensure_image_filename(image_filename or "upload.jpg")
+    img_b64 = base64.b64encode(image_bytes).decode("ascii")
+    uploaded = upload_album_image(
+        client,
+        img_base64=img_b64,
+        img_name=img_name,
+    )
+    if not isinstance(uploaded, dict):
+        raise bad_request("上传成功但返回格式异常")
+    result = _img_public(
+        img_url=uploaded.get("imgUrl"),
+        img_md5=uploaded.get("imgMd5"),
+        img_type=uploaded.get("type"),
+    )
+    if not result.get("img_url"):
+        raise bad_request("上传成功但未返回 imgUrl")
+    return result
+
+
 def tweak_and_upload_main_image(
     client: DhgateClient,
     *,

@@ -2,8 +2,10 @@ import { request } from '@umijs/max';
 import { CommonUtilsApi } from '@/constants/api';
 import type {
   ApiResponse,
+  DhgateImgInfoPublic,
+  DhgateTweakImgParams,
+  DhgateTweakImgPublic,
   DhgateUploadImgParams,
-  DhgateUploadImgPublic,
 } from '@/types/api';
 import { unwrapApiData } from '@/utils/http';
 
@@ -19,9 +21,33 @@ function requireData<T>(payload: T | null, message: string): T {
   return payload;
 }
 
-/** POST /api/v1/common/utils/dhgate/uploadimg */
+/** POST /api/v1/common/utils/dhgate/uploadimg — 直接上传图片到敦煌相册 */
 export async function uploadDhgateImage(
   params: DhgateUploadImgParams,
+  options?: RequestOptions,
+) {
+  const formData = new FormData();
+  formData.append('store_id', String(params.store_id));
+  formData.append('img', params.file, params.filename || 'upload.jpg');
+
+  const res = await request<ApiResponse<DhgateImgInfoPublic>>(
+    CommonUtilsApi.DHGATE_UPLOAD_IMG,
+    {
+      method: 'POST',
+      data: formData,
+      timeout: 120000,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhgateImgInfoPublic>(res),
+    '图片上传失败',
+  );
+}
+
+/** POST /api/v1/common/utils/dhgate/tweakimg — 微调并上传 */
+export async function tweakDhgateImage(
+  params: DhgateTweakImgParams,
   options?: RequestOptions,
 ) {
   const formData = new FormData();
@@ -43,8 +69,8 @@ export async function uploadDhgateImage(
     );
   }
 
-  const res = await request<ApiResponse<DhgateUploadImgPublic>>(
-    CommonUtilsApi.DHGATE_UPLOAD_IMG,
+  const res = await request<ApiResponse<DhgateTweakImgPublic>>(
+    CommonUtilsApi.DHGATE_TWEAK_IMG,
     {
       method: 'POST',
       data: formData,
@@ -53,7 +79,7 @@ export async function uploadDhgateImage(
     },
   );
   return requireData(
-    unwrapApiData<DhgateUploadImgPublic>(res),
+    unwrapApiData<DhgateTweakImgPublic>(res),
     '图片微调失败',
   );
 }

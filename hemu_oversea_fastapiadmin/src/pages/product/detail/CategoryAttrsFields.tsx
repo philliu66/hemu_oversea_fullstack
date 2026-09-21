@@ -7,6 +7,7 @@ import type {
   DhProductSelectedAttrPublic,
 } from '@/types/api';
 import { buildDhImageUrl } from '@/utils/dhImage';
+import DhgateAttrPicUpload from './DhgateAttrPicUpload';
 
 const CUSTOM_NAME_SET = new Set(['custom', '自定义', 'other', '其它', '其他']);
 
@@ -29,6 +30,15 @@ type AttrDraft = {
 type CategoryAttrsCardProps = {
   attrs: DhCategoryAttrPublic[];
   selectedAttrs?: DhProductSelectedAttrPublic[];
+  /** 勾选后展示已选值图片表（规格属性用） */
+  showSelectedPics?: boolean;
+  storeId?: number;
+  /** 属性值图片变更（写入 / 覆盖 pic_url） */
+  onValuePicChange?: (
+    attrId: string,
+    attrValId: string,
+    picUrl: string | null,
+  ) => void;
 };
 
 function attrLabel(attr: DhCategoryAttrPublic): string {
@@ -341,9 +351,15 @@ function renderCustomEditor(
 const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
   attrs,
   selectedAttrs,
+  showSelectedPics = false,
+  storeId,
+  onValuePicChange,
 }) => {
   const intl = useIntl();
   const [drafts, setDrafts] = useState<Record<string, AttrDraft>>({});
+  const selectedMap = new Map(
+    (selectedAttrs || []).map((item) => [String(item.attr_id), item]),
+  );
 
   useEffect(() => {
     setDrafts(buildDrafts(attrs, selectedAttrs));
@@ -597,6 +613,151 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                     : null}
                 </>
               )}
+              {showSelectedPics
+                ? (() => {
+                    const selected = selectedMap.get(String(attr.attr_id));
+                    const selectedById = new Map(
+                      (selected?.values || []).map((item) => [
+                        String(item.attr_val_id),
+                        item,
+                      ]),
+                    );
+                    const categoryById = new Map(
+                      attr.values.map((item) => [
+                        String(item.attr_val_id),
+                        item,
+                      ]),
+                    );
+                    const hasPicFeature =
+                      showPic ||
+                      attr.values.some((item) => Boolean(item.pic_url)) ||
+                      (selected?.values || []).some((item) =>
+                        Boolean(item.pic_url),
+                      );
+                    if (!hasPicFeature) {
+                      return null;
+                    }
+
+                    const selectedIds: string[] = [];
+                    if (isSelectType(attr)) {
+                      if (draft.selectValue) {
+                        selectedIds.push(draft.selectValue);
+                      }
+                    } else if (!isTextType(attr)) {
+                      selectedIds.push(...draft.checkedValues);
+                    }
+                    if (!selectedIds.length) {
+                      return null;
+                    }
+
+                    const rows = selectedIds.map((id) => {
+                      const fromSelected = selectedById.get(String(id));
+                      const fromCategory = categoryById.get(String(id));
+                      const en =
+                        fromSelected?.line_attrval_name?.trim() ||
+                        fromCategory?.line_attrval_name?.trim() ||
+                        '';
+                      const cn =
+                        fromSelected?.line_attrval_name_cn?.trim() ||
+                        fromCategory?.line_attrval_name_cn?.trim() ||
+                        '';
+                      const label =
+                        en && cn && en !== cn
+                          ? `${en}(${cn})`
+                          : en ||
+                            cn ||
+                            (fromCategory ? valueLabel(fromCategory) : id);
+                      const picUrl =
+                        fromSelected?.pic_url ||
+                        fromCategory?.pic_url ||
+                        null;
+                      return { id, label, picUrl };
+                    });
+
+                    const title =
+                      selected?.attr_name_cn?.trim() ||
+                      selected?.attr_name?.trim() ||
+                      attrLabel(attr);
+                    return (
+                      <table
+                        style={{
+                          marginTop: 12,
+                          borderCollapse: 'collapse',
+                          width: '100%',
+                          maxWidth: 720,
+                          fontSize: 13,
+                        }}
+                      >
+                        <thead>
+                          <tr>
+                            <th
+                              style={{
+                                border: '1px solid #d9d9d9',
+                                background: '#fafafa',
+                                padding: '6px 10px',
+                                textAlign: 'left',
+                                fontWeight: 500,
+                                width: 160,
+                              }}
+                            >
+                              {title}
+                            </th>
+                            <th
+                              style={{
+                                border: '1px solid #d9d9d9',
+                                background: '#fafafa',
+                                padding: '6px 10px',
+                                textAlign: 'left',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {intl.formatMessage({
+                                id: 'pages.product.detail.specAttrs.customPic',
+                                defaultMessage: '自定义图片（无图可忽略）',
+                              })}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((item) => {
+                            return (
+                              <tr key={item.id}>
+                                <td
+                                  style={{
+                                    border: '1px solid #d9d9d9',
+                                    padding: '8px 10px',
+                                    verticalAlign: 'middle',
+                                  }}
+                                >
+                                  {item.label}
+                                </td>
+                                <td
+                                  style={{
+                                    border: '1px solid #d9d9d9',
+                                    padding: '8px 10px',
+                                    verticalAlign: 'middle',
+                                  }}
+                                >
+                                  <DhgateAttrPicUpload
+                                    storeId={storeId}
+                                    value={item.picUrl}
+                                    onChange={(picUrl) =>
+                                      onValuePicChange?.(
+                                        attr.attr_id,
+                                        item.id,
+                                        picUrl,
+                                      )
+                                    }
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()
+                : null}
             </div>
           </div>
         );

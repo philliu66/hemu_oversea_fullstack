@@ -70,9 +70,11 @@ def get_dh_product_detail(
     """
     按本地商品 ID 定位店铺与 item_code，调用敦煌官方 dh.item.get 返回最新详情。
 
-    不写入本地库。含：图片 item_img_list、SKU sku_list、所属类目 category、
-    产品属性 attr_list（itemAttrList：类目/品牌/自定义属性）、
-    自定义规格 item_spec_self_def_list。
+    不写入本地库。字段按官网 dh.item.get$2.0 对照解析：
+    图片 item_img_list、SKU sku_list、产品属性 attr_list、自定义规格、
+    运费/售后/尺码模板、卖点 shortDesc1-5、折扣区间、备货、兼容属性、
+    销售国家定价、定制信息等。
+    itemBase.htmlContent 为空时补调 dh.product.html.get。
     类目全路径请另调 /api/v1/admin/categories/dh/path。
     """
     return success(product_service.get_dh_product_detail(db, payload.id))

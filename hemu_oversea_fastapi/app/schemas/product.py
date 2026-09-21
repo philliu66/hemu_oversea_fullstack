@@ -242,9 +242,143 @@ class DhProductDetailRequest(BaseModel):
     id: int = Field(description="商品 ID（product_dh.id）", ge=1)
 
 
+class DhItemWholesaleRangePublic(BaseModel):
+    """产品折扣区间（对应 dh.item.get itemWholesaleRangeList）。"""
+
+    discount: Decimal | None = Field(default=None, description="折扣率 discount")
+    start_qty: int | None = Field(default=None, description="折扣起件 startQty")
+
+
+class DhItemWeightRangePublic(BaseModel):
+    """包装阶梯重量（对应 itemPackage.itemWeigthRange，官方拼写）。"""
+
+    base_qt: int | None = Field(default=None, description="基本数量 baseQt")
+    step_qt: int | None = Field(default=None, description="阶梯数量 stepQt")
+    step_weight: Decimal | None = Field(default=None, description="阶梯重量 stepWeight")
+
+
+class DhItemShiptoSkuPricePublic(BaseModel):
+    """销售国家定价（对应 shiptoCountryPriceList）。"""
+
+    region_code: str | None = Field(default=None, description="区域编码 regionCode")
+    retail_price: Decimal | None = Field(default=None, description="售往该区域价格 retailPrice")
+
+
+class DhItemSkuInventoryPublic(BaseModel):
+    """SKU 备货地址关联（对应 itemSkuInventoryList）。"""
+
+    sku_md5: str | None = Field(default=None, description="skuMD5")
+    inventory_location: str | None = Field(
+        default=None, description="备货地址编码 inventoryLocation"
+    )
+    sku_inventory_qty: int | None = Field(
+        default=None, description="该地址 SKU 备货数量 skuInventoryQty"
+    )
+
+
+class DhItemSkuAttrValPublic(BaseModel):
+    """SKU 属性值（对应 itemSkuAttrValueList）。"""
+
+    attr_id: str | None = Field(default=None, description="sku 属性 id attrId")
+    attr_val_id: str | None = Field(default=None, description="sku 属性值 id attrValId")
+    attr_val_code: str | None = Field(
+        default=None, description="属性值编码 attrValCode（多地备货）"
+    )
+    size_spec_type: str | None = Field(
+        default=None,
+        description="规格类型 sizeSpecType：1产品规格/3自定义规格/4备货地规格",
+    )
+
+
+class DhItemInventoryLocationPublic(BaseModel):
+    """备货地址（对应 itemInventory.inventoryLocationList）。"""
+
+    sort_val: int | None = Field(default=None, description="备货地址排序 sortVal")
+    leading_time: int | None = Field(default=None, description="该地址备货期 leadingTime")
+    inventory_location: str | None = Field(
+        default=None, description="备货地址编码 inventoryLocation"
+    )
+    if_in_transit: str | None = Field(
+        default=None, description="是否备货途中 ifInTransit：0否/1是"
+    )
+
+
+class DhItemInventoryPublic(BaseModel):
+    """产品备货信息（对应 itemInventory）。"""
+
+    inventory_location: str | None = Field(
+        default=None, description="产品备货地 inventoryLocation"
+    )
+    inventory_status: str | None = Field(
+        default=None, description="是否有备货 inventoryStatus：0否/1是"
+    )
+    subtract_stock_type: str | None = Field(
+        default=None,
+        description="扣减库存类型 subtractStockType：1下单扣减/2支付完成扣减",
+    )
+    inventory_ori_qty: int | None = Field(
+        default=None, description="产品原备货量 inventoryOriQty"
+    )
+    inventory_qty: int | None = Field(default=None, description="产品备货数量 inventoryQty")
+    inventory_location_list: list[DhItemInventoryLocationPublic] = Field(
+        default_factory=list,
+        description="备货地址列表 inventoryLocationList",
+    )
+
+
+class DhItemShiptoSettingPublic(BaseModel):
+    """销售国家定价区域（对应 itemShiptoSettingList）。"""
+
+    region_code: str | None = Field(default=None, description="区域编码 regionCode")
+    shipto_country_list: list[str] = Field(
+        default_factory=list, description="销售国家 shiptoCountryList"
+    )
+    item_wholesale_range_list: list[DhItemWholesaleRangePublic] = Field(
+        default_factory=list,
+        description="该区域折扣区间 itemWholesaleRangeList",
+    )
+
+
+class DhItemCustomTypeInfoPublic(BaseModel):
+    """定制商品信息（对应 itemCustomTypeInfo）。"""
+
+    custom_type: str | None = Field(default=None, description="定制服务 customType")
+    retail_price: Decimal | None = Field(default=None, description="定制产品零售价")
+    min_wholesale_qty: int | None = Field(default=None, description="最小起批量")
+    max_sale_qty: int | None = Field(default=None, description="单次最大购买量")
+    leading_time: int | None = Field(default=None, description="定制备货期")
+    sku_code: str | None = Field(default=None, description="定制 SKU 编码")
+    sale_status: str | None = Field(default=None, description="是否可销售：0/1")
+    shipto_country_price_list: list[DhItemShiptoSkuPricePublic] = Field(
+        default_factory=list,
+        description="定制销售国家定价 shiptoCountryPriceList",
+    )
+
+
+class DhItemAttrGroupDetailPublic(BaseModel):
+    """兼容属性值（对应 itemAttrgroupDetailList）。"""
+
+    attr_id: str | None = Field(default=None, description="属性 Id")
+    attr_val_id: str | None = Field(default=None, description="属性值 id")
+    attr_name: str | None = Field(default=None, description="兼容属性英文名")
+    attr_name_cn: str | None = Field(default=None, description="兼容属性中文名")
+    line_attrval_name: str | None = Field(default=None, description="兼容属性值英文名")
+    line_attrval_name_cn: str | None = Field(default=None, description="兼容属性值中文名")
+
+
+class DhItemAttrGroupPublic(BaseModel):
+    """产品兼容属性组（对应 itemAttrGroupList）。"""
+
+    item_attrgroup_detail_list: list[DhItemAttrGroupDetailPublic] = Field(
+        default_factory=list,
+        description="兼容性属性值列表 itemAttrgroupDetailList",
+    )
+
+
 class DhProductSelectedAttrValPublic(BaseModel):
     """产品属性值（对应 dh.item.get itemAttrValList）。"""
 
+    attr_id: str | None = Field(default=None, description="属性 Id")
     attr_val_id: str | None = Field(
         default=None,
         description="属性值 ID；自定义属性可从 1 累加，也可不填",
@@ -262,7 +396,9 @@ class DhProductSelectedAttrValPublic(BaseModel):
         default=None,
         description="属性值中文名",
     )
-    pic_url: str | None = Field(default=None, description="属性值图片完整 URL")
+    pic_url: str | None = Field(
+        default=None, description="属性值图片 picUrl，官方相对路径原样返回"
+    )
     brand_id: str | None = Field(default=None, description="品牌 ID")
 
 
@@ -277,7 +413,11 @@ class DhProductSelectedAttrPublic(BaseModel):
     attr_name_cn: str | None = Field(default=None, description="属性中文名")
     is_brand: str | None = Field(
         default=None,
-        description="是否品牌属性：0/1",
+        description="是否品牌属性 isbrand：0/1",
+    )
+    is_price_attr: str | None = Field(
+        default=None,
+        description="是否影响价格 isPriceAttr：0否/1是",
     )
     values: list[DhProductSelectedAttrValPublic] = Field(default_factory=list)
 
@@ -299,28 +439,43 @@ class DhProductSpecSelfDefPublic(BaseModel):
     )
     pic_url: str | None = Field(
         default=None,
-        description="规格图片完整 URL（picUrl）",
+        description="规格图片 picUrl，官方相对路径原样返回",
     )
 
 
 class DhProductSkuPublic(BaseModel):
-    """敦煌商品 SKU 展示字段。"""
+    """敦煌商品 SKU（对应 dh.item.get itemSkuList）。"""
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    sku_id: str | None = Field(default=None, description="平台 SKU ID")
-    sku_code: str | None = Field(default=None, description="卖家自定义 SKU 编码")
-    retail_price: Decimal | None = Field(default=None, description="零售价")
-    inventory: int | None = Field(default=None, description="库存")
+    id: int = Field(description="前端行号，非平台字段")
+    sku_id: str | None = Field(default=None, description="平台 SKU ID skuId")
+    sku_code: str | None = Field(default=None, description="卖家自定义 SKU 编码 skuCode")
+    sku_md5: str | None = Field(default=None, description="SKU 属性 MD5 skuMD5")
+    retail_price: Decimal | None = Field(default=None, description="零售价 retailPrice")
+    inventory: int | None = Field(default=None, description="备货数量 inventory")
     sale_status: str | None = Field(
         default=None,
-        description="是否可售：0不可售/1可售",
+        description="是否可售 saleStatus：0不可售/1可售",
     )
-    pic_url: str | None = Field(default=None, description="SKU 图片完整 URL")
+    pic_url: str | None = Field(
+        default=None, description="SKU 图片 picUrl，官方相对路径原样返回"
+    )
     attr_combo_text: str | None = Field(
         default=None,
-        description="属性组合展示文案",
+        description="属性组合展示文案（业务派生，非官网字段）",
+    )
+    item_sku_attr_value_list: list[DhItemSkuAttrValPublic] = Field(
+        default_factory=list,
+        description="SKU 属性值列表 itemSkuAttrValueList",
+    )
+    item_sku_inventory_list: list[DhItemSkuInventoryPublic] = Field(
+        default_factory=list,
+        description="SKU 备货地址关联 itemSkuInventoryList",
+    )
+    shipto_country_price_list: list[DhItemShiptoSkuPricePublic] = Field(
+        default_factory=list,
+        description="SKU 销售国家定价 shiptoCountryPriceList",
     )
 
 
@@ -332,93 +487,144 @@ class DhProductImgPublic(BaseModel):
         description="官方 imgUrl，相对路径原样返回、不加前缀",
     )
     img_md5: str | None = Field(default=None, description="官方 imgMd5")
-    type: str | None = Field(default=None, description="官方 type")
+    type: str | None = Field(
+        default=None,
+        description="官方 type：3=Google shopping 推广图，其它=其他来源",
+    )
 
 
 class DhProductDetailPublic(BaseModel):
-    """敦煌商品详情（前端展示必要字段，不含 raw/ext 等大字段）。"""
+    """敦煌商品详情：官网 dh.item.get$2.0 字段对照解析 + 本地业务字段。"""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    store_id: int = Field(description="店铺 ID")
-    item_code: str = Field(description="商品编码")
-    site_id: str = Field(description="站点语言")
-    is_seed: str = Field(description="是否种子：1=是，0=否")
-    supplier_id: str | None = Field(default=None, description="平台卖家 ID")
-    cate_pub_id: str | None = Field(default=None, description="发布类目 ID")
+    store_id: int = Field(description="店铺 ID（本地）")
+    item_code: str = Field(description="商品编码 itemCode")
+    site_id: str = Field(description="站点语言 siteId")
+    is_seed: str = Field(description="是否种子：1=是，0=否（本地）")
+    supplier_id: str | None = Field(default=None, description="卖家 ID supplierId")
+    cate_pub_id: str | None = Field(default=None, description="发布类目 ID catePubId")
     state: str | None = Field(
         default=None,
-        description="商品状态描述",
+        description="产品状态编码 state（100100 上架等，官方原值）",
     )
-    item_name: str | None = Field(default=None, description="商品标题")
-    short_desc: str | None = Field(default=None, description="简短介绍")
-    html_content: str | None = Field(default=None, description="详情 HTML")
-    key_word1: str | None = Field(default=None, description="关键词1")
-    key_word2: str | None = Field(default=None, description="关键词2")
-    key_word3: str | None = Field(default=None, description="关键词3")
-    video_url: str | None = Field(default=None, description="视频地址")
-    min_wholesale_qty: int | None = Field(default=None, description="最小起批量")
-    max_sale_qty: int | None = Field(default=None, description="单次最大购买量")
-    leading_time: int | None = Field(default=None, description="备货天数")
+    item_name: str | None = Field(default=None, description="产品名称 itemBase.itemName")
+    short_desc: str | None = Field(default=None, description="卖点&特性 itemBase.shortDesc")
+    short_desc1: str | None = Field(default=None, description="卖点&特性1 itemBase.shortDesc1")
+    short_desc2: str | None = Field(default=None, description="卖点&特性2 itemBase.shortDesc2")
+    short_desc3: str | None = Field(default=None, description="卖点&特性3 itemBase.shortDesc3")
+    short_desc4: str | None = Field(default=None, description="卖点&特性4 itemBase.shortDesc4")
+    short_desc5: str | None = Field(default=None, description="卖点&特性5 itemBase.shortDesc5")
+    html_content: str | None = Field(
+        default=None, description="产品详情内容 itemBase.htmlContent"
+    )
+    key_word1: str | None = Field(default=None, description="搜索关键字 itemBase.keyWord1")
+    key_word2: str | None = Field(default=None, description="搜索关键字 itemBase.keyWord2")
+    key_word3: str | None = Field(default=None, description="搜索关键字 itemBase.keyWord3")
+    video_url: str | None = Field(default=None, description="产品视频地址 itemBase.videoUrl")
+    min_wholesale_qty: int | None = Field(
+        default=None, description="最小起批量 itemSaleSetting.minWholesaleQty"
+    )
+    max_sale_qty: int | None = Field(
+        default=None, description="单次最大购买量 itemSaleSetting.maxSaleQty"
+    )
+    leading_time: int | None = Field(
+        default=None, description="备货期 itemSaleSetting.leadingTime"
+    )
     price_config_type: str | None = Field(
         default=None,
-        description="定价方式：1单独/2统一",
+        description="定价方式 itemSaleSetting.priceConfigType：1分别/2统一",
     )
-    gross_weight: Decimal | None = Field(default=None, description="包装毛重 kg")
-    length: Decimal | None = Field(default=None, description="包装长 cm")
-    width: Decimal | None = Field(default=None, description="包装宽 cm")
-    height: Decimal | None = Field(default=None, description="包装高 cm")
-    packing_quantity: int | None = Field(default=None, description="每包件数")
-    price_min: Decimal | None = Field(default=None, description="最低价")
-    price_max: Decimal | None = Field(default=None, description="最高价")
-    sku_count: int | None = Field(default=None, description="SKU 数量")
-    total_inventory: int | None = Field(default=None, description="库存合计")
+    gross_weight: Decimal | None = Field(
+        default=None, description="包装后重量 kg itemPackage.grossWeight"
+    )
+    length: Decimal | None = Field(default=None, description="包装长 cm itemPackage.length")
+    width: Decimal | None = Field(default=None, description="包装宽 cm itemPackage.width")
+    height: Decimal | None = Field(default=None, description="包装高 cm itemPackage.height")
+    measure_id: str | None = Field(
+        default=None, description="销售单位 ID itemPackage.measureId"
+    )
+    packing_quantity: int | None = Field(
+        default=None, description="每包件数 itemPackage.packingQuantity"
+    )
+    item_weight_range: DhItemWeightRangePublic | None = Field(
+        default=None,
+        description="阶梯重量 itemPackage.itemWeigthRange",
+    )
+    shipping_model_id: str | None = Field(
+        default=None, description="运费模板 ID shippingModelId"
+    )
+    after_sale_template_id: str | None = Field(
+        default=None, description="售后模板 ID afterSaleTemplateId"
+    )
+    size_template_id: str | None = Field(
+        default=None, description="尺码模板 ID sizeTemplateId"
+    )
+    item_group_id: str | None = Field(
+        default=None, description="产品分组 ID itemGroupId"
+    )
+    price_min: Decimal | None = Field(default=None, description="最低价（业务派生）")
+    price_max: Decimal | None = Field(default=None, description="最高价（业务派生）")
+    sku_count: int | None = Field(default=None, description="SKU 数量（业务派生）")
+    total_inventory: int | None = Field(default=None, description="库存合计（业务派生）")
     issample: str | None = Field(
         default=None,
-        description="是否成人用品：2是/3否",
+        description="是否成人性质 issample；文档 2是/3否，平台也可能返回其它值",
     )
     is_dh_optimized: str | None = Field(
         default=None,
-        description="是否敦煌优选：0/1",
+        description="是否敦煌优选 isDhOptimized：0/1",
     )
-    vaild_day: str | None = Field(default=None, description="有效天数")
-    expire_date: datetime | None = Field(default=None, description="过期时间")
-    operate_date: datetime | None = Field(default=None, description="平台最后修改时间")
-    last_synced_at: datetime | None = Field(default=None, description="最近同步时间")
-    sync_state: str = Field(description="同步状态：1=成功，0=失败")
-    sync_state_desc: str | None = Field(default=None, description="同步状态描述")
+    vaild_day: str | None = Field(
+        default=None, description="产品有效期 vaildDay（官方拼写，文档暂不使用）"
+    )
+    expire_date: datetime | None = Field(default=None, description="过期时间 expireDate")
+    operate_date: datetime | None = Field(
+        default=None, description="产品最新修改时间 operateDate"
+    )
+    last_synced_at: datetime | None = Field(default=None, description="最近同步时间（本地）")
+    sync_state: str = Field(description="同步状态：1=成功，0=失败（本地）")
+    sync_state_desc: str | None = Field(default=None, description="同步状态描述（本地）")
     created_at: datetime
     updated_at: datetime
     item_img_list: list[DhProductImgPublic] = Field(
         default_factory=list,
-        description=(
-            "产品图片列表（对应 dh.item.get itemImgList）："
-            "img_url / img_md5 / type 为官方原值，img_url 不加前缀"
-        ),
+        description="产品图片列表 itemImgList",
     )
     sku_list: list[DhProductSkuPublic] = Field(
         default_factory=list,
-        description="商品 SKU 列表",
+        description="产品 SKU 列表 itemSkuList",
     )
     category: DhCategoryPublic | None = Field(
         default=None,
-        description="所属发布类目（按 cate_pub_id 关联 product_category_dh）",
-    )
-    item_group_id: str | None = Field(
-        default=None,
-        description="产品分组 ID（itemGroupId）",
+        description="所属发布类目（按 cate_pub_id 关联本地 product_category_dh）",
     )
     attr_list: list[DhProductSelectedAttrPublic] = Field(
         default_factory=list,
-        description=(
-            "产品属性（itemAttrList）：类目属性 + 品牌属性(attr_id=99) + "
-            "自定义属性(attr_id=11)，仅展示不参与 SKU"
-        ),
+        description="产品属性列表 itemAttrList",
     )
     item_spec_self_def_list: list[DhProductSpecSelfDefPublic] = Field(
         default_factory=list,
-        description="自定义规格列表（itemSpecSelfDefList）",
+        description="自定义规格列表 itemSpecSelfDefList",
+    )
+    item_wholesale_range_list: list[DhItemWholesaleRangePublic] = Field(
+        default_factory=list,
+        description="产品折扣区间 itemWholesaleRangeList",
+    )
+    item_inventory: DhItemInventoryPublic | None = Field(
+        default=None, description="产品备货信息 itemInventory"
+    )
+    item_attr_group_list: list[DhItemAttrGroupPublic] = Field(
+        default_factory=list,
+        description="产品兼容属性列表 itemAttrGroupList",
+    )
+    item_shipto_setting_list: list[DhItemShiptoSettingPublic] = Field(
+        default_factory=list,
+        description="销售国家定价信息 itemShiptoSettingList",
+    )
+    item_custom_type_info: DhItemCustomTypeInfoPublic | None = Field(
+        default=None, description="定制商品信息 itemCustomTypeInfo"
     )
 
 

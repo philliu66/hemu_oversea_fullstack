@@ -273,6 +273,7 @@ export type DhCategoryAttrsPublic = {
 
 /** 商品产品属性值（对应 dh.item.get itemAttrValList） */
 export type DhProductSelectedAttrValPublic = {
+  attr_id?: string | null;
   attr_val_id?: string | null;
   /** 值级属性英文名（自定义属性的属性名，如 Function/Voltage） */
   attr_name?: string | null;
@@ -301,6 +302,7 @@ export type DhProductSelectedAttrPublic = {
   attr_name: string | null;
   attr_name_cn: string | null;
   is_brand?: string | null;
+  is_price_attr?: string | null;
   values: DhProductSelectedAttrValPublic[];
 };
 
@@ -359,11 +361,90 @@ export type DhProductSkuPublic = {
   id: number;
   sku_id: string | null;
   sku_code: string | null;
+  sku_md5?: string | null;
   retail_price: string | number | null;
   inventory: number | null;
   sale_status: string | null;
   pic_url: string | null;
   attr_combo_text: string | null;
+  item_sku_attr_value_list?: DhItemSkuAttrValPublic[];
+  item_sku_inventory_list?: DhItemSkuInventoryPublic[];
+  shipto_country_price_list?: DhItemShiptoSkuPricePublic[];
+};
+
+export type DhItemSkuAttrValPublic = {
+  attr_id?: string | null;
+  attr_val_id?: string | null;
+  attr_val_code?: string | null;
+  size_spec_type?: string | null;
+};
+
+export type DhItemSkuInventoryPublic = {
+  sku_md5?: string | null;
+  inventory_location?: string | null;
+  sku_inventory_qty?: number | null;
+};
+
+export type DhItemShiptoSkuPricePublic = {
+  region_code?: string | null;
+  retail_price?: string | number | null;
+};
+
+export type DhItemWholesaleRangePublic = {
+  discount?: string | number | null;
+  start_qty?: number | null;
+};
+
+export type DhItemWeightRangePublic = {
+  base_qt?: number | null;
+  step_qt?: number | null;
+  step_weight?: string | number | null;
+};
+
+export type DhItemInventoryLocationPublic = {
+  sort_val?: number | null;
+  leading_time?: number | null;
+  inventory_location?: string | null;
+  if_in_transit?: string | null;
+};
+
+export type DhItemInventoryPublic = {
+  inventory_location?: string | null;
+  inventory_status?: string | null;
+  subtract_stock_type?: string | null;
+  inventory_ori_qty?: number | null;
+  inventory_qty?: number | null;
+  inventory_location_list?: DhItemInventoryLocationPublic[];
+};
+
+export type DhItemShiptoSettingPublic = {
+  region_code?: string | null;
+  shipto_country_list?: string[];
+  item_wholesale_range_list?: DhItemWholesaleRangePublic[];
+};
+
+export type DhItemCustomTypeInfoPublic = {
+  custom_type?: string | null;
+  retail_price?: string | number | null;
+  min_wholesale_qty?: number | null;
+  max_sale_qty?: number | null;
+  leading_time?: number | null;
+  sku_code?: string | null;
+  sale_status?: string | null;
+  shipto_country_price_list?: DhItemShiptoSkuPricePublic[];
+};
+
+export type DhItemAttrGroupDetailPublic = {
+  attr_id?: string | null;
+  attr_val_id?: string | null;
+  attr_name?: string | null;
+  attr_name_cn?: string | null;
+  line_attrval_name?: string | null;
+  line_attrval_name_cn?: string | null;
+};
+
+export type DhItemAttrGroupPublic = {
+  item_attrgroup_detail_list?: DhItemAttrGroupDetailPublic[];
 };
 
 /** 敦煌商品图片（对应 dh.item.get itemImgList） */
@@ -375,13 +456,26 @@ export type DhProductImgPublic = {
   original?: DhProductImgPublic | null;
 };
 
-/** POST /api/v1/common/utils/dhgate/uploadimg */
-export type DhgateUploadImgPublic = {
+/** POST /api/v1/common/utils/dhgate/uploadimg — 直接上传 */
+export type DhgateImgInfoPublic = {
+  img_url: string | null;
+  img_md5: string | null;
+  type: string | null;
+};
+
+export type DhgateUploadImgParams = {
+  store_id: number;
+  file: File | Blob;
+  filename?: string;
+};
+
+/** POST /api/v1/common/utils/dhgate/tweakimg — 微调并上传 */
+export type DhgateTweakImgPublic = {
   original: DhProductImgPublic;
   tweaked: DhProductImgPublic;
 };
 
-export type DhgateUploadImgParams = {
+export type DhgateTweakImgParams = {
   store_id: number;
   img_url?: string | null;
   img_md5?: string | null;
@@ -389,6 +483,9 @@ export type DhgateUploadImgParams = {
   file?: File | Blob | null;
   filename?: string;
 };
+
+/** @deprecated 使用 DhgateTweakImgPublic */
+export type DhgateUploadImgPublic = DhgateTweakImgPublic;
 
 /** 敦煌商品详情（与后端 DhProductDetailPublic 对齐） */
 export type DhProductDetailPublic = {
@@ -416,6 +513,16 @@ export type DhProductDetailPublic = {
   width: string | number | null;
   height: string | number | null;
   packing_quantity: number | null;
+  measure_id?: string | null;
+  item_weight_range?: DhItemWeightRangePublic | null;
+  shipping_model_id?: string | null;
+  after_sale_template_id?: string | null;
+  size_template_id?: string | null;
+  short_desc1?: string | null;
+  short_desc2?: string | null;
+  short_desc3?: string | null;
+  short_desc4?: string | null;
+  short_desc5?: string | null;
   price_min: string | number | null;
   price_max: string | number | null;
   sku_count: number | null;
@@ -437,6 +544,11 @@ export type DhProductDetailPublic = {
   attr_list?: DhProductSelectedAttrPublic[];
   /** 自定义规格（对应 dh.item.get itemSpecSelfDefList） */
   item_spec_self_def_list?: DhProductSpecSelfDefPublic[];
+  item_wholesale_range_list?: DhItemWholesaleRangePublic[];
+  item_inventory?: DhItemInventoryPublic | null;
+  item_attr_group_list?: DhItemAttrGroupPublic[];
+  item_shipto_setting_list?: DhItemShiptoSettingPublic[];
+  item_custom_type_info?: DhItemCustomTypeInfoPublic | null;
 };
 
 /** 敦煌产品分组（与后端 DhProductGroupPublic 对齐） */

@@ -8,11 +8,16 @@ from app.core.db import get_db
 from app.core.errors import bad_request
 from app.schemas.common import ApiResponse, success
 from app.schemas.utils import (
-    DhgateUploadImgPublic,
+    DhgateImgInfoPublic,
+    DhgateTweakImgPublic,
     FileProductSyncExtractPublic,
 )
 from app.services import utils_file as utils_file_service
-from app.services.dhgate import get_dhgate_client, tweak_product_image
+from app.services.dhgate import (
+    get_dhgate_client,
+    tweak_product_image,
+    upload_product_image,
+)
 
 router = APIRouter(
     prefix="/utils",
@@ -73,10 +78,39 @@ async def get_data_from_file(
 
 @router.post(
     "/dhgate/uploadimg",
-    response_model=ApiResponse[DhgateUploadImgPublic],
-    summary="微调并上传图片到敦煌相册（dh.album.img.upload$2.1）",
+    response_model=ApiResponse[DhgateImgInfoPublic],
+    summary="上传图片到敦煌相册（dh.album.img.upload$2.1）",
 )
 async def upload_dhgate_image(
+    db: Session = Depends(get_db),
+    store_id: int = Form(..., description="店铺 ID，用于取该店 access_token"),
+    img: UploadFile = File(..., description="上传图片文件（jpg/png 等，最大 2MB）"),
+) -> ApiResponse[DhgateImgInfoPublic]:
+    """
+    直接上传本地图片到敦煌相册，不进行微调。
+
+    表单字段：store_id + img（文件）。
+    返回 img_url / img_md5 / type（img_url 不加前缀）。
+    """
+    image_bytes = await img.read()
+    if not image_bytes:
+        raise bad_request("上传文件为空")
+
+    client = get_dhgate_client(db, store_id)
+    data = upload_product_image(
+        client,
+        image_bytes=image_bytes,
+        image_filename=img.filename,
+    )
+    return success(DhgateImgInfoPublic.model_validate(data))
+
+
+@router.post(
+    "/dhgate/tweakimg",
+    response_model=ApiResponse[DhgateTweakImgPublic],
+    summary="微调并上传图片到敦煌相册（dh.album.img.upload$2.1）",
+)
+async def tweak_dhgate_image(
     db: Session = Depends(get_db),
     store_id: int = Form(..., description="店铺 ID，用于取该店 access_token"),
     img_url: str | None = Form(
@@ -95,7 +129,7 @@ async def upload_dhgate_image(
         default=None,
         description="图片文件（接口内转 base64）；未传 img_url 时必填",
     ),
-) -> ApiResponse[DhgateUploadImgPublic]:
+) -> ApiResponse[DhgateTweakImgPublic]:
     """
     使用与联调 item/img/tweak 相同的微调服务，再调用 dh.album.img.upload。
 
@@ -122,4 +156,4 @@ async def upload_dhgate_image(
         original_img_md5=str(img_md5 or "").strip() or None,
         original_type=str(type or "").strip() or None,
     )
-    return success(DhgateUploadImgPublic.model_validate(data))
+    return success(DhgateTweakImgPublic.model_validate(data))

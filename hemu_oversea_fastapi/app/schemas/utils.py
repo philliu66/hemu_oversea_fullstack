@@ -11,11 +11,15 @@ class DhgateImgInfoPublic(BaseModel):
     type: str | None = Field(default=None, description="官方 type")
 
 
-class DhgateUploadImgPublic(BaseModel):
+class DhgateTweakImgPublic(BaseModel):
     """微调并上传后的原图 / 现图。"""
 
     original: DhgateImgInfoPublic = Field(description="微调前的原图片")
     tweaked: DhgateImgInfoPublic = Field(description="微调并上传后的现图片")
+
+
+# 兼容旧名称
+DhgateUploadImgPublic = DhgateTweakImgPublic
 
 
 class FileProductSyncRow(BaseModel):

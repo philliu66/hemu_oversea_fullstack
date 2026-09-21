@@ -15,7 +15,7 @@ import {
   Typography,
 } from 'antd';
 import React, { useRef, useState } from 'react';
-import { uploadDhgateImage } from '@/services/common/utils';
+import { tweakDhgateImage } from '@/services/common/utils';
 import type { DhProductImgPublic } from '@/types/api';
 import { buildDhImageUrl } from '@/utils/dhImage';
 import './ProductImagesEditor.less';
@@ -72,7 +72,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
     tweakingRef.current = true;
     setTweakingIndex(index);
     try {
-      const data = await uploadDhgateImage({
+      const data = await tweakDhgateImage({
         store_id: storeId,
         img_url: current.img_url,
         img_md5: current.img_md5,
