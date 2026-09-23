@@ -1,6 +1,7 @@
 from app.models.base import Base
 from app.models.captcha import Captcha
 from app.models.login_attempt import LoginAttempt
+from app.models.mission import Mission, MissionDataDhFission, MissionLog
 from app.models.product_attr_dh import ProductAttrDh
 from app.models.product_attr_val_dh import ProductAttrValDh
 from app.models.product_category_dh import ProductCategoryDh
@@ -16,6 +17,9 @@ __all__ = [
     "Base",
     "Captcha",
     "LoginAttempt",
+    "Mission",
+    "MissionDataDhFission",
+    "MissionLog",
     "ProductAttrDh",
     "ProductAttrValDh",
     "ProductCategoryDh",

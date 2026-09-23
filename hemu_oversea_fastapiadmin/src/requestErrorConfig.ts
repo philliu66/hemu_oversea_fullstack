@@ -1,16 +1,21 @@
 ﻿import type { RequestConfig } from '@umijs/max';
-import { getIntl, history } from '@umijs/max';
+import { getIntl, history, request } from '@umijs/max';
 import { message, notification } from 'antd';
 import { isUnauthorizedCode } from '@/constants/errorCodes';
 import type { ApiResponse } from '@/types/api';
+import { tryRefreshTokens } from '@/utils/authRefresh';
 import { clearTokens } from '@/utils/authToken';
 import {
   applyRequestConvention,
   isApiResponse,
   isApiSuccess,
+  isAuthWhitelist,
 } from '@/utils/http';
 
 const loginPath = '/user/login';
+
+/** 换发成功后重试原请求时打标，避免死循环 */
+const RETRY_AFTER_REFRESH = '__isRetryAfterRefresh';
 
 enum ErrorShowType {
   SILENT = 0,
@@ -27,6 +32,15 @@ interface ResponseStructure {
   errorMessage?: string;
   showType?: ErrorShowType;
 }
+
+type RequestOpts = {
+  url?: string;
+  method?: string;
+  skipErrorHandler?: boolean;
+  /** 跳过 401 静默换发（如 refresh 自身） */
+  skipAuthRefresh?: boolean;
+  [key: string]: unknown;
+};
 
 function t(id: string, defaultMessage: string, values?: Record<string, any>) {
   try {
@@ -106,10 +120,66 @@ function throwIfEnvelopeFailed(payload: unknown) {
   });
 }
 
+function isUnauthorizedError(error: any): boolean {
+  if (error?.name === 'BizError') {
+    return isUnauthorizedCode(Number(error.info?.errorCode));
+  }
+  if (error?.response) {
+    const status = error.response.status as number;
+    const payload = error.response.data;
+    if (isApiResponse(payload) && isUnauthorizedCode(payload.code)) {
+      return true;
+    }
+    return status === 401;
+  }
+  return false;
+}
+
+function canAttemptRefresh(opts: RequestOpts): boolean {
+  if (opts.skipAuthRefresh || opts[RETRY_AFTER_REFRESH]) {
+    return false;
+  }
+  if (isAuthWhitelist(opts.url, opts.method)) {
+    return false;
+  }
+  return true;
+}
+
+function unauthorizedTip(error: any): string {
+  if (error?.name === 'BizError' && error.info?.errorMessage) {
+    return error.info.errorMessage;
+  }
+  const payload = error?.response?.data;
+  if (isApiResponse(payload)) {
+    return resolveApiErrorMessage(payload);
+  }
+  return t('app.request.unauthorized', '未登录或登录已过期，请重新登录');
+}
+
+/**
+ * 401 时先静默换发，成功则重试原请求；失败再提示并跳登录。
+ * 返回值会作为原 request 的结果（umi-request 约定）。
+ */
+async function handleUnauthorized(error: any, opts: RequestOpts) {
+  if (canAttemptRefresh(opts)) {
+    const refreshed = await tryRefreshTokens();
+    if (refreshed) {
+      return request({
+        ...opts,
+        [RETRY_AFTER_REFRESH]: true,
+      });
+    }
+  }
+
+  message.error(unauthorizedTip(error));
+  redirectToLogin();
+  return undefined;
+}
+
 /**
  * 全局请求错误处理：
  * - 业务失败（code !== 0）：message.error 提示后端 message
- * - 未登录（40100 / HTTP 401）：先提示再跳转登录
+ * - 未登录（40100 / HTTP 401）：先尝试 refresh，失败再跳转登录
  * - 网络异常：统一兜底文案
  */
 export const errorConfig: RequestConfig = {
@@ -124,8 +194,14 @@ export const errorConfig: RequestConfig = {
       }
     },
     errorHandler: (error: any, opts: any) => {
-      if (opts?.skipErrorHandler) {
+      const requestOpts = (opts || {}) as RequestOpts;
+
+      if (requestOpts.skipErrorHandler) {
         throw error;
+      }
+
+      if (isUnauthorizedError(error)) {
+        return handleUnauthorized(error, requestOpts);
       }
 
       // 业务错误（响应拦截器 / errorThrower 抛出）
@@ -154,6 +230,7 @@ export const errorConfig: RequestConfig = {
             });
             break;
           case ErrorShowType.REDIRECT:
+            // 未授权已在上方 isUnauthorizedError 分支处理
             message.error(
               errorMessage ||
                 t('app.request.unauthorized', '未登录或登录已过期，请重新登录'),
@@ -174,24 +251,7 @@ export const errorConfig: RequestConfig = {
         const payload = error.response.data;
 
         if (isApiResponse(payload) && !isApiSuccess(payload)) {
-          const tip = resolveApiErrorMessage(payload);
-          if (isUnauthorizedCode(payload.code) || status === 401) {
-            message.error(
-              tip ||
-                t('app.request.unauthorized', '未登录或登录已过期，请重新登录'),
-            );
-            redirectToLogin();
-            return;
-          }
-          message.error(tip);
-          return;
-        }
-
-        if (status === 401) {
-          message.error(
-            t('app.request.unauthorized', '未登录或登录已过期，请重新登录'),
-          );
-          redirectToLogin();
+          message.error(resolveApiErrorMessage(payload));
           return;
         }
 

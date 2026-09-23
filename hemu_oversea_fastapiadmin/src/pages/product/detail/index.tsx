@@ -1,11 +1,12 @@
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ProFormInstance } from '@ant-design/pro-components';
 import {
   PageContainer,
   ProForm,
+  ProFormList,
   ProFormSelect,
+  ProFormText,
 } from '@ant-design/pro-components';
-import { history, useIntl, useModel, useParams } from '@umijs/max';
+import { history, useIntl, useLocation, useModel } from '@umijs/max';
 import {
   App,
   Button,
@@ -21,6 +22,7 @@ import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -49,7 +51,16 @@ import {
   type DhProductStateCode,
 } from '@/constants/product';
 import { formatDateTime } from '@/utils/datetime';
-import { PRODUCT_LIST_PATH, parseProductId } from '../utils';
+import {
+  PRODUCT_LIST_PATH,
+  createEmptyProductDetail,
+  isProductPageEditable,
+  productCreatePath,
+  productEditPath,
+  resolveProductPageRoute,
+  toCopyProductDetail,
+  type ProductPageMode,
+} from '../utils';
 import CategoryAttrsFields from './CategoryAttrsFields';
 import ProductImagesEditor from './ProductImagesEditor';
 import SpecAttrsFields from './SpecAttrsFields';
@@ -360,13 +371,47 @@ async function loadCascaderOptionsAlongPath(
   return options;
 }
 
+function pageTitleId(mode: ProductPageMode): {
+  id: string;
+  defaultMessage: string;
+} {
+  switch (mode) {
+    case 'create':
+      return {
+        id: 'pages.product.create.title',
+        defaultMessage: '新建商品',
+      };
+    case 'copy':
+      return {
+        id: 'pages.product.copy.title',
+        defaultMessage: '复制商品',
+      };
+    case 'edit':
+      return {
+        id: 'pages.product.edit.title',
+        defaultMessage: '编辑商品',
+      };
+    default:
+      return {
+        id: 'pages.product.detail.title',
+        defaultMessage: '商品详情',
+      };
+  }
+}
+
 const ProductDetailPage: React.FC = () => {
   const intl = useIntl();
   const { message } = App.useApp();
+  const location = useLocation();
   const { initialState } = useModel('@@initialState');
   const supplierId = initialState?.currentUser?.supplier_id;
-  const { id: idParam } = useParams<{ id: string }>();
-  const productId = parseProductId(idParam);
+  const routeState = useMemo(
+    () => resolveProductPageRoute(location.pathname, location.search),
+    [location.pathname, location.search],
+  );
+  const { mode, productId, fromId } = routeState;
+  const editable = isProductPageEditable(mode);
+  const sourceProductId = mode === 'copy' ? fromId : productId;
   const formRef = useRef<ProFormInstance<BasicFormValues>>(null);
 
   const [detail, setDetail] = useState<DhProductDetailPublic>();
@@ -486,25 +531,71 @@ const ProductDetailPage: React.FC = () => {
   );
 
   const loadDetail = useCallback(async () => {
-    if (!productId) {
+    const resetEmpty = () => {
+      setDetail(undefined);
+      setSelectedStoreId(undefined);
+      setCategoryPath(undefined);
+      setCascaderOptions([]);
+      setInitialCategoryPath(undefined);
+      setCategoryAttrs([]);
+      setAttrFillValues(undefined);
+      setCustomAttrDrafts([]);
+      originalCategoryIdRef.current = undefined;
+    };
+
+    if (mode === 'create') {
+      setLoading(true);
+      try {
+        const roots = (await fetchDhCategories({})).map(toCascaderOption);
+        setCascaderOptions(roots);
+        setInitialCategoryPath(undefined);
+        setCategoryPath(undefined);
+        setCategoryAttrs([]);
+        setAttrFillValues(undefined);
+        setCustomAttrDrafts([]);
+        originalCategoryIdRef.current = undefined;
+        setSelectedStoreId(undefined);
+        setDetail(createEmptyProductDetail());
+      } catch (error) {
+        resetEmpty();
+        message.error(
+          error instanceof Error
+            ? error.message
+            : intl.formatMessage({
+                id: 'pages.product.category.loadFailed',
+                defaultMessage: '加载商品分类失败',
+              }),
+        );
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (!sourceProductId) {
+      resetEmpty();
       setLoading(false);
       return;
     }
+
     setLoading(true);
     try {
-      const data = await fetchDhProductDetail(productId);
+      const data = await fetchDhProductDetail(sourceProductId);
+      const nextDetail =
+        mode === 'copy' ? toCopyProductDetail(data) : data;
       let nextCategoryPath: string[] | undefined;
       let nextOptions: CategoryOption[] = [];
 
-      if (data.category?.id) {
+      if (nextDetail.category?.id) {
         try {
-          const pathData = await applyCategoryPath(data.category.id);
+          const pathData = await applyCategoryPath(nextDetail.category.id);
           nextCategoryPath = pathData.path_items.map((item) => item.cate_pub_id);
           nextOptions = await loadCascaderOptionsAlongPath(pathData.path_items);
         } catch (pathError) {
-          setCategoryPath(formatCategoryLabel(data.category));
+          setCategoryPath(formatCategoryLabel(nextDetail.category));
           nextOptions = (await fetchDhCategories({})).map(toCascaderOption);
-          const fallbackId = data.cate_pub_id || data.category.cate_pub_id;
+          const fallbackId =
+            nextDetail.cate_pub_id || nextDetail.category.cate_pub_id;
           nextCategoryPath = fallbackId ? [fallbackId] : undefined;
           message.error(
             pathError instanceof Error
@@ -522,24 +613,16 @@ const ProductDetailPage: React.FC = () => {
 
       setCascaderOptions(nextOptions);
       setInitialCategoryPath(nextCategoryPath);
-      setSelectedStoreId(data.store_id);
-      setDetail(data);
-      setCustomAttrDrafts(toCustomAttrDrafts(data.attr_list));
-      originalCategoryIdRef.current = data.category?.id;
+      setSelectedStoreId(nextDetail.store_id || undefined);
+      setDetail(nextDetail);
+      setCustomAttrDrafts(toCustomAttrDrafts(nextDetail.attr_list));
+      originalCategoryIdRef.current = nextDetail.category?.id;
       await loadCategoryAttrs(
-        data.category?.id,
-        categoryProductAttrs(data.attr_list),
+        nextDetail.category?.id,
+        categoryProductAttrs(nextDetail.attr_list),
       );
     } catch (error) {
-      setDetail(undefined);
-      setSelectedStoreId(undefined);
-      setCategoryPath(undefined);
-      setCascaderOptions([]);
-      setInitialCategoryPath(undefined);
-      setCategoryAttrs([]);
-      setAttrFillValues(undefined);
-      setCustomAttrDrafts([]);
-      originalCategoryIdRef.current = undefined;
+      resetEmpty();
       message.error(
         error instanceof Error
           ? error.message
@@ -551,7 +634,14 @@ const ProductDetailPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [applyCategoryPath, intl, loadCategoryAttrs, message, productId]);
+  }, [
+    applyCategoryPath,
+    intl,
+    loadCategoryAttrs,
+    message,
+    mode,
+    sourceProductId,
+  ]);
 
   useEffect(() => {
     void loadDetail();
@@ -596,83 +686,27 @@ const ProductDetailPage: React.FC = () => {
     };
   }, [detail?.item_group_id, detail?.store_id]);
 
-  const patchCustomAttrDraft = (
-    key: string,
-    patch: Partial<Pick<CustomAttrDraft, 'attr_name' | 'content'>>,
-  ) => {
-    setCustomAttrDrafts((prev) => {
-      const next = prev.map((item) =>
-        item.key === key ? { ...item, ...patch } : item,
-      );
-      setDetail((detailPrev) =>
-        detailPrev
-          ? {
-              ...detailPrev,
-              attr_list: applyCustomAttrDraftsToAttrList(
-                detailPrev.attr_list,
-                next,
-              ),
-            }
-          : detailPrev,
-      );
-      setAttrFillValues((fillPrev) =>
-        fillPrev
-          ? applyCustomAttrDraftsToAttrList(fillPrev, next)
-          : fillPrev,
-      );
-      return next;
-    });
-  };
-
-  const addCustomAttrDraft = () => {
-    if (customAttrDrafts.length >= DH_CUSTOM_ATTR_MAX_COUNT) {
-      message.warning(
-        intl.formatMessage(
-          {
-            id: 'pages.product.detail.customAttrs.maxCount',
-            defaultMessage: '自定义属性最多 {max} 个',
-          },
-          { max: DH_CUSTOM_ATTR_MAX_COUNT },
-        ),
-      );
-      return;
-    }
-    const next: CustomAttrDraft[] = [
-      ...customAttrDrafts,
-      {
-        key: `custom-new-${Date.now()}`,
-        attr_val_id: null,
-        attr_name: '',
-        content: '',
-      },
-    ];
-    setCustomAttrDrafts(next);
+  const syncCustomAttrDrafts = (next: CustomAttrDraft[]) => {
+    const normalized = next.map((item, index) => ({
+      key: item.key || `custom-${index}-${Date.now()}`,
+      attr_val_id: item.attr_val_id ?? null,
+      attr_name: item.attr_name ?? '',
+      content: item.content ?? '',
+    }));
+    setCustomAttrDrafts(normalized);
     setDetail((prev) =>
       prev
         ? {
             ...prev,
-            attr_list: applyCustomAttrDraftsToAttrList(prev.attr_list, next),
+            attr_list: applyCustomAttrDraftsToAttrList(
+              prev.attr_list,
+              normalized,
+            ),
           }
         : prev,
     );
     setAttrFillValues((prev) =>
-      prev ? applyCustomAttrDraftsToAttrList(prev, next) : prev,
-    );
-  };
-
-  const removeCustomAttrDraft = (key: string) => {
-    const next = customAttrDrafts.filter((item) => item.key !== key);
-    setCustomAttrDrafts(next);
-    setDetail((prev) =>
-      prev
-        ? {
-            ...prev,
-            attr_list: applyCustomAttrDraftsToAttrList(prev.attr_list, next),
-          }
-        : prev,
-    );
-    setAttrFillValues((prev) =>
-      prev ? applyCustomAttrDraftsToAttrList(prev, next) : prev,
+      prev ? applyCustomAttrDraftsToAttrList(prev, normalized) : prev,
     );
   };
 
@@ -775,7 +809,12 @@ const ProductDetailPage: React.FC = () => {
     })();
   };
 
-  if (!productId) {
+  const routeInvalid =
+    (mode === 'view' || mode === 'edit') && !productId
+      ? true
+      : mode === 'copy' && !fromId;
+
+  if (routeInvalid) {
     return (
       <PageContainer
         title={false}
@@ -790,6 +829,13 @@ const ProductDetailPage: React.FC = () => {
       </PageContainer>
     );
   }
+
+  const formInstanceKey =
+    mode === 'create'
+      ? 'create'
+      : mode === 'copy'
+        ? `copy-${fromId}`
+        : `${mode}-${productId}`;
 
   const priceSelectedAttrs = priceProductAttrs(
     attrFillValues || detail?.attr_list,
@@ -808,9 +854,38 @@ const ProductDetailPage: React.FC = () => {
   const normalSelectedAttrs = nonPriceProductAttrs(
     attrFillValues || detail?.attr_list,
   );
+  const titleMsg = pageTitleId(mode);
 
   return (
-    <PageContainer title={false} onBack={() => history.push(PRODUCT_LIST_PATH)}>
+    <PageContainer
+      title={intl.formatMessage(titleMsg)}
+      onBack={() => history.push(PRODUCT_LIST_PATH)}
+      extra={
+        mode === 'view' && productId ? (
+          <Space wrap>
+            <Button
+              type="primary"
+              onClick={() => history.push(productEditPath(productId))}
+            >
+              {intl.formatMessage({
+                id: 'pages.product.action.edit',
+                defaultMessage: '编辑',
+              })}
+            </Button>
+            <Button
+              onClick={() =>
+                history.push(productCreatePath({ from: productId }))
+              }
+            >
+              {intl.formatMessage({
+                id: 'pages.product.action.copy',
+                defaultMessage: '复制',
+              })}
+            </Button>
+          </Space>
+        ) : undefined
+      }
+    >
       <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
         <Card
           title={intl.formatMessage({
@@ -821,20 +896,33 @@ const ProductDetailPage: React.FC = () => {
         >
           {detail ? (
             <ProForm<BasicFormValues>
-              key={detail.id}
+              key={`basic-${formInstanceKey}`}
               formRef={formRef}
               submitter={false}
+              disabled={!editable}
               layout="horizontal"
+              labelAlign="left"
               labelCol={{ flex: '110px' }}
               wrapperCol={{ flex: 1 }}
               style={{ maxWidth: 720 }}
               initialValues={{
-                store_id: detail.store_id,
+                store_id: detail.store_id || undefined,
                 category_path: initialCategoryPath,
               }}
               onValuesChange={(changed) => {
                 if ('store_id' in changed) {
-                  setSelectedStoreId(changed.store_id);
+                  const nextStoreId = changed.store_id as number | undefined;
+                  setSelectedStoreId(nextStoreId);
+                  itemGroupTreeLoadedRef.current = false;
+                  setItemGroupOptions([]);
+                  setDetail((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          store_id: nextStoreId || 0,
+                        }
+                      : prev,
+                  );
                 }
               }}
             >
@@ -972,6 +1060,7 @@ const ProductDetailPage: React.FC = () => {
               <CategoryAttrsFields
                 attrs={normalCategoryAttrs}
                 selectedAttrs={normalSelectedAttrs}
+                disabled={!editable}
               />
             ) : (
               !loading &&
@@ -989,186 +1078,109 @@ const ProductDetailPage: React.FC = () => {
           <Divider style={{ margin: '8px 0 16px' }} />
 
           <div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 8,
-                gap: 12,
+            <Typography.Text
+              strong
+              style={{ display: 'block', marginBottom: 12 }}
+            >
+              {intl.formatMessage({
+                id: 'pages.product.detail.customAttrs.title',
+                defaultMessage: '自定义属性',
+              })}
+            </Typography.Text>
+            <ProForm<{ customAttrs: CustomAttrDraft[] }>
+              key={`custom-attrs-${formInstanceKey}`}
+              submitter={false}
+              disabled={!editable}
+              initialValues={{ customAttrs: customAttrDrafts }}
+              onValuesChange={(_, values) => {
+                if (!editable) {
+                  return;
+                }
+                syncCustomAttrDrafts(values.customAttrs || []);
               }}
             >
-              <Typography.Text strong>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.customAttrs.title',
-                  defaultMessage: '自定义属性',
+              <ProFormList
+                name="customAttrs"
+                copyIconProps={false}
+                deleteIconProps={
+                  editable
+                    ? {
+                        tooltipText: intl.formatMessage({
+                          id: 'pages.product.detail.customAttrs.delete',
+                          defaultMessage: '删除',
+                        }),
+                      }
+                    : false
+                }
+                creatorButtonProps={
+                  editable
+                    ? {
+                        creatorButtonText: intl.formatMessage({
+                          id: 'pages.product.detail.customAttrs.add',
+                          defaultMessage: '新增属性',
+                        }),
+                        type: 'dashed',
+                        style: { width: '100%', maxWidth: 720 },
+                      }
+                    : false
+                }
+                max={DH_CUSTOM_ATTR_MAX_COUNT}
+                creatorRecord={() => ({
+                  key: `custom-new-${Date.now()}`,
+                  attr_val_id: null,
+                  attr_name: '',
+                  content: '',
                 })}
-              </Typography.Text>
-              <Button
-                type="dashed"
-                size="small"
-                icon={<PlusOutlined />}
-                disabled={customAttrDrafts.length >= DH_CUSTOM_ATTR_MAX_COUNT}
-                onClick={addCustomAttrDraft}
+                itemRender={({ listDom, action }) => (
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 16,
+                    }}
+                  >
+                    {listDom}
+                    {editable ? action : null}
+                  </div>
+                )}
               >
-                {intl.formatMessage({
-                  id: 'pages.product.detail.customAttrs.add',
-                  defaultMessage: '新增属性',
-                })}
-              </Button>
-            </div>
-            <Typography.Paragraph
-              type="secondary"
-              style={{ marginBottom: 12, fontSize: 12 }}
-            >
-              {intl.formatMessage(
-                {
-                  id: 'pages.product.detail.customAttrs.hint',
-                  defaultMessage:
-                    '对应发布接口 itemAttrList 中 attrId=11；属性名/属性值不超过 {maxLen} 字符，最多 {maxCount} 个。',
-                },
-                {
-                  maxLen: DH_CUSTOM_ATTR_MAX_LENGTH,
-                  maxCount: DH_CUSTOM_ATTR_MAX_COUNT,
-                },
-              )}
-            </Typography.Paragraph>
-            {customAttrDrafts.length > 0 ? (
-              <table
-                style={{
-                  borderCollapse: 'collapse',
-                  maxWidth: 720,
-                  width: '100%',
-                  fontSize: 13,
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th
-                      style={{
-                        border: '1px solid #d9d9d9',
-                        background: '#fafafa',
-                        padding: '6px 10px',
-                        fontWeight: 500,
-                        width: 200,
-                        textAlign: 'left',
-                      }}
-                    >
-                      {intl.formatMessage({
-                        id: 'pages.product.detail.customAttrs.name',
-                        defaultMessage: '属性名',
-                      })}
-                    </th>
-                    <th
-                      style={{
-                        border: '1px solid #d9d9d9',
-                        background: '#fafafa',
-                        padding: '6px 10px',
-                        fontWeight: 500,
-                        textAlign: 'left',
-                      }}
-                    >
-                      {intl.formatMessage({
-                        id: 'pages.product.detail.customAttrs.value',
-                        defaultMessage: '属性值',
-                      })}
-                    </th>
-                    <th
-                      style={{
-                        border: '1px solid #d9d9d9',
-                        background: '#fafafa',
-                        padding: '6px 10px',
-                        fontWeight: 500,
-                        width: 72,
-                        textAlign: 'center',
-                      }}
-                    >
-                      {intl.formatMessage({
-                        id: 'pages.product.detail.customAttrs.action',
-                        defaultMessage: '操作',
-                      })}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customAttrDrafts.map((item) => (
-                    <tr key={item.key}>
-                      <td
-                        style={{
-                          border: '1px solid #d9d9d9',
-                          padding: 6,
-                        }}
-                      >
-                        <Input
-                          value={item.attr_name}
-                          allowClear
-                          maxLength={DH_CUSTOM_ATTR_MAX_LENGTH}
-                          showCount
-                          placeholder={intl.formatMessage({
-                            id: 'pages.product.detail.attrsCustomNamePlaceholder',
-                            defaultMessage: '请输入属性名',
-                          })}
-                          onChange={(event) =>
-                            patchCustomAttrDraft(item.key, {
-                              attr_name: event.target.value,
-                            })
-                          }
-                        />
-                      </td>
-                      <td
-                        style={{
-                          border: '1px solid #d9d9d9',
-                          padding: 6,
-                        }}
-                      >
-                        <Input
-                          value={item.content}
-                          allowClear
-                          maxLength={DH_CUSTOM_ATTR_MAX_LENGTH}
-                          showCount
-                          placeholder={intl.formatMessage({
-                            id: 'pages.product.detail.attrsCustomValuePlaceholder',
-                            defaultMessage: '请输入属性值',
-                          })}
-                          onChange={(event) =>
-                            patchCustomAttrDraft(item.key, {
-                              content: event.target.value,
-                            })
-                          }
-                        />
-                      </td>
-                      <td
-                        style={{
-                          border: '1px solid #d9d9d9',
-                          padding: 6,
-                          textAlign: 'center',
-                        }}
-                      >
-                        <Button
-                          type="link"
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => removeCustomAttrDraft(item.key)}
-                        >
-                          {intl.formatMessage({
-                            id: 'pages.product.detail.customAttrs.delete',
-                            defaultMessage: '删除',
-                          })}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <Typography.Text type="secondary">
-                {intl.formatMessage({
-                  id: 'pages.product.detail.customAttrs.empty',
-                  defaultMessage: '暂无自定义属性',
-                })}
-              </Typography.Text>
-            )}
+                <Space size={8} wrap align="center">
+                  <ProFormText name="key" hidden />
+                  <ProFormText name="attr_val_id" hidden />
+                  <ProFormText
+                    name="attr_name"
+                    placeholder={intl.formatMessage({
+                      id: 'pages.product.detail.attrsCustomNamePlaceholder',
+                      defaultMessage: '请输入属性名',
+                    })}
+                    fieldProps={{
+                      maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
+                      allowClear: true,
+                      style: { width: 220 },
+                    }}
+                    formItemProps={{
+                      style: { marginBottom: 0 },
+                    }}
+                  />
+                  <ProFormText
+                    name="content"
+                    placeholder={intl.formatMessage({
+                      id: 'pages.product.detail.attrsCustomValuePlaceholder',
+                      defaultMessage: '请输入属性值',
+                    })}
+                    fieldProps={{
+                      maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
+                      allowClear: true,
+                      style: { width: 320 },
+                    }}
+                    formItemProps={{
+                      style: { marginBottom: 0 },
+                    }}
+                  />
+                </Space>
+              </ProFormList>
+            </ProForm>
           </div>
         </Card>
 
@@ -1181,10 +1193,12 @@ const ProductDetailPage: React.FC = () => {
         >
           {detail ? (
             <ProForm<ProductInfoFormValues>
-              key={`product-info-${detail.id}`}
+              key={`product-info-${formInstanceKey}`}
               formRef={productInfoFormRef}
               submitter={false}
+              disabled={!editable}
               layout="horizontal"
+              labelAlign="left"
               labelCol={{ flex: '110px' }}
               wrapperCol={{ flex: 1 }}
               style={{ maxWidth: 920 }}
@@ -1340,25 +1354,31 @@ const ProductDetailPage: React.FC = () => {
                   }}
                 />
               </Form.Item>
-              <Form.Item
-                label={intl.formatMessage({
-                  id: 'pages.product.detail.field.productState',
-                  defaultMessage: '商品状态',
-                })}
-              >
-                {formatProductState(detail.state, (id, defaultMessage) =>
-                  intl.formatMessage({ id, defaultMessage }),
-                )}
-              </Form.Item>
-              <Form.Item
-                label={intl.formatMessage({
-                  id: 'pages.product.list.field.lastSyncedAt',
-                  defaultMessage: '同步时间',
-                })}
-                style={{ marginBottom: 0 }}
-              >
-                {formatDateTime(detail.last_synced_at)}
-              </Form.Item>
+              {mode === 'view' || mode === 'edit' ? (
+                <>
+                  <Form.Item
+                    label={intl.formatMessage({
+                      id: 'pages.product.detail.field.productState',
+                      defaultMessage: '商品状态',
+                    })}
+                  >
+                    {formatProductState(
+                      detail.state,
+                      (id, defaultMessage) =>
+                        intl.formatMessage({ id, defaultMessage }),
+                    )}
+                  </Form.Item>
+                  <Form.Item
+                    label={intl.formatMessage({
+                      id: 'pages.product.list.field.lastSyncedAt',
+                      defaultMessage: '同步时间',
+                    })}
+                    style={{ marginBottom: 0 }}
+                  >
+                    {formatDateTime(detail.last_synced_at)}
+                  </Form.Item>
+                </>
+              ) : null}
             </ProForm>
           ) : (
             !loading &&
@@ -1379,8 +1399,9 @@ const ProductDetailPage: React.FC = () => {
           {loading ? null : (
             <ProductImagesEditor
               images={detail?.item_img_list}
-              storeId={selectedStoreId ?? detail?.store_id}
+              storeId={selectedStoreId || detail?.store_id || undefined}
               alt={detail?.item_name || detail?.item_code}
+              disabled={!editable}
               onChange={(next) => {
                 setDetail((prev) =>
                   prev ? { ...prev, item_img_list: next } : prev,
@@ -1397,73 +1418,83 @@ const ProductDetailPage: React.FC = () => {
           })}
           loading={loading || attrsLoading}
         >
-          <SpecAttrsFields
-            priceCategoryAttrs={priceCategoryAttrs}
-            priceSelectedAttrs={priceSelectedAttrs}
-            specSelfDefs={detail?.item_spec_self_def_list}
-            storeId={selectedStoreId ?? detail?.store_id}
-            onSpecSelfDefsChange={(next) => {
-              setDetail((prev) =>
-                prev ? { ...prev, item_spec_self_def_list: next } : prev,
-              );
-            }}
-            onValuePicChange={(attrId, attrValId, picUrl) => {
-              setAttrFillValues((prev) =>
-                patchAttrValuePic(
-                  prev || detail?.attr_list,
-                  attrId,
-                  attrValId,
-                  picUrl,
-                ),
-              );
-              setDetail((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      attr_list: patchAttrValuePic(
-                        prev.attr_list,
-                        attrId,
-                        attrValId,
-                        picUrl,
-                      ),
-                    }
-                  : prev,
-              );
-            }}
-          />
-          <Divider
-            orientation="left"
-            plain
-            style={{ marginTop: 24, marginBottom: 16 }}
-          >
-            <Typography.Text strong>
+          <div style={{ marginBottom: 20 }}>
+            <Typography.Text
+              strong
+              style={{ display: 'block', marginBottom: 12 }}
+            >
               {intl.formatMessage({
-                id: 'pages.product.detail.specSku.title',
-                defaultMessage: '规格生成的商品 SKU',
+                id: 'pages.product.detail.specAttrs.sectionTitle',
+                defaultMessage: '规格属性',
               })}
             </Typography.Text>
-          </Divider>
-          <Typography.Paragraph
-            type="secondary"
-            style={{ marginTop: -8, marginBottom: 12 }}
-          >
+            <SpecAttrsFields
+              priceCategoryAttrs={priceCategoryAttrs}
+              priceSelectedAttrs={priceSelectedAttrs}
+              specSelfDefs={detail?.item_spec_self_def_list}
+              storeId={selectedStoreId || detail?.store_id || undefined}
+              disabled={!editable}
+              onSpecSelfDefsChange={(next) => {
+                setDetail((prev) =>
+                  prev ? { ...prev, item_spec_self_def_list: next } : prev,
+                );
+              }}
+              onValuePicChange={(attrId, attrValId, picUrl) => {
+                setAttrFillValues((prev) =>
+                  patchAttrValuePic(
+                    prev || detail?.attr_list,
+                    attrId,
+                    attrValId,
+                    picUrl,
+                  ),
+                );
+                setDetail((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        attr_list: patchAttrValuePic(
+                          prev.attr_list,
+                          attrId,
+                          attrValId,
+                          picUrl,
+                        ),
+                      }
+                    : prev,
+                );
+              }}
+            />
+          </div>
+
+          <Divider plain style={{ margin: '8px 0 16px' }}>
             {intl.formatMessage({
-              id: 'pages.product.detail.specSku.hint',
-              defaultMessage:
-                '以下列表由上方规格属性组合生成，可批量设置销售状态与预计收入。',
+              id: 'pages.product.detail.specSku.divider',
+              defaultMessage: '商品规格属性生成的规格sku',
             })}
-          </Typography.Paragraph>
-          <SpecSkuTable
-            skuList={detail?.sku_list}
-            priceSelectedAttrs={priceSelectedAttrs}
-            specSelfDefs={detail?.item_spec_self_def_list}
-            itemCode={detail?.item_code}
-            onChange={(next) => {
-              setDetail((prev) =>
-                prev ? { ...prev, sku_list: next } : prev,
-              );
-            }}
-          />
+          </Divider>
+
+          <div>
+            <Typography.Text
+              strong
+              style={{ display: 'block', marginBottom: 12 }}
+            >
+              {intl.formatMessage({
+                id: 'pages.product.detail.specSku.sectionTitle',
+                defaultMessage: '规格SKU',
+              })}
+            </Typography.Text>
+            <SpecSkuTable
+              skuList={detail?.sku_list}
+              priceSelectedAttrs={priceSelectedAttrs}
+              specSelfDefs={detail?.item_spec_self_def_list}
+              itemCode={detail?.item_code}
+              disabled={!editable}
+              onChange={(next) => {
+                setDetail((prev) =>
+                  prev ? { ...prev, sku_list: next } : prev,
+                );
+              }}
+            />
+          </div>
         </Card>
 
         {detail?.html_content ? (

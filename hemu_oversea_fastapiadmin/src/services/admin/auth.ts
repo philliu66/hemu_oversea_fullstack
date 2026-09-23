@@ -3,6 +3,7 @@ import { AdminAuthApi, AdminUserApi } from '@/constants/api';
 import type {
   ApiResponse,
   AuthLoginResponse,
+  TokenPair,
   UserPublic,
 } from '@/types/api';
 import { clearTokens, getRefreshToken, setTokens } from '@/utils/authToken';
@@ -111,6 +112,29 @@ export async function adminChangePassword(body: {
       new_password: body.newPassword,
     },
   });
+}
+
+/**
+ * POST /api/v1/admin/auth/refresh
+ * 用 refresh_token 换发新的 access + refresh（后端会轮换旧 refresh）。
+ */
+export async function adminRefresh() {
+  const refresh_token = getRefreshToken();
+  if (!refresh_token) {
+    throw new Error('缺少 refresh_token');
+  }
+  const res = await request<ApiResponse<TokenPair>>(AdminAuthApi.REFRESH, {
+    method: 'POST',
+    data: { refresh_token },
+    skipErrorHandler: true,
+    skipAuthRefresh: true,
+  });
+  const data = unwrapApiData<TokenPair>(res);
+  if (!data?.access_token || !data.refresh_token) {
+    throw new Error('换发 token 失败');
+  }
+  setTokens(data.access_token, data.refresh_token);
+  return data;
 }
 
 /** POST /api/v1/admin/auth/logout */

@@ -1,54 +1,75 @@
-.product-detail-img-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+.product-detail-img-upload {
+  .product-detail-upload-trigger {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    color: rgba(0, 0, 0, 0.45);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+
+  .ant-upload-list-item-actions {
+    .anticon,
+    .anticon-experiment,
+    a,
+    button,
+    .ant-btn {
+      color: #fff !important;
+    }
+
+    .anticon:hover,
+    .anticon-experiment:hover,
+    a:hover,
+    button:hover,
+    .ant-btn:hover {
+      color: #fff !important;
+    }
+  }
 }
 
-.product-detail-img-tile {
+.product-detail-upload-item {
   position: relative;
-  width: 96px;
-  height: 96px;
-  overflow: hidden;
-  background: #f5f5f5;
-  border-radius: 6px;
+  width: 100%;
+  height: 100%;
 }
 
-.product-detail-img-tile .ant-image,
-.product-detail-img-tile .ant-image-img {
-  width: 96px;
-  height: 96px;
-  object-fit: cover;
-}
-
-.product-detail-img-mask {
+.product-detail-upload-busy {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   background: rgba(0, 0, 0, 0.45);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s;
+  border-radius: 8px;
 }
 
-.product-detail-img-tile:hover .product-detail-img-mask,
-.product-detail-img-tile.is-busy .product-detail-img-mask {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.product-detail-img-mask .ant-btn {
+.product-detail-upload-diff {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   color: #fff;
-  width: 28px;
-  height: 28px;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-.product-detail-img-mask .ant-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.18) !important;
+.product-detail-upload-diff:hover {
+  background: rgba(0, 0, 0, 0.65);
 }
 
 .product-detail-img-diff {

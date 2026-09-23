@@ -33,6 +33,7 @@ type SpecAttrsFieldsProps = {
   /** 自定义规格 */
   specSelfDefs?: DhProductSpecSelfDefPublic[];
   storeId?: number;
+  disabled?: boolean;
   onSpecSelfDefsChange?: (next: DhProductSpecSelfDefPublic[]) => void;
   onValuePicChange?: (
     attrId: string,
@@ -79,10 +80,12 @@ function toPublicList(drafts: SpecSelfDefDraft[]): DhProductSpecSelfDefPublic[] 
 function SpecSelectedImageTable({
   attr,
   storeId,
+  disabled = false,
   onValuePicChange,
 }: {
   attr: DhProductSelectedAttrPublic;
   storeId?: number;
+  disabled?: boolean;
   onValuePicChange?: (
     attrId: string,
     attrValId: string,
@@ -164,6 +167,7 @@ function SpecSelectedImageTable({
                 <DhgateAttrPicUpload
                   storeId={storeId}
                   value={item.pic_url}
+                  disabled={disabled}
                   onChange={(picUrl) =>
                     onValuePicChange?.(attr.attr_id, String(valId), picUrl)
                   }
@@ -180,10 +184,12 @@ function SpecSelectedImageTable({
 function PriceAttrFallback({
   attrs,
   storeId,
+  disabled = false,
   onValuePicChange,
 }: {
   attrs: DhProductSelectedAttrPublic[];
   storeId?: number;
+  disabled?: boolean;
   onValuePicChange?: (
     attrId: string,
     attrValId: string,
@@ -208,7 +214,7 @@ function PriceAttrFallback({
               style={{
                 width: 88,
                 flexShrink: 0,
-                textAlign: 'right',
+                textAlign: 'left',
                 paddingTop: 5,
                 color: 'rgba(0,0,0,0.88)',
               }}
@@ -229,6 +235,7 @@ function PriceAttrFallback({
           <SpecSelectedImageTable
             attr={attr}
             storeId={storeId}
+            disabled={disabled}
             onValuePicChange={onValuePicChange}
           />
         </div>
@@ -240,10 +247,12 @@ function PriceAttrFallback({
 function CustomSpecSection({
   specs,
   storeId,
+  disabled = false,
   onChange,
 }: {
   specs: DhProductSpecSelfDefPublic[];
   storeId?: number;
+  disabled?: boolean;
   onChange?: (next: DhProductSpecSelfDefPublic[]) => void;
 }) {
   const intl = useIntl();
@@ -269,6 +278,9 @@ function CustomSpecSection({
   }, [specs]);
 
   const commit = (next: SpecSelfDefDraft[]) => {
+    if (disabled) {
+      return;
+    }
     setDrafts(next);
     onChange?.(toPublicList(next));
   };
@@ -383,7 +395,7 @@ function CustomSpecSection({
           style={{
             width: 88,
             flexShrink: 0,
-            textAlign: 'right',
+            textAlign: 'left',
             paddingTop: 5,
             color: 'rgba(0,0,0,0.88)',
             lineHeight: '22px',
@@ -414,6 +426,7 @@ function CustomSpecSection({
                   >
                     <Checkbox
                       checked
+                      disabled={disabled}
                       onChange={(event) => {
                         if (!event.target.checked) {
                           handleDelete(item.key);
@@ -424,6 +437,7 @@ function CustomSpecSection({
                       <Input
                         size="small"
                         value={editingName}
+                        disabled={disabled}
                         onChange={(event) => setEditingName(event.target.value)}
                         onPressEnter={() => confirmEdit(item.key)}
                         style={{ width: 140 }}
@@ -431,7 +445,7 @@ function CustomSpecSection({
                     ) : (
                       <span>{item.attr_val_name || item.attr_val_id || '-'}</span>
                     )}
-                    {isEditing ? (
+                    {!disabled && isEditing ? (
                       <>
                         <CheckOutlined
                           style={{ color: '#1677ff', cursor: 'pointer' }}
@@ -442,7 +456,8 @@ function CustomSpecSection({
                           onClick={cancelEdit}
                         />
                       </>
-                    ) : (
+                    ) : null}
+                    {!disabled && !isEditing ? (
                       <>
                         <EditOutlined
                           style={{ color: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
@@ -461,7 +476,7 @@ function CustomSpecSection({
                           onClick={() => handleDelete(item.key)}
                         />
                       </>
-                    )}
+                    ) : null}
                   </span>
                 );
               })}
@@ -474,25 +489,27 @@ function CustomSpecSection({
               })}
             </Typography.Text>
           )}
-          <div style={{ marginTop: 8 }}>
-            <Space.Compact style={{ maxWidth: 360, width: '100%' }}>
-              <Input
-                value={addValue}
-                onChange={(event) => setAddValue(event.target.value)}
-                onPressEnter={handleAdd}
-                placeholder={intl.formatMessage({
-                  id: 'pages.product.detail.specAttrs.addPlaceholder',
-                  defaultMessage: '请输入自定义规格',
-                })}
-              />
-              <Button type="primary" onClick={handleAdd}>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.specAttrs.add',
-                  defaultMessage: '添加',
-                })}
-              </Button>
-            </Space.Compact>
-          </div>
+          {!disabled ? (
+            <div style={{ marginTop: 8 }}>
+              <Space.Compact style={{ maxWidth: 360, width: '100%' }}>
+                <Input
+                  value={addValue}
+                  onChange={(event) => setAddValue(event.target.value)}
+                  onPressEnter={handleAdd}
+                  placeholder={intl.formatMessage({
+                    id: 'pages.product.detail.specAttrs.addPlaceholder',
+                    defaultMessage: '请输入自定义规格',
+                  })}
+                />
+                <Button type="primary" onClick={handleAdd}>
+                  {intl.formatMessage({
+                    id: 'pages.product.detail.specAttrs.add',
+                    defaultMessage: '添加',
+                  })}
+                </Button>
+              </Space.Compact>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -552,6 +569,7 @@ function CustomSpecSection({
                   >
                     <Input
                       value={item.attr_val_name || ''}
+                      disabled={disabled}
                       onChange={(event) =>
                         patchDraft(item.key, {
                           attr_val_name: event.target.value,
@@ -570,21 +588,24 @@ function CustomSpecSection({
                       <DhgateAttrPicUpload
                         storeId={storeId}
                         value={item.pic_url}
+                        disabled={disabled}
                         onChange={(picUrl) =>
                           patchDraft(item.key, { pic_url: picUrl })
                         }
                       />
-                      <Button
-                        type="link"
-                        size="small"
-                        danger
-                        onClick={() => handleDelete(item.key)}
-                      >
-                        {intl.formatMessage({
-                          id: 'pages.product.detail.specAttrs.delete',
-                          defaultMessage: '删除',
-                        })}
-                      </Button>
+                      {!disabled ? (
+                        <Button
+                          type="link"
+                          size="small"
+                          danger
+                          onClick={() => handleDelete(item.key)}
+                        >
+                          {intl.formatMessage({
+                            id: 'pages.product.detail.specAttrs.delete',
+                            defaultMessage: '删除',
+                          })}
+                        </Button>
+                      ) : null}
                     </Space>
                   </td>
                 </tr>
@@ -602,6 +623,7 @@ const SpecAttrsFields: React.FC<SpecAttrsFieldsProps> = ({
   priceSelectedAttrs,
   specSelfDefs,
   storeId,
+  disabled = false,
   onSpecSelfDefsChange,
   onValuePicChange,
 }) => {
@@ -622,6 +644,7 @@ const SpecAttrsFields: React.FC<SpecAttrsFieldsProps> = ({
           selectedAttrs={selected}
           showSelectedPics
           storeId={storeId}
+          disabled={disabled}
           onValuePicChange={onValuePicChange}
         />
       ) : null}
@@ -629,12 +652,14 @@ const SpecAttrsFields: React.FC<SpecAttrsFieldsProps> = ({
         <PriceAttrFallback
           attrs={fallbackSelected}
           storeId={storeId}
+          disabled={disabled}
           onValuePicChange={onValuePicChange}
         />
       ) : null}
       <CustomSpecSection
         specs={specs}
         storeId={storeId}
+        disabled={disabled}
         onChange={onSpecSelfDefsChange}
       />
     </div>

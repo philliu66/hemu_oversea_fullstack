@@ -25,6 +25,7 @@ type SpecSkuTableProps = {
   priceSelectedAttrs?: DhProductSelectedAttrPublic[];
   specSelfDefs?: DhProductSpecSelfDefPublic[];
   itemCode?: string | null;
+  disabled?: boolean;
   onChange?: (next: DhProductSkuPublic[]) => void;
 };
 
@@ -122,6 +123,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
   priceSelectedAttrs,
   specSelfDefs,
   itemCode,
+  disabled = false,
   onChange,
 }) => {
   const intl = useIntl();
@@ -328,17 +330,19 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
               defaultMessage: '销售状态',
             })}
           </span>
-          <Button
-            type="link"
-            size="small"
-            style={{ paddingInline: 4 }}
-            onClick={() => openBatchModal('sale_status')}
-          >
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.batchSet',
-              defaultMessage: '批量设置',
-            })}
-          </Button>
+          {!disabled ? (
+            <Button
+              type="link"
+              size="small"
+              style={{ paddingInline: 4 }}
+              onClick={() => openBatchModal('sale_status')}
+            >
+              {intl.formatMessage({
+                id: 'pages.product.detail.specSku.batchSet',
+                defaultMessage: '批量设置',
+              })}
+            </Button>
+          ) : null}
         </Space>
       ),
       dataIndex: 'sale_status',
@@ -349,6 +353,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
           value={record.sale_status ?? undefined}
           style={{ width: '100%' }}
           options={saleOptions}
+          disabled={disabled}
           onChange={(value) => patchSku(index, { sale_status: value })}
         />
       ),
@@ -363,17 +368,19 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
               defaultMessage: '预计收入',
             })}
           </span>
-          <Button
-            type="link"
-            size="small"
-            style={{ paddingInline: 4 }}
-            onClick={() => openBatchModal('retail_price')}
-          >
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.batchSet',
-              defaultMessage: '批量设置',
-            })}
-          </Button>
+          {!disabled ? (
+            <Button
+              type="link"
+              size="small"
+              style={{ paddingInline: 4 }}
+              onClick={() => openBatchModal('retail_price')}
+            >
+              {intl.formatMessage({
+                id: 'pages.product.detail.specSku.batchSet',
+                defaultMessage: '批量设置',
+              })}
+            </Button>
+          ) : null}
         </Space>
       ),
       dataIndex: 'retail_price',
@@ -389,6 +396,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
             value={Number.isFinite(num) ? num : undefined}
             min={0}
             precision={2}
+            disabled={disabled}
             addonBefore="US$"
             addonAfter={intl.formatMessage({
               id: 'pages.product.detail.specSku.perPiece',
@@ -413,17 +421,19 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
               defaultMessage: '商品编码',
             })}
           </span>
-          <Button
-            type="link"
-            size="small"
-            style={{ paddingInline: 4 }}
-            onClick={generateSkuCodes}
-          >
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.generateCodes',
-              defaultMessage: '一键生成',
-            })}
-          </Button>
+          {!disabled ? (
+            <Button
+              type="link"
+              size="small"
+              style={{ paddingInline: 4 }}
+              onClick={generateSkuCodes}
+            >
+              {intl.formatMessage({
+                id: 'pages.product.detail.specSku.generateCodes',
+                defaultMessage: '一键生成',
+              })}
+            </Button>
+          ) : null}
         </Space>
       ),
       dataIndex: 'sku_code',
@@ -433,6 +443,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
         <Input
           value={record.sku_code || ''}
           allowClear
+          disabled={disabled}
           onChange={(event) =>
             patchSku(index, { sku_code: event.target.value || null })
           }

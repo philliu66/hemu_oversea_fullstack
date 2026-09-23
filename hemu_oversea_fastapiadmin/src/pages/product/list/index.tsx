@@ -1,7 +1,8 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useIntl, useModel } from '@umijs/max';
-import { App, Image, Space, Typography } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import { App, Button, Image, Space, Typography } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
@@ -11,7 +12,12 @@ import { fetchDhProductList } from '@/services/admin/products';
 import { fetchStoreList } from '@/services/admin/stores';
 import type { DhProductPublic, DhSeedCategoryPublic, StorePublic } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
-import { productDetailPath } from '../utils';
+import {
+  PRODUCT_CREATE_PATH,
+  productCreatePath,
+  productDetailPath,
+  productEditPath,
+} from '../utils';
 
 type ProductTableParams = {
   current?: number;
@@ -449,6 +455,51 @@ const ProductList: React.FC = () => {
       width: 168,
       render: (_, record) => formatDateTime(record.last_synced_at),
     },
+    {
+      title: intl.formatMessage({
+        id: 'pages.product.list.field.option',
+        defaultMessage: '操作',
+      }),
+      dataIndex: 'option',
+      valueType: 'option',
+      search: false,
+      width: 200,
+      fixed: 'right',
+      render: (_, record) => [
+        <Button
+          type="link"
+          key="detail"
+          onClick={() => history.push(productDetailPath(record.id))}
+        >
+          {intl.formatMessage({
+            id: 'pages.product.action.detail',
+            defaultMessage: '查看',
+          })}
+        </Button>,
+        <Button
+          type="link"
+          key="edit"
+          onClick={() => history.push(productEditPath(record.id))}
+        >
+          {intl.formatMessage({
+            id: 'pages.product.action.edit',
+            defaultMessage: '编辑',
+          })}
+        </Button>,
+        <Button
+          type="link"
+          key="copy"
+          onClick={() =>
+            history.push(productCreatePath({ from: record.id }))
+          }
+        >
+          {intl.formatMessage({
+            id: 'pages.product.action.copy',
+            defaultMessage: '复制',
+          })}
+        </Button>,
+      ],
+    },
   ];
 
   return (
@@ -468,7 +519,20 @@ const ProductList: React.FC = () => {
           defaultCollapsed: false,
         }}
         options={false}
-        scroll={{ x: 1000 }}
+        scroll={{ x: 1200 }}
+        toolBarRender={() => [
+          <Button
+            type="primary"
+            key="create"
+            icon={<PlusOutlined />}
+            onClick={() => history.push(PRODUCT_CREATE_PATH)}
+          >
+            {intl.formatMessage({
+              id: 'pages.product.action.create',
+              defaultMessage: '新建',
+            })}
+          </Button>,
+        ]}
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,
           showSizeChanger: true,

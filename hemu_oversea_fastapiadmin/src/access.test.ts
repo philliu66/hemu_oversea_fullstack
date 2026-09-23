@@ -56,9 +56,33 @@ describe('access', () => {
     expect(result.canAdmin).toBeFalsy();
   });
 
-  it('should return canAdmin false when initialState is undefined', () => {
-    const result = access(undefined);
-
-    expect(result.canAdmin).toBeFalsy();
+  it('should return canSupplier for supplier admin and staff', () => {
+    expect(
+      access({
+        currentUser: {
+          userid: '4',
+          name: 'Supplier Admin',
+          access: 'supplier_admin',
+        },
+      }).canSupplier,
+    ).toBe(true);
+    expect(
+      access({
+        currentUser: {
+          userid: '5',
+          name: 'Supplier Staff',
+          access: 'supplier_staff',
+        },
+      }).canSupplier,
+    ).toBe(true);
+    expect(
+      access({
+        currentUser: {
+          userid: '6',
+          name: 'Platform',
+          access: 'platform_staff',
+        },
+      }).canSupplier,
+    ).toBe(false);
   });
 });

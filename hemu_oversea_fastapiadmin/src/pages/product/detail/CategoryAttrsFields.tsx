@@ -33,6 +33,8 @@ type CategoryAttrsCardProps = {
   /** 勾选后展示已选值图片表（规格属性用） */
   showSelectedPics?: boolean;
   storeId?: number;
+  /** 只读（查看详情） */
+  disabled?: boolean;
   /** 属性值图片变更（写入 / 覆盖 pic_url） */
   onValuePicChange?: (
     attrId: string,
@@ -223,6 +225,7 @@ function renderCustomEditor(
     singleMode?: boolean;
     namePlaceholder?: string;
     valuePlaceholder?: string;
+    disabled?: boolean;
   },
 ) {
   const hasNamedRows = (rows?.length || 0) > 0;
@@ -238,15 +241,17 @@ function renderCustomEditor(
       id: 'pages.product.detail.attrsCustomValuePlaceholder',
       defaultMessage: '请输入属性值',
     });
+  const editorDisabled = Boolean(options?.disabled);
 
   if (options?.singleMode && !hasNamedRows) {
     return (
       <Input
         value={value}
+        disabled={editorDisabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={valuePlaceholder}
         allowClear
-        style={{ maxWidth: 360, marginTop: 8, width: '100%' }}
+        style={{ maxWidth: 480, marginTop: 8, width: '100%' }}
       />
     );
   }
@@ -295,6 +300,7 @@ function renderCustomEditor(
                     value={row.attrName}
                     placeholder={namePlaceholder}
                     allowClear
+                    disabled={editorDisabled}
                     onChange={(event) => {
                       if (!onRowsChange || !rows) {
                         return;
@@ -313,6 +319,7 @@ function renderCustomEditor(
                     value={row.content}
                     placeholder={valuePlaceholder}
                     allowClear
+                    disabled={editorDisabled}
                     onChange={(event) => {
                       if (!onRowsChange || !rows) {
                         return;
@@ -338,6 +345,7 @@ function renderCustomEditor(
                     value={value}
                     placeholder={valuePlaceholder}
                     allowClear
+                    disabled={editorDisabled}
                     onChange={(event) => onChange(event.target.value)}
                   />
                 </td>
@@ -353,6 +361,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
   selectedAttrs,
   showSelectedPics = false,
   storeId,
+  disabled = false,
   onValuePicChange,
 }) => {
   const intl = useIntl();
@@ -365,6 +374,18 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
     setDrafts(buildDrafts(attrs, selectedAttrs));
   }, [attrs, selectedAttrs]);
 
+  const patchDraft = (attrId: string, patch: Partial<AttrDraft>) => {
+    if (disabled) {
+      return;
+    }
+    setDrafts((prev) => ({
+      ...prev,
+      [attrId]: {
+        ...(prev[attrId] || emptyDraft()),
+        ...patch,
+      },
+    }));
+  };
   const selectAllText = intl.formatMessage({
     id: 'pages.product.detail.attrsSelectAll',
     defaultMessage: '全选',
@@ -386,16 +407,6 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
     defaultMessage: '请输入属性值',
   });
 
-  const patchDraft = (attrId: string, patch: Partial<AttrDraft>) => {
-    setDrafts((prev) => ({
-      ...prev,
-      [attrId]: {
-        ...(prev[attrId] || emptyDraft()),
-        ...patch,
-      },
-    }));
-  };
-
   const renderAttrCustomEditor = (
     attr: DhCategoryAttrPublic,
     draft: AttrDraft,
@@ -413,12 +424,16 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
         valuePlaceholder: isBrand
           ? brandCustomPlaceholder
           : customValuePlaceholder,
+        disabled,
       },
     );
   };
 
   return (
-    <div>
+    <fieldset
+      disabled={disabled}
+      style={{ border: 'none', margin: 0, padding: 0, minInlineSize: 0 }}
+    >
       {attrs.map((attr) => {
         const draft = drafts[attr.attr_id] || emptyDraft();
         const optionIds = attr.values
@@ -444,7 +459,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
               style={{
                 width: 88,
                 flexShrink: 0,
-                textAlign: 'right',
+                textAlign: 'left',
                 paddingTop: 5,
                 color: 'rgba(0,0,0,0.88)',
                 lineHeight: '22px',
@@ -466,22 +481,24 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                       const num = Number(draft.textValue);
                       return Number.isNaN(num) ? undefined : num;
                     })()}
+                    disabled={disabled}
                     onChange={(value) =>
                       patchDraft(attr.attr_id, {
                         textValue: value == null ? '' : String(value),
                       })
                     }
-                    style={{ maxWidth: 320, width: '100%' }}
+                    style={{ maxWidth: 420, width: '100%' }}
                   />
                 ) : (
                   <Input
                     value={draft.textValue}
+                    disabled={disabled}
                     onChange={(event) =>
                       patchDraft(attr.attr_id, {
                         textValue: event.target.value,
                       })
                     }
-                    style={{ maxWidth: 480 }}
+                    style={{ maxWidth: 560 }}
                   />
                 )
               ) : isSelectType(attr) ? (
@@ -493,7 +510,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                       optionFilterProp="label"
                       placeholder={placeholder}
                       value={draft.customChecked ? undefined : draft.selectValue}
-                      disabled={draft.customChecked}
+                      disabled={disabled || draft.customChecked}
                       onChange={(value) =>
                         patchDraft(attr.attr_id, {
                           selectValue: value,
@@ -506,11 +523,12 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                           value: item.attr_val_id,
                           label: valueLabel(item),
                         }))}
-                      style={{ maxWidth: 320, width: '100%' }}
+                      style={{ maxWidth: 480, width: '100%', minWidth: 280 }}
                     />
                     {canCustom ? (
                       <Checkbox
                         checked={draft.customChecked}
+                        disabled={disabled}
                         onChange={(event) =>
                           patchDraft(attr.attr_id, {
                             customChecked: event.target.checked,
@@ -534,6 +552,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                     {optionIds.length > 0 ? (
                       <Checkbox
                         checked={allChecked}
+                        disabled={disabled}
                         indeterminate={
                           !allChecked && draft.checkedValues.length > 0
                         }
@@ -557,6 +576,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                         return (
                           <Checkbox
                             key={item.attr_val_id}
+                            disabled={disabled}
                             checked={draft.checkedValues.includes(
                               item.attr_val_id,
                             )}
@@ -598,6 +618,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                     {canCustom ? (
                       <Checkbox
                         checked={draft.customChecked}
+                        disabled={disabled}
                         onChange={(event) =>
                           patchDraft(attr.attr_id, {
                             customChecked: event.target.checked,
@@ -741,6 +762,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                                   <DhgateAttrPicUpload
                                     storeId={storeId}
                                     value={item.picUrl}
+                                    disabled={disabled}
                                     onChange={(picUrl) =>
                                       onValuePicChange?.(
                                         attr.attr_id,
@@ -762,7 +784,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
           </div>
         );
       })}
-    </div>
+    </fieldset>
   );
 };
 

@@ -21,7 +21,12 @@ import AvatarName from '@/components/RightContent/AvatarName';
 import { getAdminCurrentUser } from '@/services/admin/auth';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
-import { clearTokens, getAccessToken } from './utils/authToken';
+import { tryRefreshTokens } from './utils/authRefresh';
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+} from './utils/authToken';
 
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
@@ -44,11 +49,23 @@ export async function getInitialState(): Promise<{
   settingDrawerOpen?: boolean;
 }> {
   const fetchUserInfo = async () => {
-    if (!getAccessToken()) {
+    if (!getAccessToken() && !getRefreshToken()) {
       return undefined;
     }
     try {
-      // 刷新页面时拉取最新用户信息写入全局 initialState
+      if (getAccessToken()) {
+        try {
+          // 刷新页面时拉取最新用户信息写入全局 initialState
+          return await getAdminCurrentUser({ skipErrorHandler: true });
+        } catch {
+          // access 可能已过期，下面用 refresh 换发后再试
+        }
+      }
+      const refreshed = await tryRefreshTokens();
+      if (!refreshed) {
+        clearTokens();
+        return undefined;
+      }
       return await getAdminCurrentUser({ skipErrorHandler: true });
     } catch {
       clearTokens();

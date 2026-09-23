@@ -1,0 +1,152 @@
+import { request } from '@umijs/max';
+import { AdminMissionApi } from '@/constants/api';
+import type {
+  ApiResponse,
+  MissionCreateParams,
+  MissionFissionDataPublic,
+  MissionListParams,
+  MissionLogPublic,
+  MissionPublic,
+  PageData,
+} from '@/types/api';
+import { unwrapApiData } from '@/utils/http';
+
+type RequestOptions = {
+  skipErrorHandler?: boolean;
+  [key: string]: unknown;
+};
+
+function requireData<T>(payload: T | null, message: string): T {
+  if (payload === null || payload === undefined) {
+    throw new Error(message);
+  }
+  return payload;
+}
+
+/** POST /api/v1/admin/missions/list */
+export async function fetchMissionList(
+  params: MissionListParams = {},
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<PageData<MissionPublic>>>(
+    AdminMissionApi.LIST,
+    {
+      method: 'POST',
+      data: {
+        keyword: params.keyword,
+        supplier_id: params.supplier_id,
+        page: params.page ?? 1,
+        page_size: params.page_size ?? 10,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<PageData<MissionPublic>>(res),
+    '获取任务列表失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/detail */
+export async function fetchMissionDetail(
+  id: number,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionPublic>>(
+    AdminMissionApi.DETAIL,
+    {
+      method: 'POST',
+      data: { id },
+      ...options,
+    },
+  );
+  return requireData(unwrapApiData<MissionPublic>(res), '获取任务详情失败');
+}
+
+/** POST /api/v1/admin/missions/create */
+export async function createMission(
+  params: MissionCreateParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionPublic>>(
+    AdminMissionApi.CREATE,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(unwrapApiData<MissionPublic>(res), '创建任务失败');
+}
+
+/** POST /api/v1/admin/missions/mark-finished */
+export async function markMissionFinished(id: number, options?: RequestOptions) {
+  const res = await request<ApiResponse<MissionPublic>>(
+    AdminMissionApi.MARK_FINISHED,
+    {
+      method: 'POST',
+      data: { id },
+      ...options,
+    },
+  );
+  return requireData(unwrapApiData<MissionPublic>(res), '标记结束失败');
+}
+
+/** POST /api/v1/admin/missions/fission-data/list */
+export async function fetchMissionFissionDataList(
+  params: { mission_id: number; page?: number; page_size?: number },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<PageData<MissionFissionDataPublic>>>(
+    AdminMissionApi.FISSION_DATA_LIST,
+    {
+      method: 'POST',
+      data: {
+        mission_id: params.mission_id,
+        page: params.page ?? 1,
+        page_size: params.page_size ?? 10,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<PageData<MissionFissionDataPublic>>(res),
+    '获取任务数据失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/logs/list */
+export async function fetchMissionLogList(
+  params: { mission_id: number; page?: number; page_size?: number },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<PageData<MissionLogPublic>>>(
+    AdminMissionApi.LOGS_LIST,
+    {
+      method: 'POST',
+      data: {
+        mission_id: params.mission_id,
+        page: params.page ?? 1,
+        page_size: params.page_size ?? 10,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<PageData<MissionLogPublic>>(res),
+    '获取执行日志失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/execute */
+export async function executeMission(missionId: number, options?: RequestOptions) {
+  const res = await request<ApiResponse<Record<string, never>>>(
+    AdminMissionApi.EXECUTE,
+    {
+      method: 'POST',
+      data: { mission_id: missionId },
+      ...options,
+    },
+  );
+  return unwrapApiData(res);
+}

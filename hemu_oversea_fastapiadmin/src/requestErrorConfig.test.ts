@@ -1,6 +1,18 @@
-import { message, notification } from 'antd';
+import { message } from 'antd';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorConfig } from './requestErrorConfig';
+
+const {
+  mockRequest,
+  mockTryRefreshTokens,
+  mockClearTokens,
+  mockReplace,
+} = vi.hoisted(() => ({
+  mockRequest: vi.fn(),
+  mockTryRefreshTokens: vi.fn(),
+  mockClearTokens: vi.fn(),
+  mockReplace: vi.fn(),
+}));
 
 vi.mock('antd', () => ({
   message: {
@@ -14,16 +26,21 @@ vi.mock('antd', () => ({
 
 vi.mock('@umijs/max', () => ({
   history: {
-    replace: vi.fn(),
+    replace: mockReplace,
   },
   getIntl: vi.fn(() => ({
     formatMessage: vi.fn(({ defaultMessage }) => defaultMessage),
   })),
+  request: (...args: unknown[]) => mockRequest(...args),
 }));
 
 vi.mock('@/utils/authToken', () => ({
-  clearTokens: vi.fn(),
+  clearTokens: (...args: unknown[]) => mockClearTokens(...args),
   getAccessToken: vi.fn(() => 'test-token'),
+}));
+
+vi.mock('@/utils/authRefresh', () => ({
+  tryRefreshTokens: (...args: unknown[]) => mockTryRefreshTokens(...args),
 }));
 
 describe('requestErrorConfig', () => {
@@ -34,6 +51,10 @@ describe('requestErrorConfig', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { pathname: '/welcome', search: '', hash: '' },
+    });
   });
 
   describe('errorThrower', () => {
@@ -104,6 +125,82 @@ describe('requestErrorConfig', () => {
 
       errorHandler(error, {});
       expect(message.error).toHaveBeenCalledWith('业务失败');
+    });
+
+    it('should refresh and retry on 40100 BizError', async () => {
+      mockTryRefreshTokens.mockResolvedValue(true);
+      mockRequest.mockResolvedValue({ ok: true });
+
+      const error: any = new Error('未登录或登录已过期');
+      error.name = 'BizError';
+      error.info = {
+        errorCode: 40100,
+        errorMessage: '未登录或登录已过期',
+        showType: 9,
+      };
+
+      const result = await errorHandler(error, {
+        url: '/api/v1/admin/users/me',
+        method: 'GET',
+      });
+
+      expect(mockTryRefreshTokens).toHaveBeenCalled();
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: '/api/v1/admin/users/me',
+          method: 'GET',
+          __isRetryAfterRefresh: true,
+        }),
+      );
+      expect(result).toEqual({ ok: true });
+      expect(mockClearTokens).not.toHaveBeenCalled();
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it('should redirect when refresh fails on HTTP 401', async () => {
+      mockTryRefreshTokens.mockResolvedValue(false);
+
+      const error: any = new Error('Axios error');
+      error.response = {
+        status: 401,
+        data: {
+          code: 40100,
+          message: '未登录或登录已过期',
+          data: null,
+        },
+      };
+
+      await errorHandler(error, {
+        url: '/api/v1/admin/users/me',
+        method: 'GET',
+      });
+
+      expect(mockTryRefreshTokens).toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(message.error).toHaveBeenCalledWith('未登录或登录已过期');
+      expect(mockClearTokens).toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining('/user/login?redirect='),
+      );
+    });
+
+    it('should not refresh on auth whitelist paths', async () => {
+      const error: any = new Error('用户名或密码错误');
+      error.name = 'BizError';
+      error.info = {
+        errorCode: 40100,
+        errorMessage: '用户名或密码错误',
+        showType: 9,
+      };
+
+      await errorHandler(error, {
+        url: '/api/v1/admin/auth/login',
+        method: 'POST',
+      });
+
+      expect(mockTryRefreshTokens).not.toHaveBeenCalled();
+      expect(mockClearTokens).toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalled();
     });
 
     it('should handle FastAPI envelope in axios error response', () => {

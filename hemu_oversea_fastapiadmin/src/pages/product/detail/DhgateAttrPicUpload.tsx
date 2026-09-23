@@ -11,6 +11,7 @@ type DhgateAttrPicUploadProps = {
   onChange?: (picUrl: string | null) => void;
   /** 禁用删除 */
   hideClear?: boolean;
+  disabled?: boolean;
 };
 
 const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
@@ -18,6 +19,7 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
   value,
   onChange,
   hideClear = false,
+  disabled = false,
 }) => {
   const intl = useIntl();
   const { message } = App.useApp();
@@ -84,16 +86,16 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
         accept="image/*"
         showUploadList={false}
         customRequest={customRequest}
-        disabled={uploading || !storeId}
+        disabled={disabled || uploading || !storeId}
       >
-        <Button size="small" loading={uploading}>
+        <Button size="small" loading={uploading} disabled={disabled}>
           {intl.formatMessage({
             id: 'pages.product.detail.specAttrs.selectPic',
             defaultMessage: '选择图片',
           })}
         </Button>
       </Upload>
-      {!hideClear && value ? (
+      {!hideClear && !disabled && value ? (
         <Button
           type="link"
           size="small"

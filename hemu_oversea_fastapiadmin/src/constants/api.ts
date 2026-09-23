@@ -22,6 +22,7 @@ export const AdminAuthApi = {
 export const AdminUserApi = {
   ME: '/api/v1/admin/users/me',
   LIST: '/api/v1/admin/users',
+  SUPPLIER_LIST: '/api/v1/admin/users/supplier-list',
 } as const;
 
 /** 管理端供应商相关路径 */
@@ -59,6 +60,19 @@ export const AdminProductApi = {
   DH_PRODUCT_DETAIL: '/api/v1/admin/product/dh/detail',
   DH_PRODUCT_GROUP_GET: '/api/v1/admin/product/dh/group/get',
   DH_PRODUCT_GROUP_LIST: '/api/v1/admin/product/dh/group/list',
+} as const;
+
+/** 管理端任务相关路径 */
+export const AdminMissionApi = {
+  LIST: '/api/v1/admin/missions/list',
+  DETAIL: '/api/v1/admin/missions/detail',
+  CREATE: '/api/v1/admin/missions/create',
+  MARK_FINISHED: '/api/v1/admin/missions/mark-finished',
+  FISSION_DATA_LIST: '/api/v1/admin/missions/fission-data/list',
+  FISSION_DATA_ADD: '/api/v1/admin/missions/fission-data/add',
+  FISSION_DATA_IMPORT: '/api/v1/admin/missions/fission-data/import',
+  LOGS_LIST: '/api/v1/admin/missions/logs/list',
+  EXECUTE: '/api/v1/admin/missions/execute',
 } as const;
 
 /** 管理端商品分类相关路径 */

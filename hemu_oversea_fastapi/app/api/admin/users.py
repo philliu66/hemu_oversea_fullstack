@@ -15,6 +15,7 @@ from app.schemas.common import ApiResponse, PageData, success
 from app.schemas.user import (
     AdminPasswordReset,
     AdminUserCreate,
+    SupplierUserOption,
     UserPublic,
     UserRoleUpdate,
     UserStatusUpdate,
@@ -34,6 +35,30 @@ def read_me(
 ) -> ApiResponse[UserPublic]:
     """获取当前登录的管理端用户信息（刷新页面后可据此恢复前端状态）。"""
     return success(UserPublic.model_validate(current_user))
+
+
+@router.get(
+    "/supplier-list",
+    response_model=ApiResponse[list[SupplierUserOption]],
+)
+def list_supplier_users(
+    keyword: str | None = Query(default=None, description="按用户名或昵称模糊搜索"),
+    supplier_id: int | None = Query(
+        default=None,
+        description="供应商 ID。供应商身份忽略该字段；平台身份必填",
+    ),
+    current_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[SupplierUserOption]]:
+    """获取供应商下的在职管理员和员工，供任务人员下拉选择。"""
+    return success(
+        user_service.list_supplier_users(
+            db,
+            actor=current_user,
+            keyword=keyword,
+            supplier_id=supplier_id,
+        )
+    )
 
 
 @router.get("", response_model=ApiResponse[PageData[UserPublic]])

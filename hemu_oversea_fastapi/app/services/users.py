@@ -5,12 +5,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import Pagination
-from app.core.errors import bad_request, conflict, not_found
+from app.core.errors import bad_request, conflict, forbidden, not_found
 from app.core.roles import Role
 from app.core.security import hash_password
 from app.models.user import User
 from app.schemas.common import PageData
-from app.schemas.user import UserPublic
+from app.schemas.user import SupplierUserOption, UserPublic
 from app.services.auth import revoke_all_sessions
 
 
@@ -171,6 +171,47 @@ def reset_user_password(
     user.hashed_password = hash_password(new_password)
     revoke_all_sessions(db, user.id)
     db.commit()
+
+
+_PLATFORM_ROLES = {Role.SUPER_ADMIN.value, Role.PLATFORM_STAFF.value}
+_SUPPLIER_PORTAL_ROLES = {Role.SUPPLIER_ADMIN.value, Role.SUPPLIER_STAFF.value}
+
+
+def list_supplier_users(
+    db: Session,
+    *,
+    actor: User,
+    keyword: str | None,
+    supplier_id: int | None,
+) -> list[SupplierUserOption]:
+    """当前供应商下的在职管理员和员工，供任务人员下拉使用。"""
+    if actor.role in _SUPPLIER_PORTAL_ROLES:
+        if actor.supplier_id is None:
+            raise bad_request("当前账号未绑定供应商")
+        scope_supplier_id = actor.supplier_id
+    elif actor.role in _PLATFORM_ROLES:
+        if supplier_id is None:
+            raise bad_request("请指定供应商")
+        scope_supplier_id = supplier_id
+    else:
+        raise forbidden()
+
+    filters = [
+        User.deleted_at.is_(None),
+        User.is_active.is_(True),
+        User.supplier_id == scope_supplier_id,
+        User.role.in_(_SUPPLIER_PORTAL_ROLES),
+    ]
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        filters.append(
+            or_(
+                User.username.ilike(pattern),
+                User.nickname.ilike(pattern),
+            )
+        )
+    rows = db.scalars(select(User).where(*filters).order_by(User.id.asc())).all()
+    return [SupplierUserOption.model_validate(user) for user in rows]
 
 
 def soft_delete_self(db: Session, user: User) -> None:

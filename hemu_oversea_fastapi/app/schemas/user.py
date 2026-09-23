@@ -41,6 +41,17 @@ class AdminPasswordReset(BaseModel):
     new_password: str = Field(min_length=6, max_length=128, description="新明文密码")
 
 
+class SupplierUserOption(BaseModel):
+    """供应商用户下拉项。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    nickname: str
+    role: str
+
+
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

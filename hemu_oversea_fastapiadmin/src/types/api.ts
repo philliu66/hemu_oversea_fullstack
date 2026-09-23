@@ -577,3 +577,78 @@ export type DhProductGroupListParams = {
   page?: number;
   page_size?: number;
 };
+
+/** 供应商用户下拉项 */
+export type SupplierUserOption = {
+  id: number;
+  username: string;
+  nickname: string;
+  role: string;
+};
+
+export type MissionStatus =
+  | 'pending'
+  | 'running'
+  | 'finished'
+  | 'marked_finished';
+
+export type FissionStatus = 'pending' | 'success' | 'failed';
+
+export type MissionPublic = {
+  id: number;
+  supplier_id: number;
+  title: string;
+  description: string | null;
+  status: MissionStatus;
+  worker_id: number;
+  worker_username: string;
+  worker_nickname: string;
+  created_by: number | null;
+  creator_username: string | null;
+  creator_nickname: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MissionListParams = {
+  supplier_id?: number;
+  keyword?: string;
+  page?: number;
+  page_size?: number;
+};
+
+export type MissionCreateParams = {
+  title: string;
+  description?: string;
+  worker_id: number;
+};
+
+export type MissionFissionDataPublic = {
+  id: number;
+  mission_id: number;
+  supplier_id: number;
+  seed_product_id: number;
+  store_id: number;
+  item_code: string;
+  site_id: string;
+  fission_status: FissionStatus;
+  fission_msg: string | null;
+  update_data_json: Record<string, unknown>;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MissionLogPublic = {
+  id: number;
+  mission_id: number;
+  operator_id: number;
+  operator_username: string | null;
+  operator_nickname: string | null;
+  started_at: string;
+  ended_at: string | null;
+  success_count: number;
+  fail_count: number;
+  remark: string | null;
+  created_at: string;
+};
