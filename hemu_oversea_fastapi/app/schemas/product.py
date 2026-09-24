@@ -207,7 +207,6 @@ class DhProductPublic(BaseModel):
     item_code: str = Field(description="商品编码")
     site_id: str = Field(description="站点语言")
     is_seed: str = Field(description="是否种子：1=是，0=否")
-    supplier_id: str | None = Field(default=None, description="平台卖家 ID")
     cate_pub_id: str | None = Field(default=None, description="发布类目 ID")
     state: str | None = Field(
         default=None,
@@ -217,25 +216,12 @@ class DhProductPublic(BaseModel):
         ),
     )
     item_name: str | None = Field(default=None, description="商品标题")
-    short_desc: str | None = Field(default=None, description="简短介绍")
-    min_wholesale_qty: int | None = Field(default=None, description="最小起批量")
-    max_sale_qty: int | None = Field(default=None, description="单次最大购买量")
-    leading_time: int | None = Field(default=None, description="备货天数")
-    price_min: Decimal | None = Field(default=None, description="最低价")
-    price_max: Decimal | None = Field(default=None, description="最高价")
-    sku_count: int | None = Field(default=None, description="SKU 数量")
-    total_inventory: int | None = Field(default=None, description="库存合计")
     main_image_url: str | None = Field(
         default=None,
         description="主图完整 URL（相对路径会补前缀 http://image.dhgate.com/100x100/）",
     )
-    expire_date: datetime | None = Field(default=None, description="过期时间")
-    operate_date: datetime | None = Field(default=None, description="平台最后修改时间")
     last_synced_at: datetime | None = Field(default=None, description="最近同步时间")
     sync_state: str = Field(description="同步状态：1=成功，0=失败")
-    sync_state_desc: str | None = Field(default=None, description="同步状态描述")
-    created_at: datetime
-    updated_at: datetime
 
 
 class DhProductDetailRequest(BaseModel):
@@ -585,9 +571,6 @@ class DhProductDetailPublic(BaseModel):
     )
     last_synced_at: datetime | None = Field(default=None, description="最近同步时间（本地）")
     sync_state: str = Field(description="同步状态：1=成功，0=失败（本地）")
-    sync_state_desc: str | None = Field(default=None, description="同步状态描述（本地）")
-    created_at: datetime
-    updated_at: datetime
     item_img_list: list[DhProductImgPublic] = Field(
         default_factory=list,
         description="产品图片列表 itemImgList",

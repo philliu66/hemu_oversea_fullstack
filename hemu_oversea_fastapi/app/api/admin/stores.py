@@ -11,6 +11,7 @@ from app.core.errors import bad_request
 from app.models.user import User
 from app.schemas.common import ApiResponse, PageData, success
 from app.schemas.store import (
+    StoreAftersaleTemplatePublic,
     StoreAuthorize,
     StoreAuthorizePublic,
     StoreCreate,
@@ -19,6 +20,8 @@ from app.schemas.store import (
     StoreDetailPublic,
     StoreList,
     StorePublic,
+    StoreShippingTemplatePublic,
+    StoreTemplateListRequest,
     StoreUpdate,
 )
 from app.schemas.store_inspection import (
@@ -122,6 +125,33 @@ def update_store(
         password=payload.password,
     )
     return success(store)
+
+
+@router.post(
+    "/aftersale-template/list",
+    response_model=ApiResponse[list[StoreAftersaleTemplatePublic]],
+    summary="查询店铺售后模板",
+)
+def list_aftersale_templates(
+    payload: StoreTemplateListRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[StoreAftersaleTemplatePublic]]:
+    """按店铺查询售后模板，调用 dh.item.aftersale.list。"""
+    return success(store_service.list_store_aftersale_templates(db, payload.store_id))
+
+
+@router.post(
+    "/shipping-template/list",
+    response_model=ApiResponse[list[StoreShippingTemplatePublic]],
+    summary="查询店铺物流模板",
+)
+def list_shipping_template_options(
+    payload: StoreTemplateListRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[StoreShippingTemplatePublic]]:
+    """按店铺查询物流（运费）模板，调用 dh.shipping.template.list。"""
+    return success(store_service.list_store_shipping_templates(db, payload.store_id))
+
 
 @router.post("/delete", response_model=ApiResponse[dict])
 def delete_store(

@@ -1,7 +1,7 @@
+import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useIntl, useModel } from '@umijs/max';
-import { PlusOutlined } from '@ant-design/icons';
 import { App, Button, Image, Space, Typography } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -10,12 +10,15 @@ import { DH_PRODUCT_STATE_LABEL, DH_PRODUCT_STATES } from '@/constants/product';
 import { fetchDhSeedCategories } from '@/services/admin/categories';
 import { fetchDhProductList } from '@/services/admin/products';
 import { fetchStoreList } from '@/services/admin/stores';
-import type { DhProductPublic, DhSeedCategoryPublic, StorePublic } from '@/types/api';
+import type {
+  DhProductPublic,
+  DhSeedCategoryPublic,
+  StorePublic,
+} from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
 import {
+  formatSyncState,
   PRODUCT_CREATE_PATH,
-  productCreatePath,
-  productDetailPath,
   productEditPath,
 } from '../utils';
 
@@ -84,32 +87,6 @@ function resolveCatePubId(
   }
   const text = value?.trim();
   return text || undefined;
-}
-
-function formatPrice(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') {
-    return '-';
-  }
-  const num = typeof value === 'number' ? value : Number(value);
-  if (Number.isNaN(num)) {
-    return String(value);
-  }
-  return num.toFixed(2);
-}
-
-function formatPriceRange(
-  min: string | number | null | undefined,
-  max: string | number | null | undefined,
-): string {
-  const minText = formatPrice(min);
-  const maxText = formatPrice(max);
-  if (minText === '-' && maxText === '-') {
-    return '-';
-  }
-  if (minText === maxText) {
-    return minText;
-  }
-  return `${minText} ~ ${maxText}`;
 }
 
 const ProductList: React.FC = () => {
@@ -380,7 +357,7 @@ const ProductList: React.FC = () => {
           )}
           <div style={{ minWidth: 0, flex: 1 }}>
             <Typography.Link
-              onClick={() => history.push(productDetailPath(record.id))}
+              onClick={() => history.push(productEditPath(record.id))}
               style={{ display: 'block', marginBottom: 4 }}
             >
               <Typography.Paragraph
@@ -422,28 +399,24 @@ const ProductList: React.FC = () => {
     },
     {
       title: intl.formatMessage({
-        id: 'pages.product.list.field.price',
-        defaultMessage: '价格',
+        id: 'pages.product.detail.field.syncState',
+        defaultMessage: '同步状态',
       }),
-      dataIndex: 'price_min',
+      dataIndex: 'sync_state',
       search: false,
-      width: 120,
+      width: 100,
       render: (_, record) =>
-        formatPriceRange(record.price_min, record.price_max),
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.skuCount',
-        defaultMessage: 'SKU 数量',
-      }),
-      dataIndex: 'sku_count',
-      search: false,
-      width: 96,
-      align: 'right',
-      render: (_, record) =>
-        record.sku_count === null || record.sku_count === undefined
-          ? '-'
-          : record.sku_count,
+        formatSyncState(
+          record.sync_state,
+          intl.formatMessage({
+            id: 'pages.product.detail.sync.success',
+            defaultMessage: '成功',
+          }),
+          intl.formatMessage({
+            id: 'pages.product.detail.sync.fail',
+            defaultMessage: '失败',
+          }),
+        ),
     },
     {
       title: intl.formatMessage({
@@ -455,51 +428,30 @@ const ProductList: React.FC = () => {
       width: 168,
       render: (_, record) => formatDateTime(record.last_synced_at),
     },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.option',
-        defaultMessage: '操作',
-      }),
-      dataIndex: 'option',
-      valueType: 'option',
-      search: false,
-      width: 200,
-      fixed: 'right',
-      render: (_, record) => [
-        <Button
-          type="link"
-          key="detail"
-          onClick={() => history.push(productDetailPath(record.id))}
-        >
-          {intl.formatMessage({
-            id: 'pages.product.action.detail',
-            defaultMessage: '查看',
-          })}
-        </Button>,
-        <Button
-          type="link"
-          key="edit"
-          onClick={() => history.push(productEditPath(record.id))}
-        >
-          {intl.formatMessage({
-            id: 'pages.product.action.edit',
-            defaultMessage: '编辑',
-          })}
-        </Button>,
-        <Button
-          type="link"
-          key="copy"
-          onClick={() =>
-            history.push(productCreatePath({ from: record.id }))
-          }
-        >
-          {intl.formatMessage({
-            id: 'pages.product.action.copy',
-            defaultMessage: '复制',
-          })}
-        </Button>,
-      ],
-    },
+    // 操作列暂时隐藏，进入商品只保留点击标题进入编辑。
+    // 恢复时需重新引入 productDetailPath、productCreatePath。
+    // {
+    //   title: intl.formatMessage({
+    //     id: 'pages.product.list.field.option',
+    //     defaultMessage: '操作',
+    //   }),
+    //   dataIndex: 'option',
+    //   valueType: 'option',
+    //   search: false,
+    //   width: 200,
+    //   fixed: 'right',
+    //   render: (_, record) => [
+    //     <Button type="link" key="detail" onClick={() => history.push(productDetailPath(record.id))}>
+    //       {intl.formatMessage({ id: 'pages.product.action.detail', defaultMessage: '查看' })}
+    //     </Button>,
+    //     <Button type="link" key="edit" onClick={() => history.push(productEditPath(record.id))}>
+    //       {intl.formatMessage({ id: 'pages.product.action.edit', defaultMessage: '编辑' })}
+    //     </Button>,
+    //     <Button type="link" key="copy" onClick={() => history.push(productCreatePath({ from: record.id }))}>
+    //       {intl.formatMessage({ id: 'pages.product.action.copy', defaultMessage: '复制' })}
+    //     </Button>,
+    //   ],
+    // },
   ];
 
   return (
@@ -519,7 +471,7 @@ const ProductList: React.FC = () => {
           defaultCollapsed: false,
         }}
         options={false}
-        scroll={{ x: 1200 }}
+        scroll={{ x: 960 }}
         toolBarRender={() => [
           <Button
             type="primary"

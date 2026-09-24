@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -9,7 +10,15 @@ from app.core.errors import conflict, not_found
 from app.core.store_types import StoreType
 from app.models.store import Store
 from app.schemas.common import PageData
-from app.schemas.store import StoreDetailPublic, StorePublic
+from app.schemas.store import (
+    StoreAftersaleTemplatePublic,
+    StoreDetailPublic,
+    StorePublic,
+    StoreShippingTemplatePublic,
+)
+from app.services.dhgate.items import list_item_aftersale
+from app.services.dhgate.logistics import list_shipping_templates
+from app.services.dhgate.store_context import get_dhgate_client
 from app.services.suppliers import get_supplier
 
 
@@ -199,3 +208,79 @@ def soft_delete_store(db: Session, *, store_id: int, actor_id: int) -> None:
     store.deleted_at = datetime.now(timezone.utc)
     store.updated_by = actor_id
     db.commit()
+
+
+def _as_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _first_text(item: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        text = _as_text(item.get(key))
+        if text:
+            return text
+    return None
+
+
+def _is_aftersale_deleted(item: dict[str, Any]) -> bool:
+    status = item.get("status")
+    if status is None:
+        return False
+    return str(status).strip() in {"0", "false", "False"}
+
+
+def list_store_aftersale_templates(
+    db: Session, store_id: int
+) -> list[StoreAftersaleTemplatePublic]:
+    """查询店铺售后模板，数据来自 dh.item.aftersale.list。"""
+    client = get_dhgate_client(db, store_id)
+    data = list_item_aftersale(client)
+    raw_list = data.get("afterSaleList") if isinstance(data, dict) else None
+    if not isinstance(raw_list, list):
+        return []
+    templates: list[StoreAftersaleTemplatePublic] = []
+    for item in raw_list:
+        if not isinstance(item, dict) or _is_aftersale_deleted(item):
+            continue
+        template_id = _first_text(item, "afterSaleTemplateId")
+        if not template_id:
+            continue
+        templates.append(
+            StoreAftersaleTemplatePublic(
+                after_sale_template_id=template_id,
+                name=_first_text(item, "name", "templateName", "afterSaleTemplateName"),
+                if_template_default=_first_text(item, "ifTemplateDefault"),
+            )
+        )
+    return templates
+
+
+def list_store_shipping_templates(
+    db: Session, store_id: int
+) -> list[StoreShippingTemplatePublic]:
+    """查询店铺物流（运费）模板，数据来自 dh.shipping.template.list。"""
+    client = get_dhgate_client(db, store_id)
+    data = list_shipping_templates(client)
+    raw_list = data.get("shippingModelList") if isinstance(data, dict) else None
+    if not isinstance(raw_list, list):
+        return []
+    templates: list[StoreShippingTemplatePublic] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        template_id = _first_text(item, "shippingTempId", "shippingModelId")
+        if not template_id:
+            continue
+        templates.append(
+            StoreShippingTemplatePublic(
+                shipping_model_id=template_id,
+                name=_first_text(
+                    item, "modelName", "shippingModelName", "name", "templateName"
+                ),
+                model_type=_first_text(item, "modelType"),
+            )
+        )
+    return templates

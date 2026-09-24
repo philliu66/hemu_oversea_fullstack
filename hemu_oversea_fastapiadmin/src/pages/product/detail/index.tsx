@@ -27,6 +27,11 @@ import React, {
   useState,
 } from 'react';
 import {
+  DH_PRODUCT_STATE_LABEL,
+  DH_PRODUCT_STATES,
+  type DhProductStateCode,
+} from '@/constants/product';
+import {
   fetchDhCategories,
   fetchDhCategoryAttrs,
   fetchDhCategoryPath,
@@ -36,7 +41,11 @@ import {
   fetchDhProductGroup,
   fetchDhProductGroupList,
 } from '@/services/admin/products';
-import { fetchStoreList } from '@/services/admin/stores';
+import {
+  fetchStoreAftersaleTemplates,
+  fetchStoreList,
+  fetchStoreShippingTemplates,
+} from '@/services/admin/stores';
 import type {
   DhCategoryAttrPublic,
   DhCategoryPathPublic,
@@ -45,21 +54,17 @@ import type {
   DhProductGroupPublic,
   DhProductSelectedAttrPublic,
 } from '@/types/api';
-import {
-  DH_PRODUCT_STATE_LABEL,
-  DH_PRODUCT_STATES,
-  type DhProductStateCode,
-} from '@/constants/product';
 import { formatDateTime } from '@/utils/datetime';
 import {
-  PRODUCT_LIST_PATH,
   createEmptyProductDetail,
+  formatSyncState,
   isProductPageEditable,
+  PRODUCT_LIST_PATH,
+  type ProductPageMode,
   productCreatePath,
   productEditPath,
   resolveProductPageRoute,
   toCopyProductDetail,
-  type ProductPageMode,
 } from '../utils';
 import CategoryAttrsFields from './CategoryAttrsFields';
 import ProductImagesEditor from './ProductImagesEditor';
@@ -81,6 +86,22 @@ type ProductInfoFormValues = {
   key_word3?: string;
   item_group_path?: string[];
 };
+
+type TemplateFormValues = {
+  after_sale_template_id?: string;
+  shipping_model_id?: string;
+};
+
+function templateSelectOptions(
+  items: { label: string; value: string }[],
+  currentId?: string | null,
+) {
+  const current = currentId?.trim();
+  if (!current || items.some((item) => item.value === current)) {
+    return items;
+  }
+  return [{ label: current, value: current }, ...items];
+}
 
 type ItemGroupCascaderOption = DefaultOptionType & {
   value: string;
@@ -201,11 +222,7 @@ function toCustomAttrDrafts(
     key: item.attr_val_id || `custom-${index}`,
     attr_val_id: item.attr_val_id ?? null,
     attr_name: (item.attr_name_cn || item.attr_name || '').trim(),
-    content: (
-      item.line_attrval_name_cn ||
-      item.line_attrval_name ||
-      ''
-    ).trim(),
+    content: (item.line_attrval_name_cn || item.line_attrval_name || '').trim(),
   }));
 }
 
@@ -399,7 +416,16 @@ function pageTitleId(mode: ProductPageMode): {
   }
 }
 
-const ProductDetailPage: React.FC = () => {
+type ProductDetailPageProps = {
+  /** 嵌入任务抽屉时直接指定要编辑的商品，不走路由 */
+  embeddedProductId?: number;
+  onDetailChange?: (detail: DhProductDetailPublic) => void;
+};
+
+const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
+  embeddedProductId,
+  onDetailChange,
+}) => {
   const intl = useIntl();
   const { message } = App.useApp();
   const location = useLocation();
@@ -409,7 +435,10 @@ const ProductDetailPage: React.FC = () => {
     () => resolveProductPageRoute(location.pathname, location.search),
     [location.pathname, location.search],
   );
-  const { mode, productId, fromId } = routeState;
+  const embedded = embeddedProductId != null && embeddedProductId > 0;
+  const mode: ProductPageMode = embedded ? 'edit' : routeState.mode;
+  const productId = embedded ? embeddedProductId : routeState.productId;
+  const fromId = embedded ? undefined : routeState.fromId;
   const editable = isProductPageEditable(mode);
   const sourceProductId = mode === 'copy' ? fromId : productId;
   const formRef = useRef<ProFormInstance<BasicFormValues>>(null);
@@ -419,7 +448,9 @@ const ProductDetailPage: React.FC = () => {
   const [categoryPath, setCategoryPath] = useState<string>();
   const [cascaderOptions, setCascaderOptions] = useState<CategoryOption[]>([]);
   const [initialCategoryPath, setInitialCategoryPath] = useState<string[]>();
-  const [categoryAttrs, setCategoryAttrs] = useState<DhCategoryAttrPublic[]>([]);
+  const [categoryAttrs, setCategoryAttrs] = useState<DhCategoryAttrPublic[]>(
+    [],
+  );
   const [attrFillValues, setAttrFillValues] = useState<
     DhProductSelectedAttrPublic[] | undefined
   >();
@@ -429,7 +460,8 @@ const ProductDetailPage: React.FC = () => {
   const [attrsLoading, setAttrsLoading] = useState(false);
   const attrsReqRef = useRef(0);
   const originalCategoryIdRef = useRef<number>();
-  const productInfoFormRef = useRef<ProFormInstance<ProductInfoFormValues>>(null);
+  const productInfoFormRef =
+    useRef<ProFormInstance<ProductInfoFormValues>>(null);
   const [itemGroupOptions, setItemGroupOptions] = useState<
     ItemGroupCascaderOption[]
   >([]);
@@ -462,9 +494,8 @@ const ProductDetailPage: React.FC = () => {
       itemGroupTreeLoadedRef.current = true;
       setItemGroupOptions(options);
       const currentId =
-        productInfoFormRef.current
-          ?.getFieldValue('item_group_path')
-          ?.at(-1) || detail.item_group_id;
+        productInfoFormRef.current?.getFieldValue('item_group_path')?.at(-1) ||
+        detail.item_group_id;
       if (currentId) {
         const path = findItemGroupPath(options, currentId);
         if (path) {
@@ -581,15 +612,16 @@ const ProductDetailPage: React.FC = () => {
     setLoading(true);
     try {
       const data = await fetchDhProductDetail(sourceProductId);
-      const nextDetail =
-        mode === 'copy' ? toCopyProductDetail(data) : data;
+      const nextDetail = mode === 'copy' ? toCopyProductDetail(data) : data;
       let nextCategoryPath: string[] | undefined;
       let nextOptions: CategoryOption[] = [];
 
       if (nextDetail.category?.id) {
         try {
           const pathData = await applyCategoryPath(nextDetail.category.id);
-          nextCategoryPath = pathData.path_items.map((item) => item.cate_pub_id);
+          nextCategoryPath = pathData.path_items.map(
+            (item) => item.cate_pub_id,
+          );
           nextOptions = await loadCascaderOptionsAlongPath(pathData.path_items);
         } catch (pathError) {
           setCategoryPath(formatCategoryLabel(nextDetail.category));
@@ -646,6 +678,12 @@ const ProductDetailPage: React.FC = () => {
   useEffect(() => {
     void loadDetail();
   }, [loadDetail]);
+
+  useEffect(() => {
+    if (embedded && detail) {
+      onDetailChange?.(detail);
+    }
+  }, [detail, embedded, onDetailChange]);
 
   useEffect(() => {
     itemGroupTreeLoadedRef.current = false;
@@ -788,13 +826,10 @@ const ProductDetailPage: React.FC = () => {
               }
             : prev,
         );
-        const sameAsProduct =
-          leaf.categoryId === originalCategoryIdRef.current;
+        const sameAsProduct = leaf.categoryId === originalCategoryIdRef.current;
         void loadCategoryAttrs(
           leaf.categoryId,
-          sameAsProduct
-            ? categoryProductAttrs(detail?.attr_list)
-            : undefined,
+          sameAsProduct ? categoryProductAttrs(detail?.attr_list) : undefined,
         );
       } catch (error) {
         message.error(
@@ -845,7 +880,9 @@ const ProductDetailPage: React.FC = () => {
   );
   const priceCategoryAttrs = priceSelectedAttrs
     .map((item) =>
-      categoryAttrs.find((attr) => String(attr.attr_id) === String(item.attr_id)),
+      categoryAttrs.find(
+        (attr) => String(attr.attr_id) === String(item.attr_id),
+      ),
     )
     .filter((item): item is DhCategoryAttrPublic => Boolean(item));
   const normalCategoryAttrs = categoryAttrs.filter(
@@ -855,6 +892,808 @@ const ProductDetailPage: React.FC = () => {
     attrFillValues || detail?.attr_list,
   );
   const titleMsg = pageTitleId(mode);
+
+  const templateStoreId = selectedStoreId || detail?.store_id || undefined;
+
+  const content = (
+    <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+      <Card
+        title={intl.formatMessage({
+          id: 'pages.product.detail.section.basic',
+          defaultMessage: '基本信息',
+        })}
+        loading={loading}
+      >
+        {detail ? (
+          <ProForm<BasicFormValues>
+            key={`basic-${formInstanceKey}`}
+            formRef={formRef}
+            submitter={false}
+            disabled={!editable}
+            layout="horizontal"
+            labelAlign="left"
+            labelCol={{ flex: '110px' }}
+            wrapperCol={{ flex: 1 }}
+            style={{ maxWidth: 720 }}
+            initialValues={{
+              store_id: detail.store_id || undefined,
+              category_path: initialCategoryPath,
+            }}
+            onValuesChange={(changed) => {
+              if ('store_id' in changed) {
+                const nextStoreId = changed.store_id as number | undefined;
+                setSelectedStoreId(nextStoreId);
+                itemGroupTreeLoadedRef.current = false;
+                setItemGroupOptions([]);
+                setDetail((prev) => {
+                  if (!prev) {
+                    return prev;
+                  }
+                  const storeChanged =
+                    (prev.store_id || undefined) !== nextStoreId;
+                  return {
+                    ...prev,
+                    store_id: nextStoreId || 0,
+                    ...(storeChanged
+                      ? {
+                          after_sale_template_id: null,
+                          shipping_model_id: null,
+                        }
+                      : {}),
+                  };
+                });
+              }
+            }}
+          >
+            <ProFormSelect
+              name="store_id"
+              label={intl.formatMessage({
+                id: 'pages.product.detail.field.storeName',
+                defaultMessage: '店铺名称',
+              })}
+              rules={[
+                {
+                  required: true,
+                  message: intl.formatMessage({
+                    id: 'pages.product.detail.field.storeNameRequired',
+                    defaultMessage: '请选择店铺',
+                  }),
+                },
+              ]}
+              showSearch
+              debounceTime={300}
+              params={{ supplierId }}
+              request={async () => {
+                if (!supplierId) {
+                  return [];
+                }
+                const data = await fetchStoreList({
+                  supplier_id: supplierId,
+                  page: 1,
+                  page_size: 100,
+                });
+                return data.items.map((store) => ({
+                  label: store.name,
+                  value: store.id,
+                }));
+              }}
+              fieldProps={{
+                placeholder: intl.formatMessage({
+                  id: 'pages.product.list.field.storePlaceholder',
+                  defaultMessage: '请选择店铺',
+                }),
+                style: { maxWidth: 360 },
+              }}
+            />
+            <div style={{ marginBottom: categoryPath ? 0 : undefined }}>
+              <Form.Item
+                name="category_path"
+                label={intl.formatMessage({
+                  id: 'pages.product.detail.field.productCategory',
+                  defaultMessage: '产品分类',
+                })}
+                required
+                rules={[
+                  {
+                    required: true,
+                    type: 'array',
+                    min: 1,
+                    message: intl.formatMessage({
+                      id: 'pages.product.detail.categoryRequired',
+                      defaultMessage: '请选择分类',
+                    }),
+                  },
+                ]}
+                style={{ marginBottom: categoryPath ? 8 : undefined }}
+              >
+                <Cascader
+                  options={cascaderOptions}
+                  loadData={loadCascaderData}
+                  onChange={onCategoryChange}
+                  changeOnSelect={false}
+                  displayRender={(labels) => labels.at(-1) ?? ''}
+                  placeholder={intl.formatMessage({
+                    id: 'pages.product.detail.field.categoryPlaceholder',
+                    defaultMessage: '请选择分类',
+                  })}
+                  style={{ maxWidth: 480, width: '100%' }}
+                  optionRender={(option) => (
+                    <span
+                      title={String(option.label ?? '')}
+                      style={{
+                        display: 'inline-block',
+                        maxWidth: 150,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        verticalAlign: 'bottom',
+                      }}
+                    >
+                      {option.label}
+                    </span>
+                  )}
+                />
+              </Form.Item>
+              {categoryPath ? (
+                <Typography.Text
+                  style={{
+                    display: 'block',
+                    marginBottom: 24,
+                    color: '#a0522d',
+                    lineHeight: 1.5,
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {categoryPath}
+                </Typography.Text>
+              ) : null}
+            </div>
+          </ProForm>
+        ) : (
+          !loading &&
+          intl.formatMessage({
+            id: 'pages.product.detail.notFound',
+            defaultMessage: '未找到该商品',
+          })
+        )}
+      </Card>
+
+      <Card
+        title={intl.formatMessage({
+          id: 'pages.product.detail.section.attrs',
+          defaultMessage: '商品属性',
+        })}
+        loading={loading || attrsLoading}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Typography.Text
+            strong
+            style={{ display: 'block', marginBottom: 12 }}
+          >
+            {intl.formatMessage({
+              id: 'pages.product.detail.categoryAttrs.title',
+              defaultMessage: '类目属性',
+            })}
+          </Typography.Text>
+          {normalCategoryAttrs.length > 0 ? (
+            <CategoryAttrsFields
+              attrs={normalCategoryAttrs}
+              selectedAttrs={normalSelectedAttrs}
+              disabled={!editable}
+            />
+          ) : (
+            !loading &&
+            !attrsLoading && (
+              <Typography.Text type="secondary">
+                {intl.formatMessage({
+                  id: 'pages.product.detail.categoryAttrs.empty',
+                  defaultMessage: '暂无类目属性',
+                })}
+              </Typography.Text>
+            )
+          )}
+        </div>
+
+        <Divider style={{ margin: '8px 0 16px' }} />
+
+        <div>
+          <Typography.Text
+            strong
+            style={{ display: 'block', marginBottom: 12 }}
+          >
+            {intl.formatMessage({
+              id: 'pages.product.detail.customAttrs.title',
+              defaultMessage: '自定义属性',
+            })}
+          </Typography.Text>
+          <ProForm<{ customAttrs: CustomAttrDraft[] }>
+            key={`custom-attrs-${formInstanceKey}`}
+            submitter={false}
+            disabled={!editable}
+            initialValues={{ customAttrs: customAttrDrafts }}
+            onValuesChange={(_, values) => {
+              if (!editable) {
+                return;
+              }
+              syncCustomAttrDrafts(values.customAttrs || []);
+            }}
+          >
+            <ProFormList
+              name="customAttrs"
+              copyIconProps={false}
+              deleteIconProps={
+                editable
+                  ? {
+                      tooltipText: intl.formatMessage({
+                        id: 'pages.product.detail.customAttrs.delete',
+                        defaultMessage: '删除',
+                      }),
+                    }
+                  : false
+              }
+              creatorButtonProps={
+                editable
+                  ? {
+                      creatorButtonText: intl.formatMessage({
+                        id: 'pages.product.detail.customAttrs.add',
+                        defaultMessage: '新增属性',
+                      }),
+                      type: 'dashed',
+                      style: { width: '100%', maxWidth: 720 },
+                    }
+                  : false
+              }
+              max={DH_CUSTOM_ATTR_MAX_COUNT}
+              creatorRecord={() => ({
+                key: `custom-new-${Date.now()}`,
+                attr_val_id: null,
+                attr_name: '',
+                content: '',
+              })}
+              itemRender={({ listDom, action }) => (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 16,
+                  }}
+                >
+                  {listDom}
+                  {editable ? action : null}
+                </div>
+              )}
+            >
+              <Space size={8} wrap align="center">
+                <ProFormText name="key" hidden />
+                <ProFormText name="attr_val_id" hidden />
+                <ProFormText
+                  name="attr_name"
+                  placeholder={intl.formatMessage({
+                    id: 'pages.product.detail.attrsCustomNamePlaceholder',
+                    defaultMessage: '请输入属性名',
+                  })}
+                  fieldProps={{
+                    maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
+                    allowClear: true,
+                    style: { width: 220 },
+                  }}
+                  formItemProps={{
+                    style: { marginBottom: 0 },
+                  }}
+                />
+                <ProFormText
+                  name="content"
+                  placeholder={intl.formatMessage({
+                    id: 'pages.product.detail.attrsCustomValuePlaceholder',
+                    defaultMessage: '请输入属性值',
+                  })}
+                  fieldProps={{
+                    maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
+                    allowClear: true,
+                    style: { width: 320 },
+                  }}
+                  formItemProps={{
+                    style: { marginBottom: 0 },
+                  }}
+                />
+              </Space>
+            </ProFormList>
+          </ProForm>
+        </div>
+      </Card>
+
+      <Card
+        title={intl.formatMessage({
+          id: 'pages.product.detail.section.productInfo',
+          defaultMessage: '产品信息',
+        })}
+        loading={loading}
+      >
+        {detail ? (
+          <ProForm<ProductInfoFormValues>
+            key={`product-info-${formInstanceKey}`}
+            formRef={productInfoFormRef}
+            submitter={false}
+            disabled={!editable}
+            layout="horizontal"
+            labelAlign="left"
+            labelCol={{ flex: '110px' }}
+            wrapperCol={{ flex: 1 }}
+            style={{ maxWidth: 920 }}
+            initialValues={{
+              item_name: detail.item_name || '',
+              key_word1: detail.key_word1 || '',
+              key_word2: detail.key_word2 || '',
+              key_word3: detail.key_word3 || '',
+              item_group_path: detail.item_group_id
+                ? [detail.item_group_id]
+                : undefined,
+            }}
+            onValuesChange={(_, all) => {
+              const path = all.item_group_path;
+              const nextGroupId = Array.isArray(path)
+                ? path.filter(Boolean).at(-1)
+                : undefined;
+              setDetail((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      item_name: all.item_name ?? prev.item_name,
+                      key_word1: all.key_word1 ?? prev.key_word1,
+                      key_word2: all.key_word2 ?? prev.key_word2,
+                      key_word3: all.key_word3 ?? prev.key_word3,
+                      item_group_id:
+                        nextGroupId !== undefined
+                          ? String(nextGroupId)
+                          : prev.item_group_id,
+                    }
+                  : prev,
+              );
+            }}
+          >
+            <Form.Item
+              name="item_name"
+              label={intl.formatMessage({
+                id: 'pages.product.detail.field.itemName',
+                defaultMessage: '产品标题',
+              })}
+              required
+              rules={[
+                {
+                  required: true,
+                  whitespace: true,
+                  message: intl.formatMessage({
+                    id: 'pages.product.detail.field.itemNameRequired',
+                    defaultMessage: '请输入产品标题',
+                  }),
+                },
+                {
+                  max: ITEM_NAME_MAX_LENGTH,
+                  message: intl.formatMessage(
+                    {
+                      id: 'pages.product.detail.field.itemNameMax',
+                      defaultMessage: '产品标题最多 {max} 个字符',
+                    },
+                    { max: ITEM_NAME_MAX_LENGTH },
+                  ),
+                },
+              ]}
+              extra={
+                <Form.Item
+                  noStyle
+                  shouldUpdate={(prev, next) =>
+                    prev.item_name !== next.item_name
+                  }
+                >
+                  {({ getFieldValue }) => {
+                    const used = String(
+                      getFieldValue('item_name') || '',
+                    ).length;
+                    const remaining = Math.max(0, ITEM_NAME_MAX_LENGTH - used);
+                    return (
+                      <Typography.Text type="secondary">
+                        {intl.formatMessage(
+                          {
+                            id: 'pages.product.detail.field.itemNameRemaining',
+                            defaultMessage: '您还可以输入{count}个字符',
+                          },
+                          { count: remaining },
+                        )}
+                      </Typography.Text>
+                    );
+                  }}
+                </Form.Item>
+              }
+            >
+              <Input
+                maxLength={ITEM_NAME_MAX_LENGTH}
+                allowClear
+                style={{ width: '100%' }}
+                placeholder={intl.formatMessage({
+                  id: 'pages.product.detail.field.itemNamePlaceholder',
+                  defaultMessage: '请输入产品标题',
+                })}
+              />
+            </Form.Item>
+            <Form.Item
+              label={intl.formatMessage({
+                id: 'pages.product.detail.field.keywords',
+                defaultMessage: '关键词',
+              })}
+            >
+              <Space size={12} wrap style={{ width: '100%' }}>
+                <Form.Item name="key_word1" noStyle>
+                  <Input
+                    allowClear
+                    style={{ width: 240 }}
+                    placeholder={intl.formatMessage({
+                      id: 'pages.product.detail.field.keywordPlaceholder',
+                      defaultMessage: '关键词 1',
+                    })}
+                  />
+                </Form.Item>
+                <Form.Item name="key_word2" noStyle>
+                  <Input
+                    allowClear
+                    style={{ width: 240 }}
+                    placeholder={intl.formatMessage({
+                      id: 'pages.product.detail.field.keywordPlaceholder2',
+                      defaultMessage: '关键词 2',
+                    })}
+                  />
+                </Form.Item>
+                <Form.Item name="key_word3" noStyle>
+                  <Input
+                    allowClear
+                    style={{ width: 240 }}
+                    placeholder={intl.formatMessage({
+                      id: 'pages.product.detail.field.keywordPlaceholder3',
+                      defaultMessage: '关键词 3',
+                    })}
+                  />
+                </Form.Item>
+              </Space>
+            </Form.Item>
+            <Form.Item
+              name="item_group_path"
+              label={intl.formatMessage({
+                id: 'pages.product.detail.field.itemGroup',
+                defaultMessage: '产品分组',
+              })}
+            >
+              <Cascader
+                options={itemGroupOptions}
+                changeOnSelect
+                allowClear
+                displayRender={(labels) => labels.join(' / ')}
+                placeholder={intl.formatMessage({
+                  id: 'pages.product.detail.field.itemGroupPlaceholder',
+                  defaultMessage: '请选择产品分组',
+                })}
+                style={{ maxWidth: 480, width: '100%' }}
+                popupMenuColumnStyle={{
+                  width: 220,
+                  maxWidth: 220,
+                }}
+                showSearch={{
+                  filter: (inputValue, path) =>
+                    path.some((option) =>
+                      String(option.label ?? '')
+                        .toLowerCase()
+                        .includes(inputValue.trim().toLowerCase()),
+                    ),
+                }}
+                onOpenChange={(open) => {
+                  if (open) {
+                    void loadItemGroups();
+                  }
+                }}
+              />
+            </Form.Item>
+            {mode === 'view' || mode === 'edit' ? (
+              <>
+                <Form.Item
+                  label={intl.formatMessage({
+                    id: 'pages.product.detail.field.productState',
+                    defaultMessage: '商品状态',
+                  })}
+                >
+                  {formatProductState(detail.state, (id, defaultMessage) =>
+                    intl.formatMessage({ id, defaultMessage }),
+                  )}
+                </Form.Item>
+                <Form.Item
+                  label={intl.formatMessage({
+                    id: 'pages.product.detail.field.syncState',
+                    defaultMessage: '同步状态',
+                  })}
+                >
+                  {formatSyncState(
+                    detail.sync_state,
+                    intl.formatMessage({
+                      id: 'pages.product.detail.sync.success',
+                      defaultMessage: '成功',
+                    }),
+                    intl.formatMessage({
+                      id: 'pages.product.detail.sync.fail',
+                      defaultMessage: '失败',
+                    }),
+                  )}
+                </Form.Item>
+                <Form.Item
+                  label={intl.formatMessage({
+                    id: 'pages.product.list.field.lastSyncedAt',
+                    defaultMessage: '同步时间',
+                  })}
+                  style={{ marginBottom: 0 }}
+                >
+                  {formatDateTime(detail.last_synced_at)}
+                </Form.Item>
+              </>
+            ) : null}
+          </ProForm>
+        ) : (
+          !loading &&
+          intl.formatMessage({
+            id: 'pages.product.detail.notFound',
+            defaultMessage: '未找到该商品',
+          })
+        )}
+      </Card>
+
+      <Card
+        title={intl.formatMessage({
+          id: 'pages.product.detail.section.images',
+          defaultMessage: '商品图片',
+        })}
+        loading={loading}
+      >
+        {loading ? null : (
+          <ProductImagesEditor
+            images={detail?.item_img_list}
+            storeId={selectedStoreId || detail?.store_id || undefined}
+            alt={detail?.item_name || detail?.item_code}
+            disabled={!editable}
+            onChange={(next) => {
+              setDetail((prev) =>
+                prev ? { ...prev, item_img_list: next } : prev,
+              );
+            }}
+          />
+        )}
+      </Card>
+
+      <Card
+        title={intl.formatMessage({
+          id: 'pages.product.detail.section.specAttrs',
+          defaultMessage: '商品规格',
+        })}
+        loading={loading || attrsLoading}
+      >
+        <div style={{ marginBottom: 20 }}>
+          <Typography.Text
+            strong
+            style={{ display: 'block', marginBottom: 12 }}
+          >
+            {intl.formatMessage({
+              id: 'pages.product.detail.specAttrs.sectionTitle',
+              defaultMessage: '规格属性',
+            })}
+          </Typography.Text>
+          <SpecAttrsFields
+            priceCategoryAttrs={priceCategoryAttrs}
+            priceSelectedAttrs={priceSelectedAttrs}
+            specSelfDefs={detail?.item_spec_self_def_list}
+            storeId={selectedStoreId || detail?.store_id || undefined}
+            disabled={!editable}
+            onSpecSelfDefsChange={(next) => {
+              setDetail((prev) =>
+                prev ? { ...prev, item_spec_self_def_list: next } : prev,
+              );
+            }}
+            onValuePicChange={(attrId, attrValId, picUrl) => {
+              setAttrFillValues((prev) =>
+                patchAttrValuePic(
+                  prev || detail?.attr_list,
+                  attrId,
+                  attrValId,
+                  picUrl,
+                ),
+              );
+              setDetail((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      attr_list: patchAttrValuePic(
+                        prev.attr_list,
+                        attrId,
+                        attrValId,
+                        picUrl,
+                      ),
+                    }
+                  : prev,
+              );
+            }}
+          />
+        </div>
+
+        <Divider plain style={{ margin: '8px 0 16px' }}>
+          {intl.formatMessage({
+            id: 'pages.product.detail.specSku.divider',
+            defaultMessage: '商品规格属性生成的规格sku',
+          })}
+        </Divider>
+
+        <div>
+          <Typography.Text
+            strong
+            style={{ display: 'block', marginBottom: 12 }}
+          >
+            {intl.formatMessage({
+              id: 'pages.product.detail.specSku.sectionTitle',
+              defaultMessage: '规格SKU',
+            })}
+          </Typography.Text>
+          <SpecSkuTable
+            skuList={detail?.sku_list}
+            priceSelectedAttrs={priceSelectedAttrs}
+            specSelfDefs={detail?.item_spec_self_def_list}
+            itemCode={detail?.item_code}
+            disabled={!editable}
+            onChange={(next) => {
+              setDetail((prev) => (prev ? { ...prev, sku_list: next } : prev));
+            }}
+          />
+        </div>
+      </Card>
+
+      {detail?.html_content ? (
+        <Card
+          title={intl.formatMessage({
+            id: 'pages.product.detail.section.html',
+            defaultMessage: '详情描述',
+          })}
+        >
+          <iframe
+            title={intl.formatMessage({
+              id: 'pages.product.detail.section.html',
+              defaultMessage: '详情描述',
+            })}
+            srcDoc={detail.html_content}
+            sandbox=""
+            style={{
+              width: '100%',
+              minHeight: 360,
+              maxHeight: 480,
+              border: 'none',
+              background: '#fff',
+            }}
+          />
+        </Card>
+      ) : null}
+
+      <Card
+        title={intl.formatMessage({
+          id: 'pages.product.detail.section.templates',
+          defaultMessage: '模板信息',
+        })}
+        loading={loading}
+      >
+        {detail ? (
+          <ProForm<TemplateFormValues>
+            key={`templates-${formInstanceKey}-${templateStoreId ?? 'none'}`}
+            submitter={false}
+            disabled={!editable}
+            layout="horizontal"
+            labelAlign="left"
+            labelCol={{ flex: '110px' }}
+            wrapperCol={{ flex: 1 }}
+            style={{ maxWidth: 720 }}
+            initialValues={{
+              after_sale_template_id:
+                detail.after_sale_template_id || undefined,
+              shipping_model_id: detail.shipping_model_id || undefined,
+            }}
+            onValuesChange={(changed) => {
+              setDetail((prev) => {
+                if (!prev) {
+                  return prev;
+                }
+                return {
+                  ...prev,
+                  ...('after_sale_template_id' in changed
+                    ? {
+                        after_sale_template_id:
+                          changed.after_sale_template_id || null,
+                      }
+                    : {}),
+                  ...('shipping_model_id' in changed
+                    ? {
+                        shipping_model_id: changed.shipping_model_id || null,
+                      }
+                    : {}),
+                };
+              });
+            }}
+          >
+            <ProFormSelect
+              name="after_sale_template_id"
+              label={intl.formatMessage({
+                id: 'pages.product.detail.field.afterSaleTemplate',
+                defaultMessage: '售后模板',
+              })}
+              showSearch
+              params={{
+                storeId: templateStoreId,
+                currentId: detail.after_sale_template_id,
+              }}
+              request={async (params) => {
+                if (!params.storeId) {
+                  return templateSelectOptions([], params.currentId);
+                }
+                const items = await fetchStoreAftersaleTemplates(
+                  params.storeId,
+                );
+                return templateSelectOptions(
+                  items.map((item) => ({
+                    label: item.name?.trim() || item.after_sale_template_id,
+                    value: item.after_sale_template_id,
+                  })),
+                  params.currentId,
+                );
+              }}
+              fieldProps={{
+                allowClear: true,
+                placeholder: intl.formatMessage({
+                  id: 'pages.product.detail.field.afterSaleTemplatePlaceholder',
+                  defaultMessage: '请选择售后模板',
+                }),
+                style: { maxWidth: 360 },
+              }}
+            />
+            <ProFormSelect
+              name="shipping_model_id"
+              label={intl.formatMessage({
+                id: 'pages.product.detail.field.shippingTemplate',
+                defaultMessage: '物流模板',
+              })}
+              showSearch
+              params={{
+                storeId: templateStoreId,
+                currentId: detail.shipping_model_id,
+              }}
+              request={async (params) => {
+                if (!params.storeId) {
+                  return templateSelectOptions([], params.currentId);
+                }
+                const items = await fetchStoreShippingTemplates(params.storeId);
+                return templateSelectOptions(
+                  items.map((item) => ({
+                    label: item.name?.trim() || item.shipping_model_id,
+                    value: item.shipping_model_id,
+                  })),
+                  params.currentId,
+                );
+              }}
+              fieldProps={{
+                allowClear: true,
+                placeholder: intl.formatMessage({
+                  id: 'pages.product.detail.field.shippingTemplatePlaceholder',
+                  defaultMessage: '请选择物流模板',
+                }),
+                style: { maxWidth: 360 },
+              }}
+            />
+          </ProForm>
+        ) : null}
+      </Card>
+    </Space>
+  );
+
+  if (embedded) {
+    return content;
+  }
 
   return (
     <PageContainer
@@ -886,642 +1725,7 @@ const ProductDetailPage: React.FC = () => {
         ) : undefined
       }
     >
-      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-        <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.basic',
-            defaultMessage: '基本信息',
-          })}
-          loading={loading}
-        >
-          {detail ? (
-            <ProForm<BasicFormValues>
-              key={`basic-${formInstanceKey}`}
-              formRef={formRef}
-              submitter={false}
-              disabled={!editable}
-              layout="horizontal"
-              labelAlign="left"
-              labelCol={{ flex: '110px' }}
-              wrapperCol={{ flex: 1 }}
-              style={{ maxWidth: 720 }}
-              initialValues={{
-                store_id: detail.store_id || undefined,
-                category_path: initialCategoryPath,
-              }}
-              onValuesChange={(changed) => {
-                if ('store_id' in changed) {
-                  const nextStoreId = changed.store_id as number | undefined;
-                  setSelectedStoreId(nextStoreId);
-                  itemGroupTreeLoadedRef.current = false;
-                  setItemGroupOptions([]);
-                  setDetail((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          store_id: nextStoreId || 0,
-                        }
-                      : prev,
-                  );
-                }
-              }}
-            >
-              <ProFormSelect
-                name="store_id"
-                label={intl.formatMessage({
-                  id: 'pages.product.detail.field.storeName',
-                  defaultMessage: '店铺名称',
-                })}
-                rules={[
-                  {
-                    required: true,
-                    message: intl.formatMessage({
-                      id: 'pages.product.detail.field.storeNameRequired',
-                      defaultMessage: '请选择店铺',
-                    }),
-                  },
-                ]}
-                showSearch
-                debounceTime={300}
-                params={{ supplierId }}
-                request={async () => {
-                  if (!supplierId) {
-                    return [];
-                  }
-                  const data = await fetchStoreList({
-                    supplier_id: supplierId,
-                    page: 1,
-                    page_size: 100,
-                  });
-                  return data.items.map((store) => ({
-                    label: store.name,
-                    value: store.id,
-                  }));
-                }}
-                fieldProps={{
-                  placeholder: intl.formatMessage({
-                    id: 'pages.product.list.field.storePlaceholder',
-                    defaultMessage: '请选择店铺',
-                  }),
-                  style: { maxWidth: 360 },
-                }}
-              />
-              <div style={{ marginBottom: categoryPath ? 0 : undefined }}>
-                <Form.Item
-                  name="category_path"
-                  label={intl.formatMessage({
-                    id: 'pages.product.detail.field.productCategory',
-                    defaultMessage: '产品分类',
-                  })}
-                  required
-                  rules={[
-                    {
-                      required: true,
-                      type: 'array',
-                      min: 1,
-                      message: intl.formatMessage({
-                        id: 'pages.product.detail.categoryRequired',
-                        defaultMessage: '请选择分类',
-                      }),
-                    },
-                  ]}
-                  style={{ marginBottom: categoryPath ? 8 : undefined }}
-                >
-                  <Cascader
-                    options={cascaderOptions}
-                    loadData={loadCascaderData}
-                    onChange={onCategoryChange}
-                    changeOnSelect={false}
-                    displayRender={(labels) => labels.at(-1) ?? ''}
-                    placeholder={intl.formatMessage({
-                      id: 'pages.product.detail.field.categoryPlaceholder',
-                      defaultMessage: '请选择分类',
-                    })}
-                    style={{ maxWidth: 480, width: '100%' }}
-                    optionRender={(option) => (
-                      <span
-                        title={String(option.label ?? '')}
-                        style={{
-                          display: 'inline-block',
-                          maxWidth: 150,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          verticalAlign: 'bottom',
-                        }}
-                      >
-                        {option.label}
-                      </span>
-                    )}
-                  />
-                </Form.Item>
-                {categoryPath ? (
-                  <Typography.Text
-                    style={{
-                      display: 'block',
-                      marginBottom: 24,
-                      color: '#a0522d',
-                      lineHeight: 1.5,
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {categoryPath}
-                  </Typography.Text>
-                ) : null}
-              </div>
-            </ProForm>
-          ) : (
-            !loading &&
-            intl.formatMessage({
-              id: 'pages.product.detail.notFound',
-              defaultMessage: '未找到该商品',
-            })
-          )}
-        </Card>
-
-        <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.attrs',
-            defaultMessage: '商品属性',
-          })}
-          loading={loading || attrsLoading}
-        >
-          <div style={{ marginBottom: 20 }}>
-            <Typography.Text
-              strong
-              style={{ display: 'block', marginBottom: 12 }}
-            >
-              {intl.formatMessage({
-                id: 'pages.product.detail.categoryAttrs.title',
-                defaultMessage: '类目属性',
-              })}
-            </Typography.Text>
-            {normalCategoryAttrs.length > 0 ? (
-              <CategoryAttrsFields
-                attrs={normalCategoryAttrs}
-                selectedAttrs={normalSelectedAttrs}
-                disabled={!editable}
-              />
-            ) : (
-              !loading &&
-              !attrsLoading && (
-                <Typography.Text type="secondary">
-                  {intl.formatMessage({
-                    id: 'pages.product.detail.categoryAttrs.empty',
-                    defaultMessage: '暂无类目属性',
-                  })}
-                </Typography.Text>
-              )
-            )}
-          </div>
-
-          <Divider style={{ margin: '8px 0 16px' }} />
-
-          <div>
-            <Typography.Text
-              strong
-              style={{ display: 'block', marginBottom: 12 }}
-            >
-              {intl.formatMessage({
-                id: 'pages.product.detail.customAttrs.title',
-                defaultMessage: '自定义属性',
-              })}
-            </Typography.Text>
-            <ProForm<{ customAttrs: CustomAttrDraft[] }>
-              key={`custom-attrs-${formInstanceKey}`}
-              submitter={false}
-              disabled={!editable}
-              initialValues={{ customAttrs: customAttrDrafts }}
-              onValuesChange={(_, values) => {
-                if (!editable) {
-                  return;
-                }
-                syncCustomAttrDrafts(values.customAttrs || []);
-              }}
-            >
-              <ProFormList
-                name="customAttrs"
-                copyIconProps={false}
-                deleteIconProps={
-                  editable
-                    ? {
-                        tooltipText: intl.formatMessage({
-                          id: 'pages.product.detail.customAttrs.delete',
-                          defaultMessage: '删除',
-                        }),
-                      }
-                    : false
-                }
-                creatorButtonProps={
-                  editable
-                    ? {
-                        creatorButtonText: intl.formatMessage({
-                          id: 'pages.product.detail.customAttrs.add',
-                          defaultMessage: '新增属性',
-                        }),
-                        type: 'dashed',
-                        style: { width: '100%', maxWidth: 720 },
-                      }
-                    : false
-                }
-                max={DH_CUSTOM_ATTR_MAX_COUNT}
-                creatorRecord={() => ({
-                  key: `custom-new-${Date.now()}`,
-                  attr_val_id: null,
-                  attr_name: '',
-                  content: '',
-                })}
-                itemRender={({ listDom, action }) => (
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      marginBottom: 16,
-                    }}
-                  >
-                    {listDom}
-                    {editable ? action : null}
-                  </div>
-                )}
-              >
-                <Space size={8} wrap align="center">
-                  <ProFormText name="key" hidden />
-                  <ProFormText name="attr_val_id" hidden />
-                  <ProFormText
-                    name="attr_name"
-                    placeholder={intl.formatMessage({
-                      id: 'pages.product.detail.attrsCustomNamePlaceholder',
-                      defaultMessage: '请输入属性名',
-                    })}
-                    fieldProps={{
-                      maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
-                      allowClear: true,
-                      style: { width: 220 },
-                    }}
-                    formItemProps={{
-                      style: { marginBottom: 0 },
-                    }}
-                  />
-                  <ProFormText
-                    name="content"
-                    placeholder={intl.formatMessage({
-                      id: 'pages.product.detail.attrsCustomValuePlaceholder',
-                      defaultMessage: '请输入属性值',
-                    })}
-                    fieldProps={{
-                      maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
-                      allowClear: true,
-                      style: { width: 320 },
-                    }}
-                    formItemProps={{
-                      style: { marginBottom: 0 },
-                    }}
-                  />
-                </Space>
-              </ProFormList>
-            </ProForm>
-          </div>
-        </Card>
-
-        <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.productInfo',
-            defaultMessage: '产品信息',
-          })}
-          loading={loading}
-        >
-          {detail ? (
-            <ProForm<ProductInfoFormValues>
-              key={`product-info-${formInstanceKey}`}
-              formRef={productInfoFormRef}
-              submitter={false}
-              disabled={!editable}
-              layout="horizontal"
-              labelAlign="left"
-              labelCol={{ flex: '110px' }}
-              wrapperCol={{ flex: 1 }}
-              style={{ maxWidth: 920 }}
-              initialValues={{
-                item_name: detail.item_name || '',
-                key_word1: detail.key_word1 || '',
-                key_word2: detail.key_word2 || '',
-                key_word3: detail.key_word3 || '',
-                item_group_path: detail.item_group_id
-                  ? [detail.item_group_id]
-                  : undefined,
-              }}
-            >
-              <Form.Item
-                name="item_name"
-                label={intl.formatMessage({
-                  id: 'pages.product.detail.field.itemName',
-                  defaultMessage: '产品标题',
-                })}
-                required
-                rules={[
-                  {
-                    required: true,
-                    whitespace: true,
-                    message: intl.formatMessage({
-                      id: 'pages.product.detail.field.itemNameRequired',
-                      defaultMessage: '请输入产品标题',
-                    }),
-                  },
-                  {
-                    max: ITEM_NAME_MAX_LENGTH,
-                    message: intl.formatMessage(
-                      {
-                        id: 'pages.product.detail.field.itemNameMax',
-                        defaultMessage: '产品标题最多 {max} 个字符',
-                      },
-                      { max: ITEM_NAME_MAX_LENGTH },
-                    ),
-                  },
-                ]}
-                extra={
-                  <Form.Item
-                    noStyle
-                    shouldUpdate={(prev, next) =>
-                      prev.item_name !== next.item_name
-                    }
-                  >
-                    {({ getFieldValue }) => {
-                      const used = String(
-                        getFieldValue('item_name') || '',
-                      ).length;
-                      const remaining = Math.max(
-                        0,
-                        ITEM_NAME_MAX_LENGTH - used,
-                      );
-                      return (
-                        <Typography.Text type="secondary">
-                          {intl.formatMessage(
-                            {
-                              id: 'pages.product.detail.field.itemNameRemaining',
-                              defaultMessage: '您还可以输入{count}个字符',
-                            },
-                            { count: remaining },
-                          )}
-                        </Typography.Text>
-                      );
-                    }}
-                  </Form.Item>
-                }
-              >
-                <Input
-                  maxLength={ITEM_NAME_MAX_LENGTH}
-                  allowClear
-                  style={{ width: '100%' }}
-                  placeholder={intl.formatMessage({
-                    id: 'pages.product.detail.field.itemNamePlaceholder',
-                    defaultMessage: '请输入产品标题',
-                  })}
-                />
-              </Form.Item>
-              <Form.Item
-                label={intl.formatMessage({
-                  id: 'pages.product.detail.field.keywords',
-                  defaultMessage: '关键词',
-                })}
-              >
-                <Space size={12} wrap style={{ width: '100%' }}>
-                  <Form.Item name="key_word1" noStyle>
-                    <Input
-                      allowClear
-                      style={{ width: 240 }}
-                      placeholder={intl.formatMessage({
-                        id: 'pages.product.detail.field.keywordPlaceholder',
-                        defaultMessage: '关键词 1',
-                      })}
-                    />
-                  </Form.Item>
-                  <Form.Item name="key_word2" noStyle>
-                    <Input
-                      allowClear
-                      style={{ width: 240 }}
-                      placeholder={intl.formatMessage({
-                        id: 'pages.product.detail.field.keywordPlaceholder2',
-                        defaultMessage: '关键词 2',
-                      })}
-                    />
-                  </Form.Item>
-                  <Form.Item name="key_word3" noStyle>
-                    <Input
-                      allowClear
-                      style={{ width: 240 }}
-                      placeholder={intl.formatMessage({
-                        id: 'pages.product.detail.field.keywordPlaceholder3',
-                        defaultMessage: '关键词 3',
-                      })}
-                    />
-                  </Form.Item>
-                </Space>
-              </Form.Item>
-              <Form.Item
-                name="item_group_path"
-                label={intl.formatMessage({
-                  id: 'pages.product.detail.field.itemGroup',
-                  defaultMessage: '产品分组',
-                })}
-              >
-                <Cascader
-                  options={itemGroupOptions}
-                  changeOnSelect
-                  allowClear
-                  displayRender={(labels) => labels.join(' / ')}
-                  placeholder={intl.formatMessage({
-                    id: 'pages.product.detail.field.itemGroupPlaceholder',
-                    defaultMessage: '请选择产品分组',
-                  })}
-                  style={{ maxWidth: 480, width: '100%' }}
-                  popupMenuColumnStyle={{
-                    width: 220,
-                    maxWidth: 220,
-                  }}
-                  showSearch={{
-                    filter: (inputValue, path) =>
-                      path.some((option) =>
-                        String(option.label ?? '')
-                          .toLowerCase()
-                          .includes(inputValue.trim().toLowerCase()),
-                      ),
-                  }}
-                  onOpenChange={(open) => {
-                    if (open) {
-                      void loadItemGroups();
-                    }
-                  }}
-                />
-              </Form.Item>
-              {mode === 'view' || mode === 'edit' ? (
-                <>
-                  <Form.Item
-                    label={intl.formatMessage({
-                      id: 'pages.product.detail.field.productState',
-                      defaultMessage: '商品状态',
-                    })}
-                  >
-                    {formatProductState(
-                      detail.state,
-                      (id, defaultMessage) =>
-                        intl.formatMessage({ id, defaultMessage }),
-                    )}
-                  </Form.Item>
-                  <Form.Item
-                    label={intl.formatMessage({
-                      id: 'pages.product.list.field.lastSyncedAt',
-                      defaultMessage: '同步时间',
-                    })}
-                    style={{ marginBottom: 0 }}
-                  >
-                    {formatDateTime(detail.last_synced_at)}
-                  </Form.Item>
-                </>
-              ) : null}
-            </ProForm>
-          ) : (
-            !loading &&
-            intl.formatMessage({
-              id: 'pages.product.detail.notFound',
-              defaultMessage: '未找到该商品',
-            })
-          )}
-        </Card>
-
-        <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.images',
-            defaultMessage: '商品图片',
-          })}
-          loading={loading}
-        >
-          {loading ? null : (
-            <ProductImagesEditor
-              images={detail?.item_img_list}
-              storeId={selectedStoreId || detail?.store_id || undefined}
-              alt={detail?.item_name || detail?.item_code}
-              disabled={!editable}
-              onChange={(next) => {
-                setDetail((prev) =>
-                  prev ? { ...prev, item_img_list: next } : prev,
-                );
-              }}
-            />
-          )}
-        </Card>
-
-        <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.specAttrs',
-            defaultMessage: '商品规格',
-          })}
-          loading={loading || attrsLoading}
-        >
-          <div style={{ marginBottom: 20 }}>
-            <Typography.Text
-              strong
-              style={{ display: 'block', marginBottom: 12 }}
-            >
-              {intl.formatMessage({
-                id: 'pages.product.detail.specAttrs.sectionTitle',
-                defaultMessage: '规格属性',
-              })}
-            </Typography.Text>
-            <SpecAttrsFields
-              priceCategoryAttrs={priceCategoryAttrs}
-              priceSelectedAttrs={priceSelectedAttrs}
-              specSelfDefs={detail?.item_spec_self_def_list}
-              storeId={selectedStoreId || detail?.store_id || undefined}
-              disabled={!editable}
-              onSpecSelfDefsChange={(next) => {
-                setDetail((prev) =>
-                  prev ? { ...prev, item_spec_self_def_list: next } : prev,
-                );
-              }}
-              onValuePicChange={(attrId, attrValId, picUrl) => {
-                setAttrFillValues((prev) =>
-                  patchAttrValuePic(
-                    prev || detail?.attr_list,
-                    attrId,
-                    attrValId,
-                    picUrl,
-                  ),
-                );
-                setDetail((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        attr_list: patchAttrValuePic(
-                          prev.attr_list,
-                          attrId,
-                          attrValId,
-                          picUrl,
-                        ),
-                      }
-                    : prev,
-                );
-              }}
-            />
-          </div>
-
-          <Divider plain style={{ margin: '8px 0 16px' }}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.divider',
-              defaultMessage: '商品规格属性生成的规格sku',
-            })}
-          </Divider>
-
-          <div>
-            <Typography.Text
-              strong
-              style={{ display: 'block', marginBottom: 12 }}
-            >
-              {intl.formatMessage({
-                id: 'pages.product.detail.specSku.sectionTitle',
-                defaultMessage: '规格SKU',
-              })}
-            </Typography.Text>
-            <SpecSkuTable
-              skuList={detail?.sku_list}
-              priceSelectedAttrs={priceSelectedAttrs}
-              specSelfDefs={detail?.item_spec_self_def_list}
-              itemCode={detail?.item_code}
-              disabled={!editable}
-              onChange={(next) => {
-                setDetail((prev) =>
-                  prev ? { ...prev, sku_list: next } : prev,
-                );
-              }}
-            />
-          </div>
-        </Card>
-
-        {detail?.html_content ? (
-          <Card
-            title={intl.formatMessage({
-              id: 'pages.product.detail.section.html',
-              defaultMessage: '详情描述',
-            })}
-          >
-            <iframe
-              title={intl.formatMessage({
-                id: 'pages.product.detail.section.html',
-                defaultMessage: '详情描述',
-              })}
-              srcDoc={detail.html_content}
-              sandbox=""
-              style={{
-                width: '100%',
-                minHeight: 360,
-                maxHeight: 480,
-                border: 'none',
-                background: '#fff',
-              }}
-            />
-          </Card>
-        ) : null}
-      </Space>
+      {content}
     </PageContainer>
   );
 };

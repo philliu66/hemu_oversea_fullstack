@@ -44,8 +44,16 @@ class MissionFissionDataList(BaseModel):
 
 class MissionFissionDataAdd(BaseModel):
     mission_id: int = Field(ge=1, description="任务 ID")
-    supplier_id: int | None = Field(default=None, description="供应商 ID，平台身份使用")
-    product_ids: list[int] = Field(default_factory=list, description="预留：选中的种子商品 ID")
+    seed_product_id: int = Field(ge=1, description="种子商品 ID")
+    update_json: dict[str, Any] = Field(
+        default_factory=dict,
+        description="相对种子商品本次修改的字段，供后续裂变上传使用",
+    )
+
+
+class MissionFissionDataOperate(BaseModel):
+    id: int = Field(ge=1, description="任务数据 ID")
+    mission_id: int = Field(ge=1, description="任务 ID")
 
 
 class MissionFissionDataImport(BaseModel):
@@ -92,11 +100,20 @@ class MissionFissionDataPublic(BaseModel):
     supplier_id: int
     seed_product_id: int
     store_id: int
+    store_name: str | None = Field(default=None, description="店铺名称，列表展示用")
     item_code: str
     site_id: str
+    is_seed: str
+    cate_pub_id: str | None = None
+    state: str | None = Field(default=None, description="商品状态文案")
+    item_name: str | None = None
+    main_image_url: str | None = None
+    sync_state: str | None = None
+    last_synced_at: datetime | None = None
+    update_json: dict[str, Any]
     fission_status: str
     fission_msg: str | None
-    update_data_json: dict[str, Any]
+    fission_at: datetime | None = None
     created_by: int | None
     created_at: datetime
     updated_at: datetime

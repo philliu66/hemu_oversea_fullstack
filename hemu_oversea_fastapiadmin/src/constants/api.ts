@@ -52,6 +52,8 @@ export const AdminStoreApi = {
   UPDATE: '/api/v1/admin/stores/update',
   DELETE: '/api/v1/admin/stores/delete',
   INSPECTION_PUNISH: '/api/v1/admin/stores/inspection/punish',
+  AFTERSALE_TEMPLATE_LIST: '/api/v1/admin/stores/aftersale-template/list',
+  SHIPPING_TEMPLATE_LIST: '/api/v1/admin/stores/shipping-template/list',
 } as const;
 
 /** 管理端商品相关路径 */
@@ -70,6 +72,9 @@ export const AdminMissionApi = {
   MARK_FINISHED: '/api/v1/admin/missions/mark-finished',
   FISSION_DATA_LIST: '/api/v1/admin/missions/fission-data/list',
   FISSION_DATA_ADD: '/api/v1/admin/missions/fission-data/add',
+  FISSION_DATA_DELETE: '/api/v1/admin/missions/fission-data/delete',
+  FISSION_DATA_MARK_FINISHED:
+    '/api/v1/admin/missions/fission-data/mark-finished',
   FISSION_DATA_IMPORT: '/api/v1/admin/missions/fission-data/import',
   LOGS_LIST: '/api/v1/admin/missions/logs/list',
   EXECUTE: '/api/v1/admin/missions/execute',

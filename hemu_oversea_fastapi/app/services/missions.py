@@ -1,10 +1,16 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, defer
 
 from app.core.deps import Pagination
 from app.core.errors import bad_request, forbidden, not_found
 from app.core.roles import Role
 from app.models.mission import (
+    FISSION_STATUS_MARKED_FINISHED,
+    FISSION_STATUS_PENDING,
+    FISSION_STATUS_SUCCESS,
+    MISSION_STATUS_FINISHED,
     MISSION_STATUS_MARKED_FINISHED,
     MISSION_STATUS_PENDING,
     MISSION_STATUS_RUNNING,
@@ -12,6 +18,8 @@ from app.models.mission import (
     MissionDataDhFission,
     MissionLog,
 )
+from app.models.product_dh import ProductDh
+from app.models.store import Store
 from app.models.user import User
 from app.schemas.common import PageData
 from app.schemas.mission import (
@@ -19,6 +27,7 @@ from app.schemas.mission import (
     MissionLogPublic,
     MissionPublic,
 )
+from app.services.products import _build_dh_main_image_url, _dh_product_state_label
 
 PLACEHOLDER_MESSAGE = "功能待补充"
 
@@ -238,6 +247,52 @@ def mark_mission_finished(
     )
 
 
+def _to_fission_list_public(
+    row: MissionDataDhFission,
+    *,
+    store_name: str | None,
+) -> MissionFissionDataPublic:
+    data = MissionFissionDataPublic.model_validate(row)
+    return data.model_copy(
+        update={
+            "store_name": store_name,
+            "main_image_url": _build_dh_main_image_url(row.main_image_url),
+            "state": _dh_product_state_label(row.state),
+        }
+    )
+
+
+def _snapshot_store_id(
+    db: Session,
+    *,
+    product: ProductDh,
+    update_json: dict,
+    supplier_id: int,
+) -> int:
+    if "store_id" not in update_json or update_json.get("store_id") in (None, ""):
+        return product.store_id
+    try:
+        store_id = int(update_json["store_id"])
+    except (TypeError, ValueError):
+        raise bad_request("店铺无效") from None
+    if store_id == product.store_id:
+        return store_id
+    store = db.get(Store, store_id)
+    if store is None or store.is_deleted or store.supplier_id != supplier_id:
+        raise forbidden("只能选择本供应商的店铺")
+    return store_id
+
+
+def _overlay_text(update_json: dict, key: str, current: str | None) -> str | None:
+    if key not in update_json:
+        return current
+    value = update_json.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def list_fission_data(
     db: Session,
     *,
@@ -262,15 +317,23 @@ def list_fission_data(
         )
         or 0
     )
-    rows = db.scalars(
-        select(MissionDataDhFission)
+    rows = db.execute(
+        select(MissionDataDhFission, Store.name)
+        .options(
+            defer(MissionDataDhFission.raw_json),
+            defer(MissionDataDhFission.sku_json),
+        )
+        .outerjoin(Store, Store.id == MissionDataDhFission.store_id)
         .where(*filters)
         .order_by(MissionDataDhFission.id.desc())
         .offset(pagination.offset)
         .limit(pagination.page_size)
     ).all()
     return PageData(
-        items=[MissionFissionDataPublic.model_validate(row) for row in rows],
+        items=[
+            _to_fission_list_public(fission, store_name=store_name)
+            for fission, store_name in rows
+        ],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -323,6 +386,130 @@ def list_logs(
         page=pagination.page,
         page_size=pagination.page_size,
     )
+
+
+def add_fission_data(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    seed_product_id: int,
+    update_json: dict,
+) -> MissionFissionDataPublic:
+    """复制种子商品快照加入任务。update_json 只记本次改动，不写 fission_msg。"""
+    supplier_id = _require_supplier_admin(actor)
+    mission = _get_visible_mission(
+        db,
+        mission_id=mission_id,
+        actor=actor,
+        supplier_id=supplier_id,
+    )
+    if mission.status in {MISSION_STATUS_MARKED_FINISHED, MISSION_STATUS_FINISHED}:
+        raise bad_request("任务已结束，不能再添加数据")
+
+    product = db.get(ProductDh, seed_product_id)
+    if product is None:
+        raise not_found("种子商品不存在")
+    if product.is_seed != "1":
+        raise bad_request("只能选择种子商品")
+    store = db.get(Store, product.store_id)
+    if store is None or store.is_deleted or store.supplier_id != supplier_id:
+        raise forbidden("只能选择本供应商的种子商品")
+
+    row = MissionDataDhFission(
+        mission_id=mission.id,
+        supplier_id=mission.supplier_id,
+        seed_product_id=product.id,
+        store_id=_snapshot_store_id(
+            db,
+            product=product,
+            update_json=update_json,
+            supplier_id=supplier_id,
+        ),
+        item_code=product.item_code,
+        site_id=product.site_id or "EN",
+        is_seed=product.is_seed or "1",
+        cate_pub_id=_overlay_text(update_json, "cate_pub_id", product.cate_pub_id),
+        state=product.state,
+        item_name=_overlay_text(update_json, "item_name", product.item_name),
+        main_image_url=product.main_image_url,
+        sku_json=product.sku_json,
+        raw_json=product.raw_json if isinstance(product.raw_json, dict) else None,
+        sync_state=product.sync_state or "1",
+        last_synced_at=product.last_synced_at,
+        update_json=update_json,
+        fission_status=FISSION_STATUS_PENDING,
+        created_by=actor.id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return MissionFissionDataPublic.model_validate(row)
+
+
+def _get_mutable_fission_row(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    data_id: int,
+) -> MissionDataDhFission:
+    supplier_id = _require_supplier_admin(actor)
+    mission = _get_visible_mission(
+        db,
+        mission_id=mission_id,
+        actor=actor,
+        supplier_id=supplier_id,
+    )
+    if mission.status in {MISSION_STATUS_MARKED_FINISHED, MISSION_STATUS_FINISHED}:
+        raise bad_request("任务已结束，不能再修改数据")
+    row = db.get(MissionDataDhFission, data_id)
+    if row is None or row.is_deleted or row.mission_id != mission.id:
+        raise not_found("任务数据不存在")
+    return row
+
+
+def delete_fission_data(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    data_id: int,
+) -> None:
+    """软删除一条尚未裂变成功的任务数据。"""
+    row = _get_mutable_fission_row(
+        db,
+        actor=actor,
+        mission_id=mission_id,
+        data_id=data_id,
+    )
+    if row.fission_status == FISSION_STATUS_SUCCESS:
+        raise bad_request("裂变成功的数据不能删除")
+    row.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def mark_fission_data_finished(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    data_id: int,
+) -> MissionFissionDataPublic:
+    """把尚未裂变成功的任务数据标记结束，只改裂变状态。"""
+    row = _get_mutable_fission_row(
+        db,
+        actor=actor,
+        mission_id=mission_id,
+        data_id=data_id,
+    )
+    if row.fission_status == FISSION_STATUS_SUCCESS:
+        raise bad_request("裂变成功的数据不能标记结束")
+    if row.fission_status != FISSION_STATUS_MARKED_FINISHED:
+        row.fission_status = FISSION_STATUS_MARKED_FINISHED
+        db.commit()
+        db.refresh(row)
+    return MissionFissionDataPublic.model_validate(row)
 
 
 def reject_placeholder(

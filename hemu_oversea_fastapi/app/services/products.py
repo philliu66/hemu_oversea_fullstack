@@ -10,10 +10,10 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.core.deps import Pagination
-from app.core.errors import AppError, bad_request, not_found
+from app.core.errors import bad_request, not_found
 from app.core.store_types import StoreType
 from app.models.product_category_dh import ProductCategoryDh
 from app.models.product_dh import ProductDh
@@ -51,8 +51,6 @@ from app.services.dhgate import (
     get_category,
     get_category_path,
     get_dhgate_client,
-    get_item,
-    get_item_html,
     list_item_groups,
 )
 from app.services.products_dh import _attr_combo_text, _spec_self_def_lookup
@@ -1136,7 +1134,8 @@ def list_dh_products(
     )
 
     rows = db.scalars(
-        stmt.order_by(order_expr, ProductDh.id.desc())
+        stmt.options(defer(ProductDh.raw_json), defer(ProductDh.sku_json))
+        .order_by(order_expr, ProductDh.id.desc())
         .offset(pagination.offset)
         .limit(pagination.page_size)
     ).all()
@@ -1232,9 +1231,6 @@ def _to_dh_product_detail_public(
         operate_date=_parse_dh_datetime(detail.get("operateDate")),
         last_synced_at=row.last_synced_at,
         sync_state=row.sync_state,
-        sync_state_desc=row.sync_state_desc,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
         item_img_list=_list_product_item_imgs(detail),
         sku_list=sku_list,
         category=_get_product_category(db, cate_pub_id),
@@ -1256,32 +1252,14 @@ def get_dh_product_detail(
     db: Session,
     product_id: int,
 ) -> DhProductDetailPublic:
-    """按本地商品 ID 定位店铺与 item_code，再调 dh.item.get 返回最新详情（不落库）。"""
+    """按本地商品 ID 读取 product_dh.raw_json，解析为详情。"""
     row = db.get(ProductDh, product_id)
     if row is None:
         raise not_found("商品不存在")
-
-    site_id = row.site_id or "EN"
-    client = get_dhgate_client(db, row.store_id)
-    detail = get_item(client, item_code=row.item_code, site_id=site_id)
-    item_base = detail.get("itemBase") if isinstance(detail.get("itemBase"), dict) else {}
-    html_content = _as_str(item_base.get("htmlContent"))
-    if not html_content:
-        try:
-            html_data = get_item_html(
-                client, item_code=row.item_code, site_id=site_id
-            )
-            if isinstance(html_data, dict):
-                html_content = _as_str(html_data.get("htmlContent"))
-        except AppError:
-            logger.warning(
-                "获取商品长描失败 product_id=%s item_code=%s",
-                row.id,
-                row.item_code,
-            )
-    return _to_dh_product_detail_public(
-        db, row, detail, html_content=html_content
-    )
+    detail = row.raw_json if isinstance(row.raw_json, dict) else None
+    if not detail:
+        raise not_found("商品详情尚未同步")
+    return _to_dh_product_detail_public(db, row, detail)
 
 
 def _flatten_item_groups(raw_list: Any) -> list[dict[str, Any]]:

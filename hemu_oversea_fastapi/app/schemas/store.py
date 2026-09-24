@@ -30,6 +30,28 @@ class StoreDetail(BaseModel):
     id: int = Field(description="店铺 ID")
 
 
+class StoreTemplateListRequest(BaseModel):
+    store_id: int = Field(ge=1, description="店铺 ID")
+
+
+class StoreAftersaleTemplatePublic(BaseModel):
+    after_sale_template_id: str = Field(description="售后模板 ID afterSaleTemplateId")
+    name: str | None = Field(default=None, description="模板名称")
+    if_template_default: str | None = Field(
+        default=None, description="是否默认模板，1 为默认"
+    )
+
+
+class StoreShippingTemplatePublic(BaseModel):
+    shipping_model_id: str = Field(
+        description="物流模板 ID，对应商品 shippingModelId / 接口 shippingTempId"
+    )
+    name: str | None = Field(default=None, description="模板名称")
+    model_type: str | None = Field(
+        default=None, description="模板类型，10 为新手运费模板"
+    )
+
+
 class StoreList(BaseModel):
     keyword: str | None = Field(
         default=None,

@@ -12,6 +12,7 @@ from app.schemas.mission import (
     MissionFissionDataAdd,
     MissionFissionDataImport,
     MissionFissionDataList,
+    MissionFissionDataOperate,
     MissionFissionDataPublic,
     MissionList,
     MissionLogList,
@@ -133,19 +134,58 @@ def list_logs(
     )
 
 
-@router.post("/fission-data/add", response_model=ApiResponse[dict])
+@router.post(
+    "/fission-data/add",
+    response_model=ApiResponse[MissionFissionDataPublic],
+)
 def add_fission_data(
     payload: MissionFissionDataAdd,
-    current_user: User = Depends(require_admin_user),
+    current_user: User = Depends(require_supplier_admin),
+    db: Session = Depends(get_db),
+) -> ApiResponse[MissionFissionDataPublic]:
+    return success(
+        mission_service.add_fission_data(
+            db,
+            actor=current_user,
+            mission_id=payload.mission_id,
+            seed_product_id=payload.seed_product_id,
+            update_json=payload.update_json,
+        )
+    )
+
+
+@router.post("/fission-data/delete", response_model=ApiResponse[dict])
+def delete_fission_data(
+    payload: MissionFissionDataOperate,
+    current_user: User = Depends(require_supplier_admin),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
-    mission_service.reject_placeholder(
+    mission_service.delete_fission_data(
         db,
-        mission_id=payload.mission_id,
         actor=current_user,
-        supplier_id=payload.supplier_id,
+        mission_id=payload.mission_id,
+        data_id=payload.id,
     )
     return success({})
+
+
+@router.post(
+    "/fission-data/mark-finished",
+    response_model=ApiResponse[MissionFissionDataPublic],
+)
+def mark_fission_data_finished(
+    payload: MissionFissionDataOperate,
+    current_user: User = Depends(require_supplier_admin),
+    db: Session = Depends(get_db),
+) -> ApiResponse[MissionFissionDataPublic]:
+    return success(
+        mission_service.mark_fission_data_finished(
+            db,
+            actor=current_user,
+            mission_id=payload.mission_id,
+            data_id=payload.id,
+        )
+    )
 
 
 @router.post("/fission-data/import", response_model=ApiResponse[dict])

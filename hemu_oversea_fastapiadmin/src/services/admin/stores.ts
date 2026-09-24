@@ -3,6 +3,7 @@ import { AdminStoreApi } from '@/constants/api';
 import type {
   ApiResponse,
   PageData,
+  StoreAftersaleTemplatePublic,
   StoreAuthorizePublic,
   StoreCreateParams,
   StoreDetailPublic,
@@ -10,6 +11,7 @@ import type {
   StoreInspectionPunishPublic,
   StoreListParams,
   StorePublic,
+  StoreShippingTemplatePublic,
   StoreUpdateParams,
 } from '@/types/api';
 import { unwrapApiData } from '@/utils/http';
@@ -119,6 +121,40 @@ export async function deleteStore(id: number, options?: RequestOptions) {
     data: { id },
     ...options,
   });
+}
+
+/** POST /api/v1/admin/stores/aftersale-template/list */
+export async function fetchStoreAftersaleTemplates(
+  storeId: number,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<StoreAftersaleTemplatePublic[]>>(
+    AdminStoreApi.AFTERSALE_TEMPLATE_LIST,
+    {
+      method: 'POST',
+      data: { store_id: storeId },
+      ...options,
+    },
+  );
+  return (
+    unwrapApiData<StoreAftersaleTemplatePublic[]>(res) ?? []
+  );
+}
+
+/** POST /api/v1/admin/stores/shipping-template/list */
+export async function fetchStoreShippingTemplates(
+  storeId: number,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<StoreShippingTemplatePublic[]>>(
+    AdminStoreApi.SHIPPING_TEMPLATE_LIST,
+    {
+      method: 'POST',
+      data: { store_id: storeId },
+      ...options,
+    },
+  );
+  return unwrapApiData<StoreShippingTemplatePublic[]>(res) ?? [];
 }
 
 /** POST /api/v1/admin/stores/inspection/punish */

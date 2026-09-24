@@ -144,6 +144,20 @@ export type StoreDetailPublic = StorePublic & {
   password: string;
 };
 
+/** 店铺售后模板 */
+export type StoreAftersaleTemplatePublic = {
+  after_sale_template_id: string;
+  name?: string | null;
+  if_template_default?: string | null;
+};
+
+/** 店铺物流（运费）模板，shipping_model_id 对应商品 shippingModelId */
+export type StoreShippingTemplatePublic = {
+  shipping_model_id: string;
+  name?: string | null;
+  model_type?: string | null;
+};
+
 /** POST /api/v1/admin/stores/authorize-url 返回 */
 export type StoreAuthorizePublic = {
   store_id: number;
@@ -334,26 +348,12 @@ export type DhProductPublic = {
   item_code: string;
   site_id: string;
   is_seed: string;
-  supplier_id: string | null;
   cate_pub_id: string | null;
   state: string | null;
   item_name: string | null;
-  short_desc: string | null;
-  min_wholesale_qty: number | null;
-  max_sale_qty: number | null;
-  leading_time: number | null;
-  price_min: string | number | null;
-  price_max: string | number | null;
-  sku_count: number | null;
-  total_inventory: number | null;
   main_image_url: string | null;
-  expire_date: string | null;
-  operate_date: string | null;
   last_synced_at: string | null;
   sync_state?: string;
-  sync_state_desc?: string | null;
-  created_at: string;
-  updated_at: string;
 };
 
 /** 敦煌商品 SKU（与后端 DhProductSkuPublic 对齐） */
@@ -534,9 +534,6 @@ export type DhProductDetailPublic = {
   operate_date: string | null;
   last_synced_at: string | null;
   sync_state: string;
-  sync_state_desc: string | null;
-  created_at: string;
-  updated_at: string;
   item_img_list: DhProductImgPublic[];
   sku_list: DhProductSkuPublic[];
   category: DhCategoryPublic | null;
@@ -592,7 +589,11 @@ export type MissionStatus =
   | 'finished'
   | 'marked_finished';
 
-export type FissionStatus = 'pending' | 'success' | 'failed';
+export type FissionStatus =
+  | 'pending'
+  | 'success'
+  | 'failed'
+  | 'marked_finished';
 
 export type MissionPublic = {
   id: number;
@@ -623,17 +624,32 @@ export type MissionCreateParams = {
   worker_id: number;
 };
 
+export type MissionFissionDataAddParams = {
+  mission_id: number;
+  seed_product_id: number;
+  update_json: Record<string, unknown>;
+};
+
 export type MissionFissionDataPublic = {
   id: number;
   mission_id: number;
   supplier_id: number;
   seed_product_id: number;
   store_id: number;
+  store_name?: string | null;
   item_code: string;
   site_id: string;
+  is_seed: string;
+  cate_pub_id?: string | null;
+  state?: string | null;
+  item_name?: string | null;
+  main_image_url?: string | null;
+  sync_state?: string | null;
+  last_synced_at?: string | null;
+  update_json: Record<string, unknown>;
   fission_status: FissionStatus;
   fission_msg: string | null;
-  update_data_json: Record<string, unknown>;
+  fission_at?: string | null;
   created_by: number | null;
   created_at: string;
   updated_at: string;

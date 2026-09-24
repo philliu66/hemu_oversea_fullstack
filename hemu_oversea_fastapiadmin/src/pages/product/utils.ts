@@ -75,6 +75,22 @@ export function isProductPageEditable(mode: ProductPageMode) {
   return mode === 'create' || mode === 'copy' || mode === 'edit';
 }
 
+/** product_dh.sync_state：1=成功，0=失败 */
+export function formatSyncState(
+  syncState: string | null | undefined,
+  successText: string,
+  failText: string,
+): string {
+  if (syncState === '1') {
+    return successText;
+  }
+  if (syncState === '0') {
+    return failText;
+  }
+  const text = syncState?.trim();
+  return text || '-';
+}
+
 /** 新建商品的空白草稿（本地态，尚未落库） */
 export function createEmptyProductDetail(
   partial?: Partial<DhProductDetailPublic>,
@@ -115,9 +131,6 @@ export function createEmptyProductDetail(
     operate_date: null,
     last_synced_at: null,
     sync_state: '',
-    sync_state_desc: null,
-    created_at: '',
-    updated_at: '',
     item_img_list: [],
     sku_list: [],
     category: null,
@@ -141,9 +154,6 @@ export function toCopyProductDetail(
     expire_date: null,
     operate_date: null,
     sync_state: '',
-    sync_state_desc: null,
-    created_at: '',
-    updated_at: '',
     sku_list: (source.sku_list || []).map((sku) => ({
       ...sku,
       id: 0,

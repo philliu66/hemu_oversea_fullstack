@@ -3,6 +3,7 @@ import { AdminMissionApi } from '@/constants/api';
 import type {
   ApiResponse,
   MissionCreateParams,
+  MissionFissionDataAddParams,
   MissionFissionDataPublic,
   MissionListParams,
   MissionLogPublic,
@@ -112,6 +113,60 @@ export async function fetchMissionFissionDataList(
   return requireData(
     unwrapApiData<PageData<MissionFissionDataPublic>>(res),
     '获取任务数据失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/fission-data/add */
+export async function addMissionFissionData(
+  params: MissionFissionDataAddParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionFissionDataPublic>>(
+    AdminMissionApi.FISSION_DATA_ADD,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<MissionFissionDataPublic>(res),
+    '添加任务数据失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/fission-data/delete */
+export async function deleteMissionFissionData(
+  params: { id: number; mission_id: number },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<Record<string, never>>>(
+    AdminMissionApi.FISSION_DATA_DELETE,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return unwrapApiData(res);
+}
+
+/** POST /api/v1/admin/missions/fission-data/mark-finished */
+export async function markMissionFissionDataFinished(
+  params: { id: number; mission_id: number },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionFissionDataPublic>>(
+    AdminMissionApi.FISSION_DATA_MARK_FINISHED,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<MissionFissionDataPublic>(res),
+    '标记结束失败',
   );
 }
 
