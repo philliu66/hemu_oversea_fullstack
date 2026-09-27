@@ -47,8 +47,28 @@ class MissionFissionDataAdd(BaseModel):
     seed_product_id: int = Field(ge=1, description="种子商品 ID")
     update_json: dict[str, Any] = Field(
         default_factory=dict,
-        description="相对种子商品本次修改的字段，供后续裂变上传使用",
+        description="相对最初种子详情的完整差异",
     )
+    raw_json: dict[str, Any] = Field(
+        description="修改完成后的完整正文，发布直接使用",
+    )
+
+
+class MissionFissionDataDetail(BaseModel):
+    id: int = Field(ge=1, description="任务数据 ID")
+    mission_id: int = Field(ge=1, description="任务 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略该字段；平台身份必填",
+    )
+
+
+class MissionFissionDataDetailPublic(BaseModel):
+    id: int
+    mission_id: int
+    seed_product_id: int
+    update_json: dict[str, Any]
+    raw_json: dict[str, Any] | None = None
 
 
 class MissionFissionDataOperate(BaseModel):
@@ -101,15 +121,14 @@ class MissionFissionDataPublic(BaseModel):
     seed_product_id: int
     store_id: int
     store_name: str | None = Field(default=None, description="店铺名称，列表展示用")
-    item_code: str
+    item_code: str | None = Field(
+        default=None,
+        description="新商品编码。发布成功前为空，成功后为官方 API 返回值",
+    )
     site_id: str
-    is_seed: str
     cate_pub_id: str | None = None
-    state: str | None = Field(default=None, description="商品状态文案")
     item_name: str | None = None
     main_image_url: str | None = None
-    sync_state: str | None = None
-    last_synced_at: datetime | None = None
     update_json: dict[str, Any]
     fission_status: str
     fission_msg: str | None

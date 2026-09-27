@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -23,11 +24,12 @@ from app.models.store import Store
 from app.models.user import User
 from app.schemas.common import PageData
 from app.schemas.mission import (
+    MissionFissionDataDetailPublic,
     MissionFissionDataPublic,
     MissionLogPublic,
     MissionPublic,
 )
-from app.services.products import _build_dh_main_image_url, _dh_product_state_label
+from app.services.products import _build_dh_main_image_url
 
 PLACEHOLDER_MESSAGE = "功能待补充"
 
@@ -257,7 +259,6 @@ def _to_fission_list_public(
         update={
             "store_name": store_name,
             "main_image_url": _build_dh_main_image_url(row.main_image_url),
-            "state": _dh_product_state_label(row.state),
         }
     )
 
@@ -281,6 +282,27 @@ def _snapshot_store_id(
     if store is None or store.is_deleted or store.supplier_id != supplier_id:
         raise forbidden("只能选择本供应商的店铺")
     return store_id
+
+
+def _body_text(body: dict, key: str) -> str | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _body_main_image(body: dict) -> str | None:
+    images = body.get("item_img_list")
+    if not isinstance(images, list):
+        return None
+    for image in images:
+        if not isinstance(image, dict):
+            continue
+        url = _body_text(image, "img_url")
+        if url:
+            return url
+    return None
 
 
 def _overlay_text(update_json: dict, key: str, current: str | None) -> str | None:
@@ -320,8 +342,8 @@ def list_fission_data(
     rows = db.execute(
         select(MissionDataDhFission, Store.name)
         .options(
+            defer(MissionDataDhFission.seed_json),
             defer(MissionDataDhFission.raw_json),
-            defer(MissionDataDhFission.sku_json),
         )
         .outerjoin(Store, Store.id == MissionDataDhFission.store_id)
         .where(*filters)
@@ -388,6 +410,33 @@ def list_logs(
     )
 
 
+def get_fission_data_detail(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    data_id: int,
+    supplier_id: int | None,
+) -> MissionFissionDataDetailPublic:
+    """读取一条裂变数据的改后正文和相对种子的差异。"""
+    _get_visible_mission(
+        db,
+        mission_id=mission_id,
+        actor=actor,
+        supplier_id=supplier_id,
+    )
+    row = db.get(MissionDataDhFission, data_id)
+    if row is None or row.is_deleted or row.mission_id != mission_id:
+        raise not_found("任务数据不存在")
+    return MissionFissionDataDetailPublic(
+        id=row.id,
+        mission_id=row.mission_id,
+        seed_product_id=row.seed_product_id,
+        update_json=row.update_json or {},
+        raw_json=row.raw_json if isinstance(row.raw_json, dict) else None,
+    )
+
+
 def add_fission_data(
     db: Session,
     *,
@@ -395,8 +444,9 @@ def add_fission_data(
     mission_id: int,
     seed_product_id: int,
     update_json: dict,
+    raw_json: dict,
 ) -> MissionFissionDataPublic:
-    """复制种子商品快照加入任务。update_json 只记本次改动，不写 fission_msg。"""
+    """加入任务。seed_json 冻结种子原文，raw_json 为改完后的正文，update_json 为二者差异。"""
     supplier_id = _require_supplier_admin(actor)
     mission = _get_visible_mission(
         db,
@@ -416,6 +466,11 @@ def add_fission_data(
     if store is None or store.is_deleted or store.supplier_id != supplier_id:
         raise forbidden("只能选择本供应商的种子商品")
 
+    if not isinstance(raw_json, dict) or not raw_json:
+        raise bad_request("缺少修改后的商品正文")
+    seed_json = (
+        copy.deepcopy(product.raw_json) if isinstance(product.raw_json, dict) else None
+    )
     row = MissionDataDhFission(
         mission_id=mission.id,
         supplier_id=mission.supplier_id,
@@ -426,17 +481,21 @@ def add_fission_data(
             update_json=update_json,
             supplier_id=supplier_id,
         ),
-        item_code=product.item_code,
-        site_id=product.site_id or "EN",
-        is_seed=product.is_seed or "1",
-        cate_pub_id=_overlay_text(update_json, "cate_pub_id", product.cate_pub_id),
-        state=product.state,
-        item_name=_overlay_text(update_json, "item_name", product.item_name),
-        main_image_url=product.main_image_url,
-        sku_json=product.sku_json,
-        raw_json=product.raw_json if isinstance(product.raw_json, dict) else None,
-        sync_state=product.sync_state or "1",
-        last_synced_at=product.last_synced_at,
+        item_code=None,
+        site_id=_body_text(raw_json, "site_id") or product.site_id or "EN",
+        cate_pub_id=_overlay_text(
+            update_json,
+            "cate_pub_id",
+            _body_text(raw_json, "cate_pub_id") or product.cate_pub_id,
+        ),
+        item_name=_overlay_text(
+            update_json,
+            "item_name",
+            _body_text(raw_json, "item_name") or product.item_name,
+        ),
+        main_image_url=_body_main_image(raw_json) or product.main_image_url,
+        seed_json=seed_json,
+        raw_json=raw_json,
         update_json=update_json,
         fission_status=FISSION_STATUS_PENDING,
         created_by=actor.id,

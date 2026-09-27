@@ -611,26 +611,6 @@ class DhProductDetailPublic(BaseModel):
     )
 
 
-class DhProductGroupGetRequest(BaseModel):
-    store_id: int = Field(description="店铺 ID，用于取该店 token", ge=1)
-    group_id: str = Field(
-        min_length=1,
-        max_length=64,
-        description="产品分组 ID（groupId / itemGroupId）",
-    )
-
-
-class DhProductGroupListRequest(BaseModel):
-    store_id: int = Field(description="店铺 ID，用于取该店 token", ge=1)
-    keyword: str | None = Field(
-        default=None,
-        max_length=128,
-        description="按分组中英文名称筛选，含子分组（可选）",
-    )
-    page: int = Field(default=1, ge=1, description="页码，从 1 开始")
-    page_size: int = Field(default=20, ge=1, le=100, description="每页条数")
-
-
 class DhProductGroupPublic(BaseModel):
     """敦煌产品分组（对应 dh.item.group.list itemGroupList）。"""
 

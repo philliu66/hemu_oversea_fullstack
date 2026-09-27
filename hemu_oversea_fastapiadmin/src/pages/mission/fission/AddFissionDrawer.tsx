@@ -4,6 +4,7 @@ import { App, Button, Drawer, Space } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import { addMissionFissionData } from '@/services/admin/missions';
 import type { DhProductDetailPublic, DhProductPublic } from '@/types/api';
+import { diffAttrList } from './attrDiff';
 import { FissionProductStep } from './FissionProductStep';
 import { SeedProductSelectTable } from './SeedProductSelectTable';
 
@@ -31,6 +32,13 @@ function buildUpdateData(
 ): Record<string, unknown> {
   const update: Record<string, unknown> = {};
   for (const key of TRACKED_KEYS) {
+    if (key === 'attr_list') {
+      const attrDiff = diffAttrList(baseline.attr_list, current.attr_list);
+      if (attrDiff) {
+        update.attr_list = attrDiff;
+      }
+      continue;
+    }
     const before = JSON.stringify(baseline[key] ?? null);
     const after = JSON.stringify(current[key] ?? null);
     if (before !== after) {
@@ -115,14 +123,13 @@ export function AddFissionDrawer({
       return false;
     }
     const updateJson = buildUpdateData(baseline, current);
-    console.log('update_json', updateJson);
-    console.log('raw_json', current);
     setSubmitting(true);
     try {
       await addMissionFissionData({
         mission_id: missionId,
         seed_product_id: selected.id,
         update_json: updateJson,
+        raw_json: current,
       });
       message.success(
         intl.formatMessage({

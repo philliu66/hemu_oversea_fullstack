@@ -70,8 +70,9 @@ class Mission(Base):
 class MissionDataDhFission(Base):
     """敦煌裂变任务数据。
 
-    商品字段是加入任务时从 product_dh 复制的快照，后续按这份数据重新上传。
-    update_json 只记录相对种子商品改过的字段。
+    seed_json 是加入任务时冻结的种子详情，之后不再修改。
+    raw_json 是套上改动后的完整正文，发布直接使用。
+    update_json 是相对 seed_json 的完整差异，每次保存都按最初种子重算。
     """
 
     __tablename__ = "mission_data_dh_fission"
@@ -102,12 +103,12 @@ class MissionDataDhFission(Base):
     store_id: Mapped[int] = mapped_column(
         ForeignKey("stores.id", ondelete="RESTRICT"),
         nullable=False,
-        comment="归属店铺 ID，默认复制自种子商品",
+        comment="目标店铺。未改店铺时等于种子店铺",
     )
-    item_code: Mapped[str] = mapped_column(
+    item_code: Mapped[str | None] = mapped_column(
         String(64),
-        nullable=False,
-        comment="商品编码（itemCode）",
+        nullable=True,
+        comment="新商品编码。发布成功前为空，成功后写入官方 API 返回值",
     )
     site_id: Mapped[str] = mapped_column(
         String(8),
@@ -115,58 +116,36 @@ class MissionDataDhFission(Base):
         server_default="EN",
         comment="站点语言（siteId），默认 EN",
     )
-    is_seed: Mapped[str] = mapped_column(
-        String(8),
-        nullable=False,
-        server_default="1",
-        comment="是否种子商品：1=是，0=否。加入任务时复制自种子商品",
-    )
     cate_pub_id: Mapped[str | None] = mapped_column(
         String(64),
         nullable=True,
-        comment="发布类目 ID（catePubId）",
-    )
-    state: Mapped[str | None] = mapped_column(
-        String(16),
-        nullable=True,
-        comment="商品状态（state）：100100上架等",
+        comment="改完后的发布类目 ID（catePubId）",
     )
     item_name: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
-        comment="商品标题（itemBase.itemName）",
+        comment="改完后的标题（itemBase.itemName）",
     )
     main_image_url: Mapped[str | None] = mapped_column(
         String(512),
         nullable=True,
-        comment="列表主图相对路径，取 itemImgList 第一张有效图",
+        comment="改完后的列表主图相对路径",
     )
-    sku_json: Mapped[list | None] = mapped_column(
+    seed_json: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
-        comment="SKU 数组，加入任务时复制自 product_dh.sku_json",
+        comment="加入任务时冻结的种子详情，之后不再修改",
     )
     raw_json: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
-        comment="商品完整数据，加入任务时复制自 product_dh.raw_json",
-    )
-    sync_state: Mapped[str] = mapped_column(
-        String(8),
-        nullable=False,
-        server_default="1",
-        comment="同步状态：1=成功，0=失败。加入任务时复制自种子商品",
-    )
-    last_synced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        comment="种子商品最近一次详情同步时间",
+        comment="种子详情套上改动后的完整正文，发布直接使用",
     )
     update_json: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
         server_default=text("'{}'::jsonb"),
-        comment="相对种子商品本次修改的字段",
+        comment="相对 seed_json 的完整差异，每次保存都按最初种子重算",
     )
     fission_status: Mapped[str] = mapped_column(
         String(16),

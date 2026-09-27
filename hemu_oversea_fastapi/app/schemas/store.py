@@ -34,6 +34,17 @@ class StoreTemplateListRequest(BaseModel):
     store_id: int = Field(ge=1, description="店铺 ID")
 
 
+class StoreGroupListRequest(BaseModel):
+    store_id: int = Field(description="店铺 ID", ge=1)
+    keyword: str | None = Field(
+        default=None,
+        max_length=128,
+        description="按分组中英文名称筛选，含子分组（可选）",
+    )
+    page: int = Field(default=1, ge=1, description="页码，从 1 开始")
+    page_size: int = Field(default=20, ge=1, le=500, description="每页条数")
+
+
 class StoreAftersaleTemplatePublic(BaseModel):
     after_sale_template_id: str = Field(description="售后模板 ID afterSaleTemplateId")
     name: str | None = Field(default=None, description="模板名称")

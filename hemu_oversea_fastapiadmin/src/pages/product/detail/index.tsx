@@ -38,12 +38,11 @@ import {
 } from '@/services/admin/categories';
 import {
   fetchDhProductDetail,
-  fetchDhProductGroup,
-  fetchDhProductGroupList,
 } from '@/services/admin/products';
 import {
   fetchStoreAftersaleTemplates,
   fetchStoreList,
+  fetchStoreProductGroups,
   fetchStoreShippingTemplates,
 } from '@/services/admin/stores';
 import type {
@@ -51,10 +50,15 @@ import type {
   DhCategoryPathPublic,
   DhCategoryPublic,
   DhProductDetailPublic,
-  DhProductGroupPublic,
   DhProductSelectedAttrPublic,
 } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
+import {
+  findItemGroupPath,
+  resolveItemGroupLabels,
+  toItemGroupCascaderOptions,
+  type ItemGroupCascaderOption,
+} from '../itemGroupCascader';
 import {
   createEmptyProductDetail,
   formatSyncState,
@@ -102,13 +106,6 @@ function templateSelectOptions(
   }
   return [{ label: current, value: current }, ...items];
 }
-
-type ItemGroupCascaderOption = DefaultOptionType & {
-  value: string;
-  label: string;
-  isLeaf?: boolean;
-  children?: ItemGroupCascaderOption[];
-};
 
 type CategoryOption = DefaultOptionType & {
   value: string;
@@ -236,9 +233,9 @@ function applyCustomAttrDraftsToAttrList(
     .map((item, index) => ({
       attr_id: DH_CUSTOM_PRODUCT_ATTR_ID,
       attr_val_id: item.attr_val_id || String(index + 1),
-      attr_name: item.attr_name.trim() || null,
+      attr_name: (item.attr_name || '').trim() || null,
       attr_name_cn: null,
-      line_attrval_name: item.content.trim() || null,
+      line_attrval_name: (item.content || '').trim() || null,
       line_attrval_name_cn: null,
       pic_url: null,
     }))
@@ -272,52 +269,6 @@ function formatProductState(
     );
   }
   return code;
-}
-
-function groupDisplayName(group: DhProductGroupPublic): string {
-  return (group.group_name || group.group_en_name || group.group_id).trim();
-}
-
-function toItemGroupCascaderOption(
-  group: DhProductGroupPublic,
-): ItemGroupCascaderOption {
-  const children = (group.children || [])
-    .filter((item) => Boolean(item.group_id))
-    .map((item) => toItemGroupCascaderOption(item));
-  return {
-    value: group.group_id,
-    label: groupDisplayName(group),
-    isLeaf: children.length === 0,
-    children: children.length ? children : undefined,
-  };
-}
-
-function toItemGroupCascaderOptions(
-  groups: DhProductGroupPublic[],
-): ItemGroupCascaderOption[] {
-  return groups
-    .filter((item) => Boolean(item.group_id))
-    .map((item) => toItemGroupCascaderOption(item));
-}
-
-function findItemGroupPath(
-  options: ItemGroupCascaderOption[],
-  targetId: string,
-  path: string[] = [],
-): string[] | undefined {
-  for (const option of options) {
-    const next = [...path, option.value];
-    if (option.value === targetId) {
-      return next;
-    }
-    if (option.children?.length) {
-      const found = findItemGroupPath(option.children, targetId, next);
-      if (found) {
-        return found;
-      }
-    }
-  }
-  return undefined;
 }
 
 function formatCategoryLabel(category: DhCategoryPublic): string {
@@ -441,7 +392,14 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const fromId = embedded ? undefined : routeState.fromId;
   const editable = isProductPageEditable(mode);
   const sourceProductId = mode === 'copy' ? fromId : productId;
+  const formInstanceKey =
+    mode === 'create'
+      ? 'create'
+      : mode === 'copy'
+        ? `copy-${fromId}`
+        : `${mode}-${productId}`;
   const formRef = useRef<ProFormInstance<BasicFormValues>>(null);
+  const templateFormRef = useRef<ProFormInstance<TemplateFormValues>>(null);
 
   const [detail, setDetail] = useState<DhProductDetailPublic>();
   const [loading, setLoading] = useState(true);
@@ -465,8 +423,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [itemGroupOptions, setItemGroupOptions] = useState<
     ItemGroupCascaderOption[]
   >([]);
+  const [itemGroupsReady, setItemGroupsReady] = useState(false);
   const itemGroupReqRef = useRef(0);
-  const itemGroupTreeLoadedRef = useRef(false);
   const [selectedStoreId, setSelectedStoreId] = useState<number>();
 
   const applyCategoryPath = useCallback(async (categoryLocalId: number) => {
@@ -474,48 +432,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     setCategoryPath(formatCategoryPathDisplay(pathData));
     return pathData;
   }, []);
-
-  const loadItemGroups = useCallback(async () => {
-    if (!detail?.store_id || itemGroupTreeLoadedRef.current) {
-      return;
-    }
-    const reqId = itemGroupReqRef.current + 1;
-    itemGroupReqRef.current = reqId;
-    try {
-      const data = await fetchDhProductGroupList({
-        store_id: detail.store_id,
-        page: 1,
-        page_size: 100,
-      });
-      if (itemGroupReqRef.current !== reqId) {
-        return;
-      }
-      const options = toItemGroupCascaderOptions(data.items);
-      itemGroupTreeLoadedRef.current = true;
-      setItemGroupOptions(options);
-      const currentId =
-        productInfoFormRef.current?.getFieldValue('item_group_path')?.at(-1) ||
-        detail.item_group_id;
-      if (currentId) {
-        const path = findItemGroupPath(options, currentId);
-        if (path) {
-          productInfoFormRef.current?.setFieldValue('item_group_path', path);
-        }
-      }
-    } catch (error) {
-      if (itemGroupReqRef.current !== reqId) {
-        return;
-      }
-      message.error(
-        error instanceof Error
-          ? error.message
-          : intl.formatMessage({
-              id: 'pages.product.detail.itemGroupLoadFailed',
-              defaultMessage: '加载产品分组失败',
-            }),
-      );
-    }
-  }, [detail?.item_group_id, detail?.store_id, intl, message]);
 
   const loadCategoryAttrs = useCallback(
     async (
@@ -685,44 +601,93 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   }, [detail, embedded, onDetailChange]);
 
+  // 进页 / 切换店铺或商品时直接拉本地分组树
   useEffect(() => {
-    itemGroupTreeLoadedRef.current = false;
-    if (!detail?.store_id || !detail.item_group_id) {
+    const storeId = selectedStoreId || detail?.store_id;
+    if (!storeId) {
       setItemGroupOptions([]);
+      setItemGroupsReady(true);
       return;
     }
-    const storeId = detail.store_id;
-    const groupId = detail.item_group_id;
+    const reqId = itemGroupReqRef.current + 1;
+    itemGroupReqRef.current = reqId;
+    setItemGroupsReady(false);
     let cancelled = false;
-    void fetchDhProductGroup(
-      {
-        store_id: storeId,
-        group_id: groupId,
-      },
-      { skipErrorHandler: true },
-    )
-      .then((group) => {
-        if (cancelled || itemGroupTreeLoadedRef.current) {
+    void (async () => {
+      try {
+        const data = await fetchStoreProductGroups({
+          store_id: storeId,
+        });
+        if (cancelled || itemGroupReqRef.current !== reqId) {
           return;
         }
-        setItemGroupOptions([toItemGroupCascaderOption(group)]);
-      })
-      .catch(() => {
-        if (cancelled || itemGroupTreeLoadedRef.current) {
+        setItemGroupOptions(toItemGroupCascaderOptions(data.items));
+        setItemGroupsReady(true);
+      } catch (error) {
+        if (cancelled || itemGroupReqRef.current !== reqId) {
           return;
         }
-        setItemGroupOptions([
-          {
-            value: groupId,
-            label: groupId,
-            isLeaf: true,
-          },
-        ]);
-      });
+        setItemGroupOptions([]);
+        setItemGroupsReady(true);
+        message.error(
+          error instanceof Error
+            ? error.message
+            : intl.formatMessage({
+                id: 'pages.product.detail.itemGroupLoadFailed',
+                defaultMessage: '加载产品分组失败',
+              }),
+        );
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [detail?.item_group_id, detail?.store_id]);
+  }, [
+    detail?.id,
+    detail?.store_id,
+    intl,
+    message,
+    mode,
+    selectedStoreId,
+    sourceProductId,
+  ]);
+
+  const itemGroupPath = useMemo(() => {
+    if (!detail?.item_group_id || !itemGroupOptions.length) {
+      return undefined;
+    }
+    return findItemGroupPath(itemGroupOptions, detail.item_group_id);
+  }, [detail?.item_group_id, itemGroupOptions]);
+
+  // 分组树就绪后再写入表单路径，并用 options 解析名称（避免 Cascader 回退成 ID）
+  useEffect(() => {
+    if (!itemGroupsReady) {
+      return;
+    }
+    productInfoFormRef.current?.setFieldValue(
+      'item_group_path',
+      itemGroupPath,
+    );
+  }, [formInstanceKey, itemGroupPath, itemGroupsReady]);
+
+  const renderItemGroupDisplay = useCallback(
+    (_labels: string[], selectedOptions?: DefaultOptionType[]) => {
+      const fromForm = productInfoFormRef.current?.getFieldValue(
+        'item_group_path',
+      ) as string[] | undefined;
+      const fromSelected = selectedOptions
+        ?.map((item) => String(item?.value ?? '').trim())
+        .filter(Boolean);
+      const path =
+        (Array.isArray(fromForm) && fromForm.length
+          ? fromForm.map(String)
+          : undefined) ||
+        itemGroupPath ||
+        fromSelected;
+      return resolveItemGroupLabels(itemGroupOptions, path);
+    },
+    [itemGroupOptions, itemGroupPath],
+  );
 
   const syncCustomAttrDrafts = (next: CustomAttrDraft[]) => {
     const normalized = next.map((item, index) => ({
@@ -865,13 +830,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     );
   }
 
-  const formInstanceKey =
-    mode === 'create'
-      ? 'create'
-      : mode === 'copy'
-        ? `copy-${fromId}`
-        : `${mode}-${productId}`;
-
   const priceSelectedAttrs = priceProductAttrs(
     attrFillValues || detail?.attr_list,
   );
@@ -923,8 +881,16 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               if ('store_id' in changed) {
                 const nextStoreId = changed.store_id as number | undefined;
                 setSelectedStoreId(nextStoreId);
-                itemGroupTreeLoadedRef.current = false;
                 setItemGroupOptions([]);
+                setItemGroupsReady(false);
+                productInfoFormRef.current?.setFieldValue(
+                  'item_group_path',
+                  undefined,
+                );
+                templateFormRef.current?.setFieldsValue({
+                  after_sale_template_id: undefined,
+                  shipping_model_id: undefined,
+                });
                 setDetail((prev) => {
                   if (!prev) {
                     return prev;
@@ -936,6 +902,7 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     store_id: nextStoreId || 0,
                     ...(storeChanged
                       ? {
+                          item_group_id: null,
                           after_sale_template_id: null,
                           shipping_model_id: null,
                         }
@@ -1226,9 +1193,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               key_word1: detail.key_word1 || '',
               key_word2: detail.key_word2 || '',
               key_word3: detail.key_word3 || '',
-              item_group_path: detail.item_group_id
-                ? [detail.item_group_id]
-                : undefined,
             }}
             onValuesChange={(_, all) => {
               const path = all.item_group_path;
@@ -1363,10 +1327,11 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               })}
             >
               <Cascader
+                disabled={!itemGroupsReady}
                 options={itemGroupOptions}
                 changeOnSelect
                 allowClear
-                displayRender={(labels) => labels.join(' / ')}
+                displayRender={renderItemGroupDisplay}
                 placeholder={intl.formatMessage({
                   id: 'pages.product.detail.field.itemGroupPlaceholder',
                   defaultMessage: '请选择产品分组',
@@ -1383,11 +1348,6 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         .toLowerCase()
                         .includes(inputValue.trim().toLowerCase()),
                     ),
-                }}
-                onOpenChange={(open) => {
-                  if (open) {
-                    void loadItemGroups();
-                  }
                 }}
               />
             </Form.Item>
@@ -1582,7 +1542,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       >
         {detail ? (
           <ProForm<TemplateFormValues>
-            key={`templates-${formInstanceKey}-${templateStoreId ?? 'none'}`}
+            key={`templates-${formInstanceKey}`}
+            formRef={templateFormRef}
             submitter={false}
             disabled={!editable}
             layout="horizontal"
@@ -1645,6 +1606,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               }}
               fieldProps={{
                 allowClear: true,
+                autoFocus: false,
+                defaultOpen: false,
                 placeholder: intl.formatMessage({
                   id: 'pages.product.detail.field.afterSaleTemplatePlaceholder',
                   defaultMessage: '请选择售后模板',
@@ -1678,6 +1641,8 @@ const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               }}
               fieldProps={{
                 allowClear: true,
+                autoFocus: false,
+                defaultOpen: false,
                 placeholder: intl.formatMessage({
                   id: 'pages.product.detail.field.shippingTemplatePlaceholder',
                   defaultMessage: '请选择物流模板',

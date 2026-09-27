@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   MissionCreateParams,
   MissionFissionDataAddParams,
+  MissionFissionDataDetailPublic,
   MissionFissionDataPublic,
   MissionListParams,
   MissionLogPublic,
@@ -113,6 +114,25 @@ export async function fetchMissionFissionDataList(
   return requireData(
     unwrapApiData<PageData<MissionFissionDataPublic>>(res),
     '获取任务数据失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/fission-data/detail */
+export async function fetchMissionFissionDataDetail(
+  params: { id: number; mission_id: number; supplier_id?: number },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionFissionDataDetailPublic>>(
+    AdminMissionApi.FISSION_DATA_DETAIL,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<MissionFissionDataDetailPublic>(res),
+    '获取任务数据详情失败',
   );
 }
 

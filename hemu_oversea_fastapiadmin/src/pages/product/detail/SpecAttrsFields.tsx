@@ -34,7 +34,11 @@ type SpecAttrsFieldsProps = {
   specSelfDefs?: DhProductSpecSelfDefPublic[];
   storeId?: number;
   disabled?: boolean;
+  /** 相对种子有变更的属性 ID，标签与值标红 */
+  changedAttrIds?: string[];
   onSpecSelfDefsChange?: (next: DhProductSpecSelfDefPublic[]) => void;
+  /** 规格属性勾选/填写变更 */
+  onSelectedAttrsChange?: (next: DhProductSelectedAttrPublic[]) => void;
   onValuePicChange?: (
     attrId: string,
     attrValId: string,
@@ -624,7 +628,9 @@ const SpecAttrsFields: React.FC<SpecAttrsFieldsProps> = ({
   specSelfDefs,
   storeId,
   disabled = false,
+  changedAttrIds,
   onSpecSelfDefsChange,
+  onSelectedAttrsChange,
   onValuePicChange,
 }) => {
   const specs = specSelfDefs || [];
@@ -645,6 +651,8 @@ const SpecAttrsFields: React.FC<SpecAttrsFieldsProps> = ({
           showSelectedPics
           storeId={storeId}
           disabled={disabled}
+          changedAttrIds={changedAttrIds}
+          onSelectedAttrsChange={onSelectedAttrsChange}
           onValuePicChange={onValuePicChange}
         />
       ) : null}

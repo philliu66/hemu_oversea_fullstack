@@ -50,3 +50,21 @@ class ProductSyncTestRequest(BaseModel):
         min_length=1,
         description="待同步商品列表（可跨店铺）",
     )
+
+
+class ProductGroupSyncTestRequest(BaseModel):
+    """按供应商同步其下敦煌店铺的产品分组。"""
+
+    supplier_id: int = Field(description="供应商 ID（必传）", ge=1)
+
+
+class ShippingTemplateSyncTestRequest(BaseModel):
+    """按供应商同步其下敦煌店铺的运费模板。"""
+
+    supplier_id: int = Field(description="供应商 ID（必传）", ge=1)
+
+
+class AftersaleTemplateSyncTestRequest(BaseModel):
+    """按供应商同步其下敦煌店铺的售后模板。"""
+
+    supplier_id: int = Field(description="供应商 ID（必传）", ge=1)

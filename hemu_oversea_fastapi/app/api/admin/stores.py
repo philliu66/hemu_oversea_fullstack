@@ -10,6 +10,7 @@ from app.core.deps import (
 from app.core.errors import bad_request
 from app.models.user import User
 from app.schemas.common import ApiResponse, PageData, success
+from app.schemas.product import DhProductGroupPublic
 from app.schemas.store import (
     StoreAftersaleTemplatePublic,
     StoreAuthorize,
@@ -18,6 +19,7 @@ from app.schemas.store import (
     StoreDelete,
     StoreDetail,
     StoreDetailPublic,
+    StoreGroupListRequest,
     StoreList,
     StorePublic,
     StoreShippingTemplatePublic,
@@ -28,6 +30,7 @@ from app.schemas.store_inspection import (
     StoreInspectionPunishPublic,
     StoreInspectionPunishRequest,
 )
+from app.services import products as product_service
 from app.services import store_oauth, stores as store_service
 from app.services.commerce import summarize_supplier_punish
 
@@ -127,32 +130,6 @@ def update_store(
     return success(store)
 
 
-@router.post(
-    "/aftersale-template/list",
-    response_model=ApiResponse[list[StoreAftersaleTemplatePublic]],
-    summary="查询店铺售后模板",
-)
-def list_aftersale_templates(
-    payload: StoreTemplateListRequest,
-    db: Session = Depends(get_db),
-) -> ApiResponse[list[StoreAftersaleTemplatePublic]]:
-    """按店铺查询售后模板，调用 dh.item.aftersale.list。"""
-    return success(store_service.list_store_aftersale_templates(db, payload.store_id))
-
-
-@router.post(
-    "/shipping-template/list",
-    response_model=ApiResponse[list[StoreShippingTemplatePublic]],
-    summary="查询店铺物流模板",
-)
-def list_shipping_template_options(
-    payload: StoreTemplateListRequest,
-    db: Session = Depends(get_db),
-) -> ApiResponse[list[StoreShippingTemplatePublic]]:
-    """按店铺查询物流（运费）模板，调用 dh.shipping.template.list。"""
-    return success(store_service.list_store_shipping_templates(db, payload.store_id))
-
-
 @router.post("/delete", response_model=ApiResponse[dict])
 def delete_store(
     payload: StoreDelete,
@@ -195,3 +172,54 @@ def inspect_store_punish(
             end_date=summary.end_date,
         )
     )
+
+
+@router.post(
+    "/groups",
+    response_model=ApiResponse[PageData[DhProductGroupPublic]],
+    summary="查询店铺产品分组列表",
+)
+def list_store_product_groups(
+    payload: StoreGroupListRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[PageData[DhProductGroupPublic]]:
+    """
+    按店铺查询本地产品分组全量树（含名称、产品数量、子分组）。
+
+    数据来源 product_group_dh；可选 keyword 按中英文名称筛选，匹配父分组或子分组。
+    返回该店铺全部根分组树，供商品页反显与选择使用（不再截断分页）。
+    """
+    return success(
+        product_service.list_dh_product_groups(
+            db,
+            store_id=payload.store_id,
+            keyword=payload.keyword,
+            pagination=None,
+        )
+    )
+
+
+@router.post(
+    "/shipping-template/list",
+    response_model=ApiResponse[list[StoreShippingTemplatePublic]],
+    summary="查询店铺物流模板",
+)
+def list_shipping_template_options(
+    payload: StoreTemplateListRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[StoreShippingTemplatePublic]]:
+    """按店铺查询物流（运费）模板，数据来自本地 shipping_template_dh。"""
+    return success(store_service.list_store_shipping_templates(db, payload.store_id))
+
+
+@router.post(
+    "/aftersale-template/list",
+    response_model=ApiResponse[list[StoreAftersaleTemplatePublic]],
+    summary="查询店铺售后模板",
+)
+def list_aftersale_templates(
+    payload: StoreTemplateListRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[StoreAftersaleTemplatePublic]]:
+    """按店铺查询售后模板，数据来自本地 aftersale_template_dh。"""
+    return success(store_service.list_store_aftersale_templates(db, payload.store_id))

@@ -9,9 +9,6 @@ from app.schemas.common import ApiResponse, PageData, success
 from app.schemas.product import (
     DhProductDetailPublic,
     DhProductDetailRequest,
-    DhProductGroupGetRequest,
-    DhProductGroupListRequest,
-    DhProductGroupPublic,
     DhProductListRequest,
     DhProductPublic,
 )
@@ -75,53 +72,3 @@ def get_dh_product_detail(
     类目全路径请另调 /api/v1/admin/categories/dh/path。
     """
     return success(product_service.get_dh_product_detail(db, payload.id))
-
-
-@router.post(
-    "/dh/group/get",
-    response_model=ApiResponse[DhProductGroupPublic],
-    summary="查询敦煌产品分组详情",
-)
-def get_dh_product_group(
-    payload: DhProductGroupGetRequest,
-    db: Session = Depends(get_db),
-) -> ApiResponse[DhProductGroupPublic]:
-    """
-    按店铺与分组 ID 查询产品分组名称、产品数量等信息。
-
-    底层调用 dh.item.group.list；官方列表无 groupId 入参，按返回项匹配。
-    """
-    return success(
-        product_service.get_dh_product_group(
-            db,
-            store_id=payload.store_id,
-            group_id=payload.group_id,
-        )
-    )
-
-
-@router.post(
-    "/dh/group/list",
-    response_model=ApiResponse[PageData[DhProductGroupPublic]],
-    summary="查询敦煌产品分组列表（分页）",
-)
-def list_dh_product_groups(
-    payload: DhProductGroupListRequest,
-    db: Session = Depends(get_db),
-) -> ApiResponse[PageData[DhProductGroupPublic]]:
-    """
-    按店铺分页查询产品分组（含名称、产品数量、子分组）。
-
-    默认 containChildGroup=true，返回 itemChildGroupList。
-    可选 keyword 按中英文名称筛选，匹配父分组或子分组。
-    底层调用 dh.item.group.list。
-    """
-    pagination = Pagination(page=payload.page, page_size=payload.page_size)
-    return success(
-        product_service.list_dh_product_groups(
-            db,
-            store_id=payload.store_id,
-            keyword=payload.keyword,
-            pagination=pagination,
-        )
-    )

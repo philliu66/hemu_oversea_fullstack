@@ -2,6 +2,8 @@ import { request } from '@umijs/max';
 import { AdminStoreApi } from '@/constants/api';
 import type {
   ApiResponse,
+  DhProductGroupListParams,
+  DhProductGroupPublic,
   PageData,
   StoreAftersaleTemplatePublic,
   StoreAuthorizePublic,
@@ -123,40 +125,6 @@ export async function deleteStore(id: number, options?: RequestOptions) {
   });
 }
 
-/** POST /api/v1/admin/stores/aftersale-template/list */
-export async function fetchStoreAftersaleTemplates(
-  storeId: number,
-  options?: RequestOptions,
-) {
-  const res = await request<ApiResponse<StoreAftersaleTemplatePublic[]>>(
-    AdminStoreApi.AFTERSALE_TEMPLATE_LIST,
-    {
-      method: 'POST',
-      data: { store_id: storeId },
-      ...options,
-    },
-  );
-  return (
-    unwrapApiData<StoreAftersaleTemplatePublic[]>(res) ?? []
-  );
-}
-
-/** POST /api/v1/admin/stores/shipping-template/list */
-export async function fetchStoreShippingTemplates(
-  storeId: number,
-  options?: RequestOptions,
-) {
-  const res = await request<ApiResponse<StoreShippingTemplatePublic[]>>(
-    AdminStoreApi.SHIPPING_TEMPLATE_LIST,
-    {
-      method: 'POST',
-      data: { store_id: storeId },
-      ...options,
-    },
-  );
-  return unwrapApiData<StoreShippingTemplatePublic[]>(res) ?? [];
-}
-
 /** POST /api/v1/admin/stores/inspection/punish */
 export async function fetchStoreInspectionPunish(
   params: StoreInspectionPunishParams,
@@ -181,3 +149,60 @@ export async function fetchStoreInspectionPunish(
     '获取店铺巡检处罚信息失败',
   );
 }
+
+/** POST /api/v1/admin/stores/groups */
+export async function fetchStoreProductGroups(
+  params: DhProductGroupListParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<PageData<DhProductGroupPublic>>>(
+    AdminStoreApi.GROUPS,
+    {
+      method: 'POST',
+      data: {
+        store_id: params.store_id,
+        keyword: params.keyword,
+        page: params.page ?? 1,
+        page_size: params.page_size ?? 20,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<PageData<DhProductGroupPublic>>(res),
+    '获取产品分组列表失败',
+  );
+}
+
+/** POST /api/v1/admin/stores/shipping-template/list */
+export async function fetchStoreShippingTemplates(
+  storeId: number,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<StoreShippingTemplatePublic[]>>(
+    AdminStoreApi.SHIPPING_TEMPLATE_LIST,
+    {
+      method: 'POST',
+      data: { store_id: storeId },
+      ...options,
+    },
+  );
+  return unwrapApiData<StoreShippingTemplatePublic[]>(res) ?? [];
+}
+
+/** POST /api/v1/admin/stores/aftersale-template/list */
+export async function fetchStoreAftersaleTemplates(
+  storeId: number,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<StoreAftersaleTemplatePublic[]>>(
+    AdminStoreApi.AFTERSALE_TEMPLATE_LIST,
+    {
+      method: 'POST',
+      data: { store_id: storeId },
+      ...options,
+    },
+  );
+  return unwrapApiData<StoreAftersaleTemplatePublic[]>(res) ?? [];
+}
+

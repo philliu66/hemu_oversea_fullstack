@@ -5,10 +5,13 @@ import type {
   DhCategoryAttrPublic,
   DhCategoryAttrValPublic,
   DhProductSelectedAttrPublic,
+  DhProductSelectedAttrValPublic,
 } from '@/types/api';
 import { buildDhImageUrl } from '@/utils/dhImage';
+import '@/pages/mission/fission/changedHighlight.css';
 import DhgateAttrPicUpload from './DhgateAttrPicUpload';
 
+const CHANGED_COLOR = '#cf1322';
 const CUSTOM_NAME_SET = new Set(['custom', '自定义', 'other', '其它', '其他']);
 
 type CustomAttrRow = {
@@ -35,6 +38,10 @@ type CategoryAttrsCardProps = {
   storeId?: number;
   /** 只读（查看详情） */
   disabled?: boolean;
+  /** 相对种子有变更的属性 ID，标签标红 */
+  changedAttrIds?: string[];
+  /** 属性勾选/填写变更后回写（本组件管理的属性子集） */
+  onSelectedAttrsChange?: (next: DhProductSelectedAttrPublic[]) => void;
   /** 属性值图片变更（写入 / 覆盖 pic_url） */
   onValuePicChange?: (
     attrId: string,
@@ -213,6 +220,143 @@ function buildDrafts(
   return next;
 }
 
+/** draft → 本组件管理的属性子集（用于写回 detail.attr_list） */
+function draftsToSelectedAttrs(
+  attrs: DhCategoryAttrPublic[],
+  drafts: Record<string, AttrDraft>,
+  previousSelected?: DhProductSelectedAttrPublic[],
+): DhProductSelectedAttrPublic[] {
+  const prevMap = new Map(
+    (previousSelected || []).map((item) => [String(item.attr_id), item]),
+  );
+  const result: DhProductSelectedAttrPublic[] = [];
+
+  for (const attr of attrs) {
+    const draft = drafts[attr.attr_id] || emptyDraft();
+    const prev = prevMap.get(String(attr.attr_id));
+    const prevByValId = new Map(
+      (prev?.values || [])
+        .filter((item) => item.attr_val_id != null && item.attr_val_id !== '')
+        .map((item) => [String(item.attr_val_id), item]),
+    );
+    const optionById = new Map(
+      attr.values.map((item) => [item.attr_val_id, item]),
+    );
+    const customOption = attr.values.find(isCustomOption);
+    const values: DhProductSelectedAttrValPublic[] = [];
+
+    const pushOption = (valId: string) => {
+      const option = optionById.get(valId);
+      const prevVal = prevByValId.get(String(valId));
+      values.push({
+        attr_id: attr.attr_id,
+        attr_val_id: valId,
+        attr_name: prevVal?.attr_name ?? null,
+        attr_name_cn: prevVal?.attr_name_cn ?? null,
+        line_attrval_name:
+          option?.line_attrval_name ?? prevVal?.line_attrval_name ?? null,
+        line_attrval_name_cn:
+          option?.line_attrval_name_cn ?? prevVal?.line_attrval_name_cn ?? null,
+        pic_url: prevVal?.pic_url ?? option?.pic_url ?? null,
+        brand_id: prevVal?.brand_id ?? null,
+      });
+    };
+
+    const pushCustom = (
+      content: string,
+      attrName?: string,
+      key?: string,
+    ) => {
+      const trimmed = content.trim();
+      const name = (attrName || '').trim();
+      if (!trimmed && !name) {
+        return;
+      }
+      const valId =
+        (key && String(key).trim()) ||
+        customOption?.attr_val_id ||
+        (name ? `custom-${name}` : 'custom');
+      const prevVal = prevByValId.get(String(valId));
+      values.push({
+        attr_id: attr.attr_id,
+        attr_val_id: valId,
+        attr_name: name || prevVal?.attr_name || null,
+        attr_name_cn: name || prevVal?.attr_name_cn || null,
+        line_attrval_name: trimmed || null,
+        line_attrval_name_cn: trimmed || null,
+        pic_url: prevVal?.pic_url ?? null,
+        brand_id: prevVal?.brand_id ?? null,
+      });
+    };
+
+    if (isTextType(attr)) {
+      const text = draft.textValue.trim();
+      if (text) {
+        const prevVal = prev?.values?.[0];
+        values.push({
+          attr_id: attr.attr_id,
+          attr_val_id: prevVal?.attr_val_id || text,
+          attr_name: null,
+          attr_name_cn: null,
+          line_attrval_name: text,
+          line_attrval_name_cn: text,
+          pic_url: prevVal?.pic_url ?? null,
+          brand_id: prevVal?.brand_id ?? null,
+        });
+      }
+    } else if (isSelectType(attr)) {
+      if (draft.customChecked) {
+        if (draft.customRows.length) {
+          draft.customRows.forEach((row) =>
+            pushCustom(row.content, row.attrName, row.key),
+          );
+        } else {
+          pushCustom(draft.customText);
+        }
+      } else if (draft.selectValue) {
+        pushOption(draft.selectValue);
+      }
+    } else {
+      draft.checkedValues.forEach((id) => pushOption(id));
+      if (draft.customChecked) {
+        if (draft.customRows.length) {
+          draft.customRows.forEach((row) =>
+            pushCustom(row.content, row.attrName, row.key),
+          );
+        } else {
+          pushCustom(draft.customText);
+        }
+      }
+    }
+
+    // 无值时：规格属性保留空壳以免 UI 消失；普通类目属性则省略
+    if (!values.length) {
+      if (String(prev?.is_price_attr) === '1') {
+        result.push({
+          attr_id: attr.attr_id,
+          attr_name: prev?.attr_name ?? attr.line_attr_name ?? null,
+          attr_name_cn: prev?.attr_name_cn ?? attr.line_attr_name_cn ?? null,
+          is_brand: attr.is_brand ?? prev?.is_brand ?? null,
+          is_price_attr: '1',
+          values: [],
+        });
+      }
+      continue;
+    }
+
+    result.push({
+      attr_id: attr.attr_id,
+      attr_name: prev?.attr_name ?? attr.line_attr_name ?? null,
+      attr_name_cn: prev?.attr_name_cn ?? attr.line_attr_name_cn ?? null,
+      is_brand: attr.is_brand ?? prev?.is_brand ?? null,
+      is_price_attr: prev?.is_price_attr ?? null,
+      values,
+    });
+  }
+
+  return result;
+}
+
 function renderCustomEditor(
   intl: ReturnType<typeof useIntl>,
   customLabel: string,
@@ -337,7 +481,13 @@ function renderCustomEditor(
             ))
           : (
               <tr>
-                <td style={{ ...cellPad, padding: '8px 10px', color: 'rgba(0,0,0,0.65)' }}>
+                <td
+                  style={{
+                    ...cellPad,
+                    padding: '8px 10px',
+                    color: 'rgba(0,0,0,0.65)',
+                  }}
+                >
                   {customLabel}
                 </td>
                 <td style={cellPad}>
@@ -362,13 +512,22 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
   showSelectedPics = false,
   storeId,
   disabled = false,
+  changedAttrIds,
+  onSelectedAttrsChange,
   onValuePicChange,
 }) => {
+  const changedAttrIdSet = new Set((changedAttrIds || []).map(String));
   const intl = useIntl();
   const [drafts, setDrafts] = useState<Record<string, AttrDraft>>({});
   const selectedMap = new Map(
     (selectedAttrs || []).map((item) => [String(item.attr_id), item]),
   );
+  const onSelectedAttrsChangeRef = React.useRef(onSelectedAttrsChange);
+  onSelectedAttrsChangeRef.current = onSelectedAttrsChange;
+  const selectedAttrsRef = React.useRef(selectedAttrs);
+  selectedAttrsRef.current = selectedAttrs;
+  const attrsRef = React.useRef(attrs);
+  attrsRef.current = attrs;
 
   useEffect(() => {
     setDrafts(buildDrafts(attrs, selectedAttrs));
@@ -378,13 +537,25 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
     if (disabled) {
       return;
     }
-    setDrafts((prev) => ({
-      ...prev,
-      [attrId]: {
-        ...(prev[attrId] || emptyDraft()),
-        ...patch,
-      },
-    }));
+    setDrafts((prev) => {
+      const next = {
+        ...prev,
+        [attrId]: {
+          ...(prev[attrId] || emptyDraft()),
+          ...patch,
+        },
+      };
+      const notify = onSelectedAttrsChangeRef.current;
+      if (notify) {
+        const selected = draftsToSelectedAttrs(
+          attrsRef.current,
+          next,
+          selectedAttrsRef.current,
+        );
+        queueMicrotask(() => notify(selected));
+      }
+      return next;
+    });
   };
   const selectAllText = intl.formatMessage({
     id: 'pages.product.detail.attrsSelectAll',
@@ -430,10 +601,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
   };
 
   return (
-    <fieldset
-      disabled={disabled}
-      style={{ border: 'none', margin: 0, padding: 0, minInlineSize: 0 }}
-    >
+    <div>
       {attrs.map((attr) => {
         const draft = drafts[attr.attr_id] || emptyDraft();
         const optionIds = attr.values
@@ -444,6 +612,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
           optionIds.every((id) => draft.checkedValues.includes(id));
         const showPic = attr.style === '2' || attr.style === '3';
         const canCustom = allowCustom(attr);
+        const attrChanged = changedAttrIdSet.has(String(attr.attr_id));
 
         return (
           <div
@@ -456,12 +625,13 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
             }}
           >
             <div
+              className={attrChanged ? 'hm-changed-text' : undefined}
               style={{
                 width: 88,
                 flexShrink: 0,
                 textAlign: 'left',
                 paddingTop: 5,
-                color: 'rgba(0,0,0,0.88)',
+                color: attrChanged ? CHANGED_COLOR : 'rgba(0,0,0,0.88)',
                 lineHeight: '22px',
               }}
             >
@@ -784,7 +954,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
           </div>
         );
       })}
-    </fieldset>
+    </div>
   );
 };
 

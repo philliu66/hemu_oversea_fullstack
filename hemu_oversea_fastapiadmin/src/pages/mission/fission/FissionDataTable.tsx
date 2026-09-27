@@ -15,15 +15,14 @@ import {
 } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
-import { formatSyncState } from '@/pages/product/utils';
 import {
   deleteMissionFissionData,
   fetchMissionFissionDataList,
   markMissionFissionDataFinished,
 } from '@/services/admin/missions';
 import type { FissionStatus, MissionFissionDataPublic } from '@/types/api';
-import { formatDateTime } from '@/utils/datetime';
 import { AddFissionDrawer } from './AddFissionDrawer';
+import { ViewFissionDrawer } from './ViewFissionDrawer';
 
 type FissionTableParams = {
   current?: number;
@@ -49,6 +48,8 @@ export function FissionDataTable({
   const actionRef = useRef<ActionType | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewDataId, setViewDataId] = useState<number>();
 
   const statusLabel = (status: FissionStatus) => {
     const id = {
@@ -74,7 +75,7 @@ export function FissionDataTable({
           {record.main_image_url ? (
             <Image
               src={record.main_image_url}
-              alt={record.item_name || record.item_code}
+              alt={record.item_name || record.item_code || undefined}
               width={48}
               height={48}
               style={{
@@ -102,7 +103,7 @@ export function FissionDataTable({
               {record.item_name || '-'}
             </Typography.Paragraph>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {record.item_code}
+              {record.item_code || '-'}
             </Typography.Text>
           </div>
         </Space>
@@ -118,48 +119,6 @@ export function FissionDataTable({
       width: 140,
       ellipsis: true,
       render: (_, record) => record.store_name || String(record.store_id),
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.state',
-        defaultMessage: '状态',
-      }),
-      dataIndex: 'state',
-      search: false,
-      width: 140,
-      ellipsis: true,
-      render: (_, record) => record.state || '-',
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.field.syncState',
-        defaultMessage: '同步状态',
-      }),
-      dataIndex: 'sync_state',
-      search: false,
-      width: 100,
-      render: (_, record) =>
-        formatSyncState(
-          record.sync_state,
-          intl.formatMessage({
-            id: 'pages.product.detail.sync.success',
-            defaultMessage: '成功',
-          }),
-          intl.formatMessage({
-            id: 'pages.product.detail.sync.fail',
-            defaultMessage: '失败',
-          }),
-        ),
-    },
-    {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.lastSyncedAt',
-        defaultMessage: '同步时间',
-      }),
-      dataIndex: 'last_synced_at',
-      search: false,
-      width: 168,
-      render: (_, record) => formatDateTime(record.last_synced_at),
     },
     {
       title: intl.formatMessage({
@@ -184,95 +143,105 @@ export function FissionDataTable({
       ellipsis: true,
       render: (_, record) => record.fission_msg || '-',
     },
-    ...(editable
-      ? [
-          {
-            title: intl.formatMessage({
-              id: 'pages.product.list.field.option',
-              defaultMessage: '操作',
-            }),
-            dataIndex: 'option',
-            valueType: 'option' as const,
-            search: false as const,
-            width: 160,
-            render: (_: unknown, record: MissionFissionDataPublic) => {
-              if (record.fission_status === 'success') {
-                return ['-'];
-              }
-              const actions = [];
-              if (record.fission_status !== 'marked_finished') {
-                actions.push(
-                  <Popconfirm
-                    key="finish"
-                    title={intl.formatMessage({
-                      id: 'pages.mission.fissionData.markFinishedConfirm',
-                      defaultMessage: '确认将这条任务数据标记结束？',
-                    })}
-                    onConfirm={async () => {
-                      try {
-                        await markMissionFissionDataFinished({
-                          id: record.id,
-                          mission_id: missionId,
-                        });
-                        message.success(
-                          intl.formatMessage({
-                            id: 'pages.mission.fissionData.markFinishedSuccess',
-                            defaultMessage: '已标记结束',
-                          }),
-                        );
-                        actionRef.current?.reload();
-                      } catch {
-                        // 错误已由全局拦截器处理
-                      }
-                    }}
-                  >
-                    <Button type="link">
-                      {intl.formatMessage({
-                        id: 'pages.mission.action.markFinished',
-                        defaultMessage: '标记结束',
-                      })}
-                    </Button>
-                  </Popconfirm>,
+    {
+      title: intl.formatMessage({
+        id: 'pages.product.list.field.option',
+        defaultMessage: '操作',
+      }),
+      dataIndex: 'option',
+      valueType: 'option' as const,
+      search: false as const,
+      width: editable ? 240 : 100,
+      render: (_: unknown, record: MissionFissionDataPublic) => {
+        const actions = [
+          <Button
+            key="view"
+            type="link"
+            onClick={() => {
+              setViewDataId(record.id);
+              setViewOpen(true);
+            }}
+          >
+            {intl.formatMessage({
+              id: 'pages.mission.action.viewChanges',
+              defaultMessage: '查看变更',
+            })}
+          </Button>,
+        ];
+        if (!editable || record.fission_status === 'success') {
+          return actions;
+        }
+        if (record.fission_status !== 'marked_finished') {
+          actions.push(
+            <Popconfirm
+              key="finish"
+              title={intl.formatMessage({
+                id: 'pages.mission.fissionData.markFinishedConfirm',
+                defaultMessage: '确认将这条任务数据标记结束？',
+              })}
+              onConfirm={async () => {
+                try {
+                  await markMissionFissionDataFinished({
+                    id: record.id,
+                    mission_id: missionId,
+                  });
+                  message.success(
+                    intl.formatMessage({
+                      id: 'pages.mission.fissionData.markFinishedSuccess',
+                      defaultMessage: '已标记结束',
+                    }),
+                  );
+                  actionRef.current?.reload();
+                } catch {
+                  // 错误已由全局拦截器处理
+                }
+              }}
+            >
+              <Button type="link">
+                {intl.formatMessage({
+                  id: 'pages.mission.action.markFinished',
+                  defaultMessage: '标记结束',
+                })}
+              </Button>
+            </Popconfirm>,
+          );
+        }
+        actions.push(
+          <Popconfirm
+            key="delete"
+            title={intl.formatMessage({
+              id: 'pages.mission.fissionData.deleteConfirm',
+              defaultMessage: '确认删除这条任务数据？',
+            })}
+            onConfirm={async () => {
+              try {
+                await deleteMissionFissionData({
+                  id: record.id,
+                  mission_id: missionId,
+                });
+                message.success(
+                  intl.formatMessage({
+                    id: 'pages.mission.fissionData.deleteSuccess',
+                    defaultMessage: '已删除',
+                  }),
                 );
+                actionRef.current?.reload();
+              } catch {
+                // 错误已由全局拦截器处理
               }
-              actions.push(
-                <Popconfirm
-                  key="delete"
-                  title={intl.formatMessage({
-                    id: 'pages.mission.fissionData.deleteConfirm',
-                    defaultMessage: '确认删除这条任务数据？',
-                  })}
-                  onConfirm={async () => {
-                    try {
-                      await deleteMissionFissionData({
-                        id: record.id,
-                        mission_id: missionId,
-                      });
-                      message.success(
-                        intl.formatMessage({
-                          id: 'pages.mission.fissionData.deleteSuccess',
-                          defaultMessage: '已删除',
-                        }),
-                      );
-                      actionRef.current?.reload();
-                    } catch {
-                      // 错误已由全局拦截器处理
-                    }
-                  }}
-                >
-                  <Button type="link" danger>
-                    {intl.formatMessage({
-                      id: 'pages.mission.fissionData.delete',
-                      defaultMessage: '删除',
-                    })}
-                  </Button>
-                </Popconfirm>,
-              );
-              return actions;
-            },
-          },
-        ]
-      : []),
+            }}
+          >
+            <Button type="link" danger>
+              {intl.formatMessage({
+                id: 'pages.mission.fissionData.delete',
+                defaultMessage: '删除',
+              })}
+            </Button>
+          </Popconfirm>,
+        );
+        return actions;
+      },
+    },
   ];
 
   return (
@@ -321,6 +290,12 @@ export function FissionDataTable({
           };
         }}
         columns={columns}
+      />
+      <ViewFissionDrawer
+        open={viewOpen}
+        missionId={missionId}
+        dataId={viewDataId}
+        onClose={() => setViewOpen(false)}
       />
       <AddFissionDrawer
         open={addOpen}

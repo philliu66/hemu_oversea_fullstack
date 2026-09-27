@@ -17,7 +17,7 @@ import {
   Typography,
 } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DH_PRODUCT_STATE_LABEL,
   DH_PRODUCT_STATES,
@@ -29,17 +29,23 @@ import SpecAttrsFields from '@/pages/product/detail/SpecAttrsFields';
 import SpecSkuTable from '@/pages/product/detail/SpecSkuTable';
 import { formatSyncState } from '@/pages/product/utils';
 import {
+  findItemGroupPath,
+  resolveItemGroupLabels,
+  toItemGroupCascaderOption,
+  type ItemGroupCascaderOption,
+} from '@/pages/product/itemGroupCascader';
+import {
   fetchDhCategories,
   fetchDhCategoryAttrs,
   fetchDhCategoryPath,
 } from '@/services/admin/categories';
 import {
   fetchDhProductDetail,
-  fetchDhProductGroupList,
 } from '@/services/admin/products';
 import {
   fetchStoreAftersaleTemplates,
   fetchStoreList,
+  fetchStoreProductGroups,
   fetchStoreShippingTemplates,
 } from '@/services/admin/stores';
 import type {
@@ -47,12 +53,14 @@ import type {
   DhCategoryPathPublic,
   DhCategoryPublic,
   DhProductDetailPublic,
-  DhProductGroupPublic,
   DhProductSelectedAttrPublic,
 } from '@/types/api';
+import { customAttrValueChanged } from './attrDiff';
 import { formatDateTime } from '@/utils/datetime';
+import './changedHighlight.css';
 
 const ITEM_NAME_MAX_LENGTH = 140;
+const CHANGED_COLOR = '#cf1322';
 const DH_CUSTOM_PRODUCT_ATTR_ID = '11';
 const DH_CUSTOM_ATTR_MAX_COUNT = 20;
 const DH_CUSTOM_ATTR_MAX_LENGTH = 40;
@@ -84,13 +92,6 @@ type CategoryOption = DefaultOptionType & {
   children?: CategoryOption[];
 };
 
-type ItemGroupCascaderOption = DefaultOptionType & {
-  value: string;
-  label: string;
-  isLeaf?: boolean;
-  children?: ItemGroupCascaderOption[];
-};
-
 function isCustomProductAttr(attr: DhProductSelectedAttrPublic) {
   return String(attr.attr_id) === DH_CUSTOM_PRODUCT_ATTR_ID;
 }
@@ -109,6 +110,76 @@ function priceProductAttrs(list?: DhProductSelectedAttrPublic[]) {
 
 function nonPriceProductAttrs(list?: DhProductSelectedAttrPublic[]) {
   return categoryProductAttrs(list).filter((item) => !isPriceProductAttr(item));
+}
+
+/** 用本组件管理的属性子集替换 attr_list 中对应项，其它属性保留 */
+function mergeManagedAttrsIntoList(
+  list: DhProductSelectedAttrPublic[] | undefined,
+  managedAttrIds: Iterable<string>,
+  nextManaged: DhProductSelectedAttrPublic[],
+): DhProductSelectedAttrPublic[] {
+  const managedIdSet = new Set(
+    [...managedAttrIds].map((id) => String(id).trim()).filter(Boolean),
+  );
+  const others = (list || []).filter(
+    (item) => !managedIdSet.has(String(item.attr_id)),
+  );
+  return [...others, ...nextManaged];
+}
+
+/** 写入 / 覆盖指定属性值的 pic_url */
+function patchAttrValuePic(
+  list: DhProductSelectedAttrPublic[] | undefined,
+  attrId: string,
+  attrValId: string,
+  picUrl: string | null,
+): DhProductSelectedAttrPublic[] {
+  const source = list || [];
+  let foundAttr = false;
+  const next = source.map((attr) => {
+    if (String(attr.attr_id) !== String(attrId)) {
+      return attr;
+    }
+    foundAttr = true;
+    let foundVal = false;
+    const values = (attr.values || []).map((item) => {
+      if (String(item.attr_val_id) !== String(attrValId)) {
+        return item;
+      }
+      foundVal = true;
+      return { ...item, pic_url: picUrl };
+    });
+    if (!foundVal) {
+      values.push({
+        attr_val_id: attrValId,
+        attr_name: attr.attr_name,
+        attr_name_cn: attr.attr_name_cn,
+        line_attrval_name: null,
+        line_attrval_name_cn: null,
+        pic_url: picUrl,
+      });
+    }
+    return { ...attr, values };
+  });
+  if (!foundAttr) {
+    next.push({
+      attr_id: attrId,
+      attr_name: null,
+      attr_name_cn: null,
+      is_price_attr: '1',
+      values: [
+        {
+          attr_val_id: attrValId,
+          attr_name: null,
+          attr_name_cn: null,
+          line_attrval_name: null,
+          line_attrval_name_cn: null,
+          pic_url: picUrl,
+        },
+      ],
+    });
+  }
+  return next;
 }
 
 function toCustomAttrDrafts(
@@ -138,9 +209,9 @@ function applyCustomAttrDraftsToAttrList(
     .map((item, index) => ({
       attr_id: DH_CUSTOM_PRODUCT_ATTR_ID,
       attr_val_id: item.attr_val_id || String(index + 1),
-      attr_name: item.attr_name.trim() || null,
+      attr_name: (item.attr_name || '').trim() || null,
       attr_name_cn: null,
-      line_attrval_name: item.content.trim() || null,
+      line_attrval_name: (item.content || '').trim() || null,
       line_attrval_name_cn: null,
       pic_url: null,
     }))
@@ -157,6 +228,17 @@ function applyCustomAttrDraftsToAttrList(
       values,
     },
   ];
+}
+
+function normalizeCustomAttrDrafts(
+  drafts: CustomAttrDraft[] | undefined,
+): CustomAttrDraft[] {
+  return (drafts || []).map((item, index) => ({
+    key: item?.key || `custom-${index}-${Date.now()}`,
+    attr_val_id: item?.attr_val_id ?? null,
+    attr_name: item?.attr_name ?? '',
+    content: item?.content ?? '',
+  }));
 }
 
 function formatCategoryLabel(category: DhCategoryPublic): string {
@@ -225,44 +307,6 @@ async function loadCascaderOptionsAlongPath(
   return options;
 }
 
-function groupDisplayName(group: DhProductGroupPublic): string {
-  return (group.group_name || group.group_en_name || group.group_id).trim();
-}
-
-function toItemGroupCascaderOption(
-  group: DhProductGroupPublic,
-): ItemGroupCascaderOption {
-  const children = (group.children || [])
-    .filter((item) => Boolean(item.group_id))
-    .map((item) => toItemGroupCascaderOption(item));
-  return {
-    value: group.group_id,
-    label: groupDisplayName(group),
-    isLeaf: children.length === 0,
-    children: children.length ? children : undefined,
-  };
-}
-
-function findItemGroupPath(
-  options: ItemGroupCascaderOption[],
-  targetId: string,
-  path: string[] = [],
-): string[] | undefined {
-  for (const option of options) {
-    const next = [...path, option.value];
-    if (option.value === targetId) {
-      return next;
-    }
-    if (option.children?.length) {
-      const found = findItemGroupPath(option.children, targetId, next);
-      if (found) {
-        return found;
-      }
-    }
-  }
-  return undefined;
-}
-
 function formatProductState(
   state: string | null | undefined,
   t: (id: string, defaultMessage: string) => string,
@@ -278,6 +322,17 @@ function formatProductState(
     );
   }
   return code;
+}
+
+function changedLabel(text: string, changed: boolean) {
+  if (!changed) {
+    return text;
+  }
+  return <span style={{ color: CHANGED_COLOR }}>{text}</span>;
+}
+
+function changedControlStyle(changed: boolean): React.CSSProperties {
+  return changed ? { color: CHANGED_COLOR } : {};
 }
 
 function textOrNull(value: string | null | undefined): string | null {
@@ -301,15 +356,31 @@ function withCurrentTemplateOption(
 export function FissionProductStep({
   productId,
   onDetailChange,
+  readOnly = false,
+  initialDetail,
+  changedKeys = [],
+  changedAttrList = [],
 }: {
-  productId: number;
-  onDetailChange: (detail: DhProductDetailPublic) => void;
+  productId?: number;
+  onDetailChange?: (detail: DhProductDetailPublic) => void;
+  readOnly?: boolean;
+  initialDetail?: DhProductDetailPublic;
+  changedKeys?: string[];
+  changedAttrList?: DhProductSelectedAttrPublic[];
 }) {
   const intl = useIntl();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const supplierId = initialState?.currentUser?.supplier_id;
   const [form] = Form.useForm<ProductFormValues>();
+  const changedKeySet = new Set(changedKeys);
+  const isChanged = (key: string) => changedKeySet.has(key);
+  const changedCategoryAttrIds = changedAttrList
+    .map((item) => String(item.attr_id))
+    .filter((attrId) => attrId !== DH_CUSTOM_PRODUCT_ATTR_ID);
+  const changedCustomValues = changedAttrList.find(
+    (item) => String(item.attr_id) === DH_CUSTOM_PRODUCT_ATTR_ID,
+  )?.values;
   const onDetailChangeRef = useRef(onDetailChange);
   onDetailChangeRef.current = onDetailChange;
 
@@ -323,6 +394,7 @@ export function FissionProductStep({
   const [itemGroupOptions, setItemGroupOptions] = useState<
     ItemGroupCascaderOption[]
   >([]);
+  const [itemGroupsReady, setItemGroupsReady] = useState(false);
   const [aftersaleOptions, setAftersaleOptions] = useState<TemplateOption[]>(
     [],
   );
@@ -331,7 +403,7 @@ export function FissionProductStep({
 
   const publishDetail = useCallback((next: DhProductDetailPublic) => {
     setDetail(next);
-    onDetailChangeRef.current(next);
+    onDetailChangeRef.current?.(next);
   }, []);
 
   const patchDetail = useCallback((patch: Partial<DhProductDetailPublic>) => {
@@ -340,7 +412,7 @@ export function FissionProductStep({
         return prev;
       }
       const next = { ...prev, ...patch };
-      onDetailChangeRef.current(next);
+      onDetailChangeRef.current?.(next);
       return next;
     });
   }, []);
@@ -352,7 +424,17 @@ export function FissionProductStep({
     itemGroupLoadedRef.current = false;
     void (async () => {
       try {
-        const data = await fetchDhProductDetail(productId);
+        const data =
+          initialDetail ??
+          (productId ? await fetchDhProductDetail(productId) : undefined);
+        if (!data) {
+          throw new Error(
+            intl.formatMessage({
+              id: 'pages.product.detail.loadFailed',
+              defaultMessage: '加载商品详情失败',
+            }),
+          );
+        }
         if (cancelled) {
           return;
         }
@@ -389,9 +471,7 @@ export function FissionProductStep({
           key_word1: data.key_word1 || '',
           key_word2: data.key_word2 || '',
           key_word3: data.key_word3 || '',
-          item_group_path: data.item_group_id
-            ? [data.item_group_id]
-            : undefined,
+          item_group_path: undefined,
           customAttrs: toCustomAttrDrafts(data.attr_list),
         });
       } catch (error) {
@@ -415,7 +495,7 @@ export function FissionProductStep({
     return () => {
       cancelled = true;
     };
-  }, [intl, message, productId, publishDetail]);
+  }, [initialDetail, intl, message, productId, publishDetail]);
 
   useEffect(() => {
     const storeId = detail?.store_id;
@@ -457,28 +537,77 @@ export function FissionProductStep({
     };
   }, [detail?.store_id]);
 
-  const loadItemGroups = useCallback(async () => {
-    if (!detail?.store_id || itemGroupLoadedRef.current) {
+  useEffect(() => {
+    if (!detail?.store_id) {
+      setItemGroupOptions([]);
+      setItemGroupsReady(true);
+      itemGroupLoadedRef.current = true;
       return;
     }
-    const data = await fetchDhProductGroupList({
-      store_id: detail.store_id,
-      page: 1,
-      page_size: 100,
-    });
-    const options = data.items
-      .filter((item) => Boolean(item.group_id))
-      .map((item) => toItemGroupCascaderOption(item));
-    itemGroupLoadedRef.current = true;
-    setItemGroupOptions(options);
-    const currentId = detail.item_group_id;
-    if (currentId) {
-      const path = findItemGroupPath(options, currentId);
-      if (path) {
-        form.setFieldValue('item_group_path', path);
+    const storeId = detail.store_id;
+    let cancelled = false;
+    itemGroupLoadedRef.current = false;
+    setItemGroupsReady(false);
+    void (async () => {
+      try {
+        const data = await fetchStoreProductGroups({
+          store_id: storeId,
+        });
+        if (cancelled) {
+          return;
+        }
+        const options = data.items
+          .filter((item) => Boolean(item.group_id))
+          .map((item) => toItemGroupCascaderOption(item));
+        itemGroupLoadedRef.current = true;
+        setItemGroupOptions(options);
+        setItemGroupsReady(true);
+      } catch {
+        if (!cancelled) {
+          itemGroupLoadedRef.current = true;
+          setItemGroupOptions([]);
+          setItemGroupsReady(true);
+        }
       }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.store_id]);
+
+  const itemGroupPath = useMemo(() => {
+    if (!detail?.item_group_id || !itemGroupOptions.length) {
+      return undefined;
     }
-  }, [detail?.item_group_id, detail?.store_id]);
+    return findItemGroupPath(itemGroupOptions, detail.item_group_id);
+  }, [detail?.item_group_id, itemGroupOptions]);
+
+  // 分组树就绪后再写入表单路径，并用 options 解析名称（避免 Cascader 回退成 ID）
+  useEffect(() => {
+    if (!itemGroupsReady) {
+      return;
+    }
+    form.setFieldValue('item_group_path', itemGroupPath);
+  }, [form, itemGroupPath, itemGroupsReady]);
+
+  const renderItemGroupDisplay = useCallback(
+    (_labels: string[], selectedOptions?: DefaultOptionType[]) => {
+      const fromForm = form.getFieldValue('item_group_path') as
+        | string[]
+        | undefined;
+      const fromSelected = selectedOptions
+        ?.map((item) => String(item?.value ?? '').trim())
+        .filter(Boolean);
+      const path =
+        (Array.isArray(fromForm) && fromForm.length
+          ? fromForm.map(String)
+          : undefined) ||
+        itemGroupPath ||
+        fromSelected;
+      return resolveItemGroupLabels(itemGroupOptions, path);
+    },
+    [form, itemGroupOptions, itemGroupPath],
+  );
 
   const loadCategoryData: CascaderProps<CategoryOption>['loadData'] = (
     selectedOptions,
@@ -541,7 +670,7 @@ export function FissionProductStep({
             return prev;
           }
           const next = { ...prev, cate_pub_id: String(leaf.value) };
-          onDetailChangeRef.current(next);
+          onDetailChangeRef.current?.(next);
           return next;
         });
       } catch (error) {
@@ -557,7 +686,10 @@ export function FissionProductStep({
     })();
   };
 
-  const syncFormValues = (values: ProductFormValues) => {
+  const syncFormValues = (
+    values: ProductFormValues,
+    changedFields: string[] = [],
+  ) => {
     setDetail((prev) => {
       if (!prev) {
         return prev;
@@ -584,12 +716,14 @@ export function FissionProductStep({
         key_word3: textOrNull(values.key_word3),
         item_group_id:
           nextGroupId !== undefined ? String(nextGroupId) : prev.item_group_id,
-        attr_list: applyCustomAttrDraftsToAttrList(
-          prev.attr_list,
-          values.customAttrs || [],
-        ),
+        attr_list: changedFields.includes('customAttrs')
+          ? applyCustomAttrDraftsToAttrList(
+              prev.attr_list,
+              normalizeCustomAttrDrafts(values.customAttrs),
+            )
+          : prev.attr_list,
       };
-      onDetailChangeRef.current(next);
+      onDetailChangeRef.current?.(next);
       return next;
     });
   };
@@ -610,22 +744,100 @@ export function FissionProductStep({
   );
   const normalSelectedAttrs = nonPriceProductAttrs(detail?.attr_list);
 
+  const handleNormalAttrsChange = useCallback(
+    (nextSelected: DhProductSelectedAttrPublic[]) => {
+      setDetail((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const managedIds = normalCategoryAttrs.map((item) =>
+          String(item.attr_id),
+        );
+        const updated = {
+          ...prev,
+          attr_list: mergeManagedAttrsIntoList(
+            prev.attr_list,
+            managedIds,
+            nextSelected,
+          ),
+        };
+        onDetailChangeRef.current?.(updated);
+        return updated;
+      });
+    },
+    [normalCategoryAttrs],
+  );
+
+  const handlePriceAttrsChange = useCallback(
+    (nextSelected: DhProductSelectedAttrPublic[]) => {
+      setDetail((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const managedIds = priceCategoryAttrs.map((item) =>
+          String(item.attr_id),
+        );
+        const priced = nextSelected.map((item) => ({
+          ...item,
+          is_price_attr: '1',
+        }));
+        const updated = {
+          ...prev,
+          attr_list: mergeManagedAttrsIntoList(
+            prev.attr_list,
+            managedIds,
+            priced,
+          ),
+        };
+        onDetailChangeRef.current?.(updated);
+        return updated;
+      });
+    },
+    [priceCategoryAttrs],
+  );
+
+  const handleAttrValuePicChange = useCallback(
+    (attrId: string, attrValId: string, picUrl: string | null) => {
+      setDetail((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const updated = {
+          ...prev,
+          attr_list: patchAttrValuePic(
+            prev.attr_list,
+            attrId,
+            attrValId,
+            picUrl,
+          ),
+        };
+        onDetailChangeRef.current?.(updated);
+        return updated;
+      });
+    },
+    [],
+  );
+
   return (
     <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
       <ProForm<ProductFormValues>
-        key={productId}
+        key={initialDetail?.id ?? productId}
         form={form}
+        disabled={readOnly}
         submitter={false}
         layout="horizontal"
         labelAlign="left"
         labelCol={{ flex: '110px' }}
         wrapperCol={{ flex: 1 }}
-        onValuesChange={(_, values) => {
-          if ('store_id' in _) {
+        onValuesChange={(changedValues, values) => {
+          if (readOnly) {
+            return;
+          }
+          if ('store_id' in changedValues) {
             itemGroupLoadedRef.current = false;
             setItemGroupOptions([]);
           }
-          syncFormValues(values);
+          syncFormValues(values, Object.keys(changedValues));
         }}
       >
         <Card
@@ -637,10 +849,13 @@ export function FissionProductStep({
         >
           <ProFormSelect
             name="store_id"
-            label={intl.formatMessage({
-              id: 'pages.product.detail.field.storeName',
-              defaultMessage: '店铺名称',
-            })}
+            label={changedLabel(
+              intl.formatMessage({
+                id: 'pages.product.detail.field.storeName',
+                defaultMessage: '店铺名称',
+              }),
+              isChanged('store_id'),
+            )}
             showSearch
             debounceTime={300}
             params={{ supplierId }}
@@ -658,26 +873,39 @@ export function FissionProductStep({
                 value: store.id,
               }));
             }}
-            fieldProps={{ style: { maxWidth: 360 } }}
+            fieldProps={{
+              style: { maxWidth: 360, ...changedControlStyle(isChanged('store_id')) },
+            }}
           />
           <Form.Item
             name="category_path"
-            label={intl.formatMessage({
-              id: 'pages.product.detail.field.productCategory',
-              defaultMessage: '产品分类',
-            })}
+            label={changedLabel(
+              intl.formatMessage({
+                id: 'pages.product.detail.field.productCategory',
+                defaultMessage: '产品分类',
+              }),
+              isChanged('cate_pub_id'),
+            )}
           >
             <Cascader
+              disabled={readOnly}
               options={cascaderOptions}
-              loadData={loadCategoryData}
-              onChange={onCategoryChange}
+              loadData={readOnly ? undefined : loadCategoryData}
+              onChange={readOnly ? undefined : onCategoryChange}
               changeOnSelect={false}
               displayRender={(labels) => labels.at(-1) ?? ''}
               placeholder={intl.formatMessage({
                 id: 'pages.product.detail.field.categoryPlaceholder',
                 defaultMessage: '请选择分类',
               })}
-              style={{ maxWidth: 480, width: '100%' }}
+              className={
+                isChanged('cate_pub_id') ? 'hm-changed-control' : undefined
+              }
+              style={{
+                maxWidth: 480,
+                width: '100%',
+                ...changedControlStyle(isChanged('cate_pub_id')),
+              }}
             />
           </Form.Item>
           {categoryPath ? (
@@ -685,7 +913,7 @@ export function FissionProductStep({
               style={{
                 display: 'block',
                 margin: '-8px 0 16px 110px',
-                color: '#a0522d',
+                color: isChanged('cate_pub_id') ? CHANGED_COLOR : '#a0522d',
               }}
             >
               {categoryPath}
@@ -694,10 +922,13 @@ export function FissionProductStep({
         </Card>
 
         <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.attrs',
-            defaultMessage: '商品属性',
-          })}
+          title={changedLabel(
+            intl.formatMessage({
+              id: 'pages.product.detail.section.attrs',
+              defaultMessage: '商品属性',
+            }),
+            isChanged('attr_list'),
+          )}
           loading={loading}
           style={{ marginTop: 16 }}
         >
@@ -714,6 +945,11 @@ export function FissionProductStep({
             <CategoryAttrsFields
               attrs={normalCategoryAttrs}
               selectedAttrs={normalSelectedAttrs}
+              disabled={readOnly}
+              changedAttrIds={changedCategoryAttrIds}
+              onSelectedAttrsChange={
+                readOnly ? undefined : handleNormalAttrsChange
+              }
             />
           ) : (
             !loading && (
@@ -728,7 +964,11 @@ export function FissionProductStep({
           <Divider />
           <Typography.Text
             strong
-            style={{ display: 'block', marginBottom: 12 }}
+            style={{
+              display: 'block',
+              marginBottom: 12,
+              color: changedCustomValues?.length ? CHANGED_COLOR : undefined,
+            }}
           >
             {intl.formatMessage({
               id: 'pages.product.detail.customAttrs.title',
@@ -738,14 +978,28 @@ export function FissionProductStep({
           <ProFormList
             name="customAttrs"
             copyIconProps={false}
-            creatorButtonProps={{
-              creatorButtonText: intl.formatMessage({
-                id: 'pages.product.detail.customAttrs.add',
-                defaultMessage: '新增属性',
-              }),
-              type: 'dashed',
-              style: { width: '100%', maxWidth: 720 },
-            }}
+            deleteIconProps={
+              readOnly
+                ? false
+                : {
+                    tooltipText: intl.formatMessage({
+                      id: 'pages.product.detail.customAttrs.delete',
+                      defaultMessage: '删除',
+                    }),
+                  }
+            }
+            creatorButtonProps={
+              readOnly
+                ? false
+                : {
+                    creatorButtonText: intl.formatMessage({
+                      id: 'pages.product.detail.customAttrs.add',
+                      defaultMessage: '新增属性',
+                    }),
+                    type: 'dashed',
+                    style: { width: '100%', maxWidth: 720 },
+                  }
+            }
             max={DH_CUSTOM_ATTR_MAX_COUNT}
             creatorRecord={() => ({
               key: `custom-new-${Date.now()}`,
@@ -753,22 +1007,55 @@ export function FissionProductStep({
               attr_name: '',
               content: '',
             })}
+            itemRender={({ listDom, action }, meta) => {
+              const record =
+                (meta?.record as CustomAttrDraft | undefined) || {};
+              const rowChanged = customAttrValueChanged(
+                changedCustomValues,
+                record,
+              );
+              return (
+                <div
+                  className={rowChanged ? 'hm-changed-control' : undefined}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 16,
+                    color: rowChanged ? CHANGED_COLOR : undefined,
+                  }}
+                >
+                  {listDom}
+                  {readOnly ? null : action}
+                </div>
+              );
+            }}
           >
-            <Space size={8} wrap>
+            <Space size={8} wrap align="center">
               <ProFormText name="key" hidden />
               <ProFormText name="attr_val_id" hidden />
               <ProFormText
                 name="attr_name"
+                placeholder={intl.formatMessage({
+                  id: 'pages.product.detail.attrsCustomNamePlaceholder',
+                  defaultMessage: '请输入属性名',
+                })}
                 fieldProps={{
                   maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
+                  allowClear: true,
                   style: { width: 220 },
                 }}
                 formItemProps={{ style: { marginBottom: 0 } }}
               />
               <ProFormText
                 name="content"
+                placeholder={intl.formatMessage({
+                  id: 'pages.product.detail.attrsCustomValuePlaceholder',
+                  defaultMessage: '请输入属性值',
+                })}
                 fieldProps={{
                   maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
+                  allowClear: true,
                   style: { width: 320 },
                 }}
                 formItemProps={{ style: { marginBottom: 0 } }}
@@ -787,10 +1074,13 @@ export function FissionProductStep({
         >
           <Form.Item
             name="item_name"
-            label={intl.formatMessage({
-              id: 'pages.product.detail.field.itemName',
-              defaultMessage: '产品标题',
-            })}
+            label={changedLabel(
+              intl.formatMessage({
+                id: 'pages.product.detail.field.itemName',
+                defaultMessage: '产品标题',
+              }),
+              isChanged('item_name'),
+            )}
             rules={[
               {
                 max: ITEM_NAME_MAX_LENGTH,
@@ -807,6 +1097,8 @@ export function FissionProductStep({
             <Input
               maxLength={ITEM_NAME_MAX_LENGTH}
               allowClear
+              disabled={readOnly}
+              style={changedControlStyle(isChanged('item_name'))}
               placeholder={intl.formatMessage({
                 id: 'pages.product.detail.field.itemNamePlaceholder',
                 defaultMessage: '请输入产品标题',
@@ -814,44 +1106,65 @@ export function FissionProductStep({
             />
           </Form.Item>
           <Form.Item
-            label={intl.formatMessage({
-              id: 'pages.product.detail.field.keywords',
-              defaultMessage: '关键词',
-            })}
+            label={changedLabel(
+              intl.formatMessage({
+                id: 'pages.product.detail.field.keywords',
+                defaultMessage: '关键词',
+              }),
+              isChanged('key_word1') ||
+                isChanged('key_word2') ||
+                isChanged('key_word3'),
+            )}
           >
             <Space size={12} wrap>
               <Form.Item name="key_word1" noStyle>
-                <Input allowClear style={{ width: 240 }} />
+                <Input
+                  allowClear
+                  disabled={readOnly}
+                  style={{ width: 240, ...changedControlStyle(isChanged('key_word1')) }}
+                />
               </Form.Item>
               <Form.Item name="key_word2" noStyle>
-                <Input allowClear style={{ width: 240 }} />
+                <Input
+                  allowClear
+                  disabled={readOnly}
+                  style={{ width: 240, ...changedControlStyle(isChanged('key_word2')) }}
+                />
               </Form.Item>
               <Form.Item name="key_word3" noStyle>
-                <Input allowClear style={{ width: 240 }} />
+                <Input
+                  allowClear
+                  disabled={readOnly}
+                  style={{ width: 240, ...changedControlStyle(isChanged('key_word3')) }}
+                />
               </Form.Item>
             </Space>
           </Form.Item>
           <Form.Item
             name="item_group_path"
-            label={intl.formatMessage({
-              id: 'pages.product.detail.field.itemGroup',
-              defaultMessage: '产品分组',
-            })}
+            label={changedLabel(
+              intl.formatMessage({
+                id: 'pages.product.detail.field.itemGroup',
+                defaultMessage: '产品分组',
+              }),
+              isChanged('item_group_id'),
+            )}
           >
             <Cascader
+              disabled={readOnly || !itemGroupsReady}
               options={itemGroupOptions}
               changeOnSelect
               allowClear
-              style={{ maxWidth: 480, width: '100%' }}
+              displayRender={renderItemGroupDisplay}
+              style={{
+                maxWidth: 480,
+                width: '100%',
+                ...changedControlStyle(isChanged('item_group_id')),
+              }}
               placeholder={intl.formatMessage({
                 id: 'pages.product.detail.field.itemGroupPlaceholder',
                 defaultMessage: '请选择产品分组',
               })}
-              onOpenChange={(open) => {
-                if (open) {
-                  void loadItemGroups();
-                }
-              }}
             />
           </Form.Item>
           <Form.Item
@@ -894,15 +1207,19 @@ export function FissionProductStep({
       </ProForm>
 
       <Card
-        title={intl.formatMessage({
-          id: 'pages.product.detail.section.images',
-          defaultMessage: '商品图片',
-        })}
+        title={changedLabel(
+          intl.formatMessage({
+            id: 'pages.product.detail.section.images',
+            defaultMessage: '商品图片',
+          }),
+          isChanged('item_img_list'),
+        )}
         loading={loading}
       >
         {loading ? null : (
           <ProductImagesEditor
             images={detail?.item_img_list}
+            disabled={readOnly}
             storeId={detail?.store_id || undefined}
             alt={detail?.item_name || detail?.item_code}
             onChange={(next) => {
@@ -911,7 +1228,7 @@ export function FissionProductStep({
                   return prev;
                 }
                 const updated = { ...prev, item_img_list: next };
-                onDetailChangeRef.current(updated);
+                onDetailChangeRef.current?.(updated);
                 return updated;
               });
             }}
@@ -920,24 +1237,37 @@ export function FissionProductStep({
       </Card>
 
       <Card
-        title={intl.formatMessage({
-          id: 'pages.product.detail.section.specAttrs',
-          defaultMessage: '商品规格',
-        })}
+        title={changedLabel(
+          intl.formatMessage({
+            id: 'pages.product.detail.section.specAttrs',
+            defaultMessage: '商品规格',
+          }),
+          isChanged('sku_list') ||
+            isChanged('item_spec_self_def_list') ||
+            changedCategoryAttrIds.some((id) => priceAttrIdSet.has(id)),
+        )}
         loading={loading}
       >
         <SpecAttrsFields
+          disabled={readOnly}
+          changedAttrIds={changedCategoryAttrIds}
           priceCategoryAttrs={priceCategoryAttrs}
           priceSelectedAttrs={priceSelectedAttrs}
           specSelfDefs={detail?.item_spec_self_def_list}
           storeId={detail?.store_id || undefined}
+          onSelectedAttrsChange={
+            readOnly ? undefined : handlePriceAttrsChange
+          }
+          onValuePicChange={
+            readOnly ? undefined : handleAttrValuePicChange
+          }
           onSpecSelfDefsChange={(next) => {
             setDetail((prev) => {
               if (!prev) {
                 return prev;
               }
               const updated = { ...prev, item_spec_self_def_list: next };
-              onDetailChangeRef.current(updated);
+              onDetailChangeRef.current?.(updated);
               return updated;
             });
           }}
@@ -949,6 +1279,7 @@ export function FissionProductStep({
           })}
         </Divider>
         <SpecSkuTable
+          disabled={readOnly}
           skuList={detail?.sku_list}
           priceSelectedAttrs={priceSelectedAttrs}
           specSelfDefs={detail?.item_spec_self_def_list}
@@ -959,7 +1290,7 @@ export function FissionProductStep({
                 return prev;
               }
               const updated = { ...prev, sku_list: next };
-              onDetailChangeRef.current(updated);
+              onDetailChangeRef.current?.(updated);
               return updated;
             });
           }}
@@ -968,10 +1299,13 @@ export function FissionProductStep({
 
       {detail?.html_content ? (
         <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.html',
-            defaultMessage: '详情描述',
-          })}
+          title={changedLabel(
+            intl.formatMessage({
+              id: 'pages.product.detail.section.html',
+              defaultMessage: '详情描述',
+            }),
+            isChanged('html_content'),
+          )}
         >
           <iframe
             title={intl.formatMessage({
@@ -984,7 +1318,9 @@ export function FissionProductStep({
               width: '100%',
               minHeight: 360,
               maxHeight: 480,
-              border: 'none',
+              border: isChanged('html_content')
+                ? `1px solid ${CHANGED_COLOR}`
+                : 'none',
               background: '#fff',
             }}
           />
@@ -1000,17 +1336,29 @@ export function FissionProductStep({
       >
         <div style={{ maxWidth: 720 }}>
           <div style={{ display: 'flex', marginBottom: 24 }}>
-            <div style={{ width: 110, flex: '0 0 110px', lineHeight: '32px' }}>
+            <div
+              style={{
+                width: 110,
+                flex: '0 0 110px',
+                lineHeight: '32px',
+                ...changedControlStyle(isChanged('after_sale_template_id')),
+              }}
+            >
               {intl.formatMessage({
                 id: 'pages.product.detail.field.afterSaleTemplate',
                 defaultMessage: '售后模板',
               })}
             </div>
             <Select
+              disabled={readOnly}
               allowClear
               showSearch
               optionFilterProp="label"
-              style={{ maxWidth: 360, width: '100%' }}
+              style={{
+                maxWidth: 360,
+                width: '100%',
+                ...changedControlStyle(isChanged('after_sale_template_id')),
+              }}
               placeholder={intl.formatMessage({
                 id: 'pages.product.detail.field.afterSaleTemplatePlaceholder',
                 defaultMessage: '请选择售后模板',
@@ -1026,17 +1374,29 @@ export function FissionProductStep({
             />
           </div>
           <div style={{ display: 'flex' }}>
-            <div style={{ width: 110, flex: '0 0 110px', lineHeight: '32px' }}>
+            <div
+              style={{
+                width: 110,
+                flex: '0 0 110px',
+                lineHeight: '32px',
+                ...changedControlStyle(isChanged('shipping_model_id')),
+              }}
+            >
               {intl.formatMessage({
                 id: 'pages.product.detail.field.shippingTemplate',
                 defaultMessage: '物流模板',
               })}
             </div>
             <Select
+              disabled={readOnly}
               allowClear
               showSearch
               optionFilterProp="label"
-              style={{ maxWidth: 360, width: '100%' }}
+              style={{
+                maxWidth: 360,
+                width: '100%',
+                ...changedControlStyle(isChanged('shipping_model_id')),
+              }}
               placeholder={intl.formatMessage({
                 id: 'pages.product.detail.field.shippingTemplatePlaceholder',
                 defaultMessage: '请选择物流模板',

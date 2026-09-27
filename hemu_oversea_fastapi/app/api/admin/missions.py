@@ -10,6 +10,8 @@ from app.schemas.mission import (
     MissionDetail,
     MissionExecute,
     MissionFissionDataAdd,
+    MissionFissionDataDetail,
+    MissionFissionDataDetailPublic,
     MissionFissionDataImport,
     MissionFissionDataList,
     MissionFissionDataOperate,
@@ -135,6 +137,26 @@ def list_logs(
 
 
 @router.post(
+    "/fission-data/detail",
+    response_model=ApiResponse[MissionFissionDataDetailPublic],
+)
+def fission_data_detail(
+    payload: MissionFissionDataDetail,
+    current_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[MissionFissionDataDetailPublic]:
+    return success(
+        mission_service.get_fission_data_detail(
+            db,
+            actor=current_user,
+            mission_id=payload.mission_id,
+            data_id=payload.id,
+            supplier_id=payload.supplier_id,
+        )
+    )
+
+
+@router.post(
     "/fission-data/add",
     response_model=ApiResponse[MissionFissionDataPublic],
 )
@@ -150,6 +172,7 @@ def add_fission_data(
             mission_id=payload.mission_id,
             seed_product_id=payload.seed_product_id,
             update_json=payload.update_json,
+            raw_json=payload.raw_json,
         )
     )
 

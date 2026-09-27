@@ -1,15 +1,19 @@
+from app.models.aftersale_template_dh import AftersaleTemplateDh
 from app.models.base import Base
 from app.models.captcha import Captcha
 from app.models.login_attempt import LoginAttempt
 from app.models.mission import Mission, MissionDataDhFission, MissionLog
 from app.models.product_category_dh import ProductCategoryDh
 from app.models.product_dh import ProductDh
+from app.models.product_group_dh import ProductGroupDh
 from app.models.refresh_session import RefreshSession
+from app.models.shipping_template_dh import ShippingTemplateDh
 from app.models.store import Store
 from app.models.supplier import Supplier
 from app.models.user import User
 
 __all__ = [
+    "AftersaleTemplateDh",
     "Base",
     "Captcha",
     "LoginAttempt",
@@ -18,7 +22,9 @@ __all__ = [
     "MissionLog",
     "ProductCategoryDh",
     "ProductDh",
+    "ProductGroupDh",
     "RefreshSession",
+    "ShippingTemplateDh",
     "Store",
     "Supplier",
     "User",

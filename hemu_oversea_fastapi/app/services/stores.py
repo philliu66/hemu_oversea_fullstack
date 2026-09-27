@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +7,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.deps import Pagination
 from app.core.errors import conflict, not_found
 from app.core.store_types import StoreType
+from app.models.aftersale_template_dh import AftersaleTemplateDh
+from app.models.shipping_template_dh import ShippingTemplateDh
 from app.models.store import Store
 from app.schemas.common import PageData
 from app.schemas.store import (
@@ -16,9 +17,6 @@ from app.schemas.store import (
     StorePublic,
     StoreShippingTemplatePublic,
 )
-from app.services.dhgate.items import list_item_aftersale
-from app.services.dhgate.logistics import list_shipping_templates
-from app.services.dhgate.store_context import get_dhgate_client
 from app.services.suppliers import get_supplier
 
 
@@ -210,23 +208,7 @@ def soft_delete_store(db: Session, *, store_id: int, actor_id: int) -> None:
     db.commit()
 
 
-def _as_text(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def _first_text(item: dict[str, Any], *keys: str) -> str | None:
-    for key in keys:
-        text = _as_text(item.get(key))
-        if text:
-            return text
-    return None
-
-
-def _is_aftersale_deleted(item: dict[str, Any]) -> bool:
-    status = item.get("status")
+def _is_aftersale_deleted_status(status: str | None) -> bool:
     if status is None:
         return False
     return str(status).strip() in {"0", "false", "False"}
@@ -235,52 +217,39 @@ def _is_aftersale_deleted(item: dict[str, Any]) -> bool:
 def list_store_aftersale_templates(
     db: Session, store_id: int
 ) -> list[StoreAftersaleTemplatePublic]:
-    """查询店铺售后模板，数据来自 dh.item.aftersale.list。"""
-    client = get_dhgate_client(db, store_id)
-    data = list_item_aftersale(client)
-    raw_list = data.get("afterSaleList") if isinstance(data, dict) else None
-    if not isinstance(raw_list, list):
-        return []
-    templates: list[StoreAftersaleTemplatePublic] = []
-    for item in raw_list:
-        if not isinstance(item, dict) or _is_aftersale_deleted(item):
-            continue
-        template_id = _first_text(item, "afterSaleTemplateId")
-        if not template_id:
-            continue
-        templates.append(
-            StoreAftersaleTemplatePublic(
-                after_sale_template_id=template_id,
-                name=_first_text(item, "name", "templateName", "afterSaleTemplateName"),
-                if_template_default=_first_text(item, "ifTemplateDefault"),
-            )
+    """查询店铺售后模板，数据来自本地 aftersale_template_dh（排除已删除）。"""
+    _get_alive_store(db, store_id)
+    rows = db.scalars(
+        select(AftersaleTemplateDh)
+        .where(AftersaleTemplateDh.store_id == store_id)
+        .order_by(AftersaleTemplateDh.id.asc())
+    ).all()
+    return [
+        StoreAftersaleTemplatePublic(
+            after_sale_template_id=row.after_sale_template_id,
+            name=row.name,
+            if_template_default=row.if_template_default,
         )
-    return templates
+        for row in rows
+        if not _is_aftersale_deleted_status(row.status)
+    ]
 
 
 def list_store_shipping_templates(
     db: Session, store_id: int
 ) -> list[StoreShippingTemplatePublic]:
-    """查询店铺物流（运费）模板，数据来自 dh.shipping.template.list。"""
-    client = get_dhgate_client(db, store_id)
-    data = list_shipping_templates(client)
-    raw_list = data.get("shippingModelList") if isinstance(data, dict) else None
-    if not isinstance(raw_list, list):
-        return []
-    templates: list[StoreShippingTemplatePublic] = []
-    for item in raw_list:
-        if not isinstance(item, dict):
-            continue
-        template_id = _first_text(item, "shippingTempId", "shippingModelId")
-        if not template_id:
-            continue
-        templates.append(
-            StoreShippingTemplatePublic(
-                shipping_model_id=template_id,
-                name=_first_text(
-                    item, "modelName", "shippingModelName", "name", "templateName"
-                ),
-                model_type=_first_text(item, "modelType"),
-            )
+    """查询店铺物流（运费）模板，数据来自本地 shipping_template_dh。"""
+    _get_alive_store(db, store_id)
+    rows = db.scalars(
+        select(ShippingTemplateDh)
+        .where(ShippingTemplateDh.store_id == store_id)
+        .order_by(ShippingTemplateDh.id.asc())
+    ).all()
+    return [
+        StoreShippingTemplatePublic(
+            shipping_model_id=row.shipping_temp_id,
+            name=row.model_name,
+            model_type=row.model_type,
         )
-    return templates
+        for row in rows
+    ]

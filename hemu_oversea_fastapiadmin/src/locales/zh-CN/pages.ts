@@ -82,6 +82,7 @@ export default {
   'pages.mission.action.markFinished': '标记结束',
   'pages.mission.action.execute': '执行任务',
   'pages.mission.action.add': '手动添加',
+  'pages.mission.action.viewChanges': '查看变更',
   'pages.mission.action.import': '批量导入',
   'pages.mission.action.search': '查询',
   'pages.mission.action.searchReset': '重置',

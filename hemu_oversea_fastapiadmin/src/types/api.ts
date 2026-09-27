@@ -561,13 +561,7 @@ export type DhProductGroupPublic = {
   children?: DhProductGroupPublic[];
 };
 
-/** POST /api/v1/admin/product/dh/group/get */
-export type DhProductGroupGetParams = {
-  store_id: number;
-  group_id: string;
-};
-
-/** POST /api/v1/admin/product/dh/group/list */
+/** POST /api/v1/admin/stores/groups */
 export type DhProductGroupListParams = {
   store_id: number;
   keyword?: string;
@@ -624,10 +618,19 @@ export type MissionCreateParams = {
   worker_id: number;
 };
 
+export type MissionFissionDataDetailPublic = {
+  id: number;
+  mission_id: number;
+  seed_product_id: number;
+  update_json: Record<string, unknown>;
+  raw_json: DhProductDetailPublic | null;
+};
+
 export type MissionFissionDataAddParams = {
   mission_id: number;
   seed_product_id: number;
   update_json: Record<string, unknown>;
+  raw_json: DhProductDetailPublic;
 };
 
 export type MissionFissionDataPublic = {
@@ -637,15 +640,11 @@ export type MissionFissionDataPublic = {
   seed_product_id: number;
   store_id: number;
   store_name?: string | null;
-  item_code: string;
+  item_code: string | null;
   site_id: string;
-  is_seed: string;
   cate_pub_id?: string | null;
-  state?: string | null;
   item_name?: string | null;
   main_image_url?: string | null;
-  sync_state?: string | null;
-  last_synced_at?: string | null;
   update_json: Record<string, unknown>;
   fission_status: FissionStatus;
   fission_msg: string | null;

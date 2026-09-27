@@ -105,7 +105,7 @@ def get_dh_category_path(
     """
     按类目主键 ID 获取从根到当前类目的全路径。
 
-    内部调用 dh.category.path.get；失败时回退本地父子回溯。
+    数据来源本地 product_category_dh，按父子关系向上回溯。
     path_name 格式：中文(英文) > 中文(英文) > …
     """
     return success(product_service.get_dh_category_path(db, payload.id))

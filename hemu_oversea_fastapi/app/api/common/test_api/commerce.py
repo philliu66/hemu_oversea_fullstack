@@ -17,16 +17,22 @@ from app.core.db import get_db
 from app.core.errors import bad_request
 from app.schemas.common import ApiResponse, success
 from app.schemas.test_api.commerce import (
+    AftersaleTemplateSyncTestRequest,
+    ProductGroupSyncTestRequest,
     ProductSyncTestRequest,
     PunishSummaryTestRequest,
+    ShippingTemplateSyncTestRequest,
 )
 from app.services import utils_file as utils_file_service
+from app.services.aftersale_templates_dh import sync_supplier_aftersale_templates_dh
 from app.services.commerce import summarize_supplier_punish
+from app.services.product_groups_dh import sync_supplier_product_groups_dh
 from app.services.products_dh import (
     find_missing_product_sync_items,
     summarize_sync_result,
     sync_products_dh,
 )
+from app.services.shipping_templates_dh import sync_supplier_shipping_templates_dh
 
 router = APIRouter(
     prefix="/dhgate/commerce",
@@ -54,6 +60,76 @@ def test_punish_summary(
         page_size=payload.page_size,
     )
     return success(asdict(summary))
+
+
+@router.post(
+    "/item/group/sync",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调] dh.item.group.list$2.0 多店铺产品分组同步入库",
+)
+def test_sync_product_groups(
+    payload: ProductGroupSyncTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    按供应商查询所属已授权敦煌店铺，逐店调用 dh.item.group.list 并写入 product_group_dh。
+
+    - 每入库一条立即 commit；同店已存在的 group_id 跳过
+    - containChildGroup=true，子分组扁平化，parent_group_id 记录层级
+    - 每条记录带 supplier_id、store_id
+    - 单店失败不中断其余店铺
+    """
+    result = sync_supplier_product_groups_dh(
+        db,
+        supplier_id=payload.supplier_id,
+    )
+    return success(result)
+
+
+@router.post(
+    "/shipping/template/sync",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调] dh.shipping.template.list$2.0 多店铺运费模板同步入库",
+)
+def test_sync_shipping_templates(
+    payload: ShippingTemplateSyncTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    按供应商查询所属已授权敦煌店铺，逐店调用 dh.shipping.template.list 并写入 shipping_template_dh。
+
+    - 每入库一条立即 commit；同店已存在的 shipping_temp_id 跳过
+    - 每条记录带 supplier_id、store_id
+    - 单店失败不中断其余店铺
+    """
+    result = sync_supplier_shipping_templates_dh(
+        db,
+        supplier_id=payload.supplier_id,
+    )
+    return success(result)
+
+
+@router.post(
+    "/item/aftersale/sync",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调] dh.item.aftersale.list$2.0 多店铺售后模板同步入库",
+)
+def test_sync_aftersale_templates(
+    payload: AftersaleTemplateSyncTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    按供应商查询所属已授权敦煌店铺，逐店调用 dh.item.aftersale.list 并写入 aftersale_template_dh。
+
+    - 每入库一条立即 commit；同店已存在的 after_sale_template_id 跳过
+    - 每条记录带 supplier_id、store_id
+    - 单店失败不中断其余店铺
+    """
+    result = sync_supplier_aftersale_templates_dh(
+        db,
+        supplier_id=payload.supplier_id,
+    )
+    return success(result)
 
 
 @router.post(

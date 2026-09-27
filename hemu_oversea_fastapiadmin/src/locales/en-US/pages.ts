@@ -82,6 +82,7 @@ export default {
   'pages.mission.action.markFinished': 'Mark Finished',
   'pages.mission.action.execute': 'Run Mission',
   'pages.mission.action.add': 'Add Manually',
+  'pages.mission.action.viewChanges': 'View Changes',
   'pages.mission.action.import': 'Batch Import',
   'pages.mission.action.search': 'Search',
   'pages.mission.action.searchReset': 'Reset',
