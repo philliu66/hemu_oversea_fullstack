@@ -148,10 +148,10 @@ const MissionFissionList: React.FC = () => {
       width: 280,
       render: (_, record) => {
         const canMark =
-          access.canSupplierAdmin &&
+          access.can('mission.fission.finish') &&
           (record.status === 'pending' || record.status === 'running');
         return [
-          access.canSupplierAdmin ? (
+          access.can('mission.fission.data') ? (
             <Button
               type="link"
               key="data"
@@ -224,7 +224,7 @@ const MissionFissionList: React.FC = () => {
           showSizeChanger: true,
         }}
         toolBarRender={() =>
-          access.canSupplierAdmin
+          access.can('mission.fission.create')
             ? [
                 <Button
                   type="primary"

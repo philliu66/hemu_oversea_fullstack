@@ -119,10 +119,13 @@ def list_stores(
     *,
     keyword: str | None,
     store_type: StoreType | None,
-    supplier_id: int | None,
+    supplier_id: int,
     pagination: Pagination,
 ) -> PageData[StorePublic]:
-    filters = [Store.deleted_at.is_(None)]
+    filters = [
+        Store.deleted_at.is_(None),
+        Store.supplier_id == supplier_id,
+    ]
     if keyword:
         pattern = f"%{keyword}%"
         filters.append(
@@ -134,8 +137,6 @@ def list_stores(
         )
     if store_type is not None:
         filters.append(Store.store_type == store_type.value)
-    if supplier_id is not None:
-        filters.append(Store.supplier_id == supplier_id)
 
     count_stmt = select(func.count()).select_from(Store).where(*filters)
     stmt = (

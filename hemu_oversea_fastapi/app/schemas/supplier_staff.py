@@ -16,6 +16,7 @@ class SupplierStaffCreate(BaseModel):
     nickname: str | None = Field(default=None, min_length=1, max_length=50)
     email: str = Field(min_length=3, max_length=255, description="邮箱")
     phone: str | None = Field(default=None, min_length=5, max_length=20)
+    role_ids: list[int] = Field(default_factory=list, description="业务角色 ID 列表")
 
 
 class SupplierStaffUpdate(BaseModel):
@@ -29,6 +30,7 @@ class SupplierStaffUpdate(BaseModel):
         max_length=128,
         description="可选：重置明文密码",
     )
+    role_ids: list[int] | None = Field(default=None, description="业务角色 ID 列表")
 
 
 class SupplierStaffStatusUpdate(BaseModel):

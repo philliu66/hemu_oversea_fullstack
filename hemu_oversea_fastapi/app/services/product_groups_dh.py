@@ -58,7 +58,9 @@ def _normalize_group_row(
         "store_id": store_id,
         "group_id": group_id,
         "parent_group_id": parent,
-        "group_name": _as_str(item.get("groupName")),
+        # 官方文档筛选参数用 groupCnName；列表项常见 groupName / groupCnName 两种
+        "group_name": _as_str(item.get("groupName"))
+        or _as_str(item.get("groupCnName")),
         "group_en_name": _as_str(item.get("groupEnName")),
         "remark": _as_str(item.get("remark")),
         "item_count": _as_int(item.get("itemCount")),

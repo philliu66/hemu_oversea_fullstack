@@ -44,15 +44,19 @@ router = APIRouter(
 @router.post("/list", response_model=ApiResponse[PageData[StorePublic]])
 def list_stores(
     payload: StoreList,
+    current_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[PageData[StorePublic]]:
+    if current_user.supplier_id is None:
+        raise bad_request("当前账号未绑定供应商，无法查询店铺")
     pagination = Pagination(page=payload.page, page_size=payload.page_size)
     return success(
         store_service.list_stores(
             db,
             keyword=payload.keyword,
             store_type=payload.store_type,
-            supplier_id=payload.supplier_id,
+            # 强制按当前账号所属供应商隔离，忽略客户端传入的 supplier_id
+            supplier_id=current_user.supplier_id,
             pagination=pagination,
         )
     )

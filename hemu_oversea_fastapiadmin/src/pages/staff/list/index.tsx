@@ -1,19 +1,18 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useIntl } from '@umijs/max';
-import { App, Button, Form, Input, Modal, Popconfirm, Space, Tag } from 'antd';
+import { useIntl, useModel } from '@umijs/max';
+import { App, Button, Popconfirm, Space, Tag } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
-  createSupplierStaff,
-  deleteSupplierStaff,
-  fetchSupplierStaffList,
-  updateSupplierStaff,
-  updateSupplierStaffStatus,
+  deleteStaff,
+  fetchStaffList,
+  updateStaffStatus,
 } from '@/services/admin/supplierStaff';
 import type { UserPublic } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
+import { StaffFormDrawer } from './StaffFormDrawer';
 
 type StaffTableParams = {
   current?: number;
@@ -21,105 +20,23 @@ type StaffTableParams = {
   keyword?: string;
 };
 
-type StaffFormValues = {
-  username: string;
-  nickname?: string;
-  email: string;
-  phone?: string;
-  password?: string;
-  confirmPassword?: string;
-};
-
-function confirmPasswordMatch(
-  getFieldValue: (name: string) => unknown,
-  value?: string,
-) {
-  if (!value || getFieldValue('password') === value) {
-    return Promise.resolve();
-  }
-  return Promise.reject(new Error('两次输入的密码不一致'));
-}
-
 const StaffListPage: React.FC = () => {
   const intl = useIntl();
   const { message } = App.useApp();
+  const { initialState } = useModel('@@initialState');
+  const portalRole = initialState?.currentUser?.role;
   const actionRef = useRef<ActionType | null>(null);
-  const [form] = Form.useForm<StaffFormValues>();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<UserPublic | null>(null);
-
-  const isEdit = !!editing;
-
-  const closeModal = () => {
-    setModalOpen(false);
-    setEditing(null);
-    form.resetFields();
-  };
 
   const openCreate = () => {
     setEditing(null);
-    form.resetFields();
-    setModalOpen(true);
+    setDrawerOpen(true);
   };
 
   const openEdit = (record: UserPublic) => {
     setEditing(record);
-    form.setFieldsValue({
-      username: record.username,
-      nickname: record.nickname,
-      email: record.email,
-      phone: record.phone || undefined,
-      password: undefined,
-      confirmPassword: undefined,
-    });
-    setModalOpen(true);
-  };
-
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields();
-      setSubmitting(true);
-      if (isEdit && editing) {
-        const phone = values.phone?.trim();
-        await updateSupplierStaff({
-          id: editing.id,
-          nickname: values.nickname?.trim() || undefined,
-          email: values.email.trim(),
-          phone: phone || undefined,
-          password: values.password || undefined,
-        });
-        message.success(
-          intl.formatMessage({
-            id: 'pages.staff.edit.success',
-            defaultMessage: '保存成功',
-          }),
-        );
-      } else {
-        await createSupplierStaff({
-          username: values.username.trim(),
-          password: values.password || '',
-          nickname: values.nickname?.trim() || undefined,
-          email: values.email.trim(),
-          phone: values.phone?.trim() || undefined,
-        });
-        message.success(
-          intl.formatMessage({
-            id: 'pages.staff.create.success',
-            defaultMessage: '创建成功',
-          }),
-        );
-      }
-      closeModal();
-      actionRef.current?.reload();
-    } catch (error) {
-      if (error && typeof error === 'object' && 'errorFields' in error) {
-        return;
-      }
-      // 业务错误已由全局拦截器处理
-    } finally {
-      setSubmitting(false);
-    }
+    setDrawerOpen(true);
   };
 
   const columns: ProColumns<UserPublic>[] = [
@@ -175,6 +92,20 @@ const StaffListPage: React.FC = () => {
       search: false,
       width: 140,
       render: (_, record) => record.phone || '-',
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.staff.field.roles',
+        defaultMessage: '角色',
+      }),
+      dataIndex: 'roles',
+      search: false,
+      width: 160,
+      ellipsis: true,
+      render: (_, record) =>
+        record.roles?.length
+          ? record.roles.map((r) => r.name).join('、')
+          : '-',
     },
     {
       title: intl.formatMessage({
@@ -239,7 +170,7 @@ const StaffListPage: React.FC = () => {
             })}
             onConfirm={async () => {
               try {
-                await updateSupplierStaffStatus({
+                await updateStaffStatus(portalRole, {
                   id: record.id,
                   is_active: !record.is_active,
                 });
@@ -271,7 +202,7 @@ const StaffListPage: React.FC = () => {
             })}
             onConfirm={async () => {
               try {
-                await deleteSupplierStaff(record.id);
+                await deleteStaff(portalRole, record.id);
                 message.success(
                   intl.formatMessage({
                     id: 'pages.staff.delete.success',
@@ -326,7 +257,7 @@ const StaffListPage: React.FC = () => {
         ]}
         request={async (params) => {
           try {
-            const result = await fetchSupplierStaffList({
+            const result = await fetchStaffList(portalRole, {
               page: params.current,
               page_size: params.pageSize,
               keyword: params.keyword?.trim() || undefined,
@@ -347,222 +278,16 @@ const StaffListPage: React.FC = () => {
         columns={columns}
       />
 
-      <Modal
-        title={intl.formatMessage({
-          id: isEdit ? 'pages.staff.modal.edit' : 'pages.staff.modal.create',
-          defaultMessage: isEdit ? '编辑员工' : '新建员工',
-        })}
-        open={modalOpen}
-        onCancel={closeModal}
-        onOk={() => void handleSubmit()}
-        confirmLoading={submitting}
-        destroyOnHidden
-        width={480}
-      >
-        <Form<StaffFormValues>
-          form={form}
-          layout="vertical"
-          autoComplete="off"
-          className="mt-4"
-        >
-          <Form.Item
-            name="username"
-            label={intl.formatMessage({
-              id: 'pages.staff.field.username',
-              defaultMessage: '账号',
-            })}
-            rules={[
-              {
-                required: true,
-                message: intl.formatMessage({
-                  id: 'pages.staff.field.usernameRequired',
-                  defaultMessage: '请输入账号',
-                }),
-              },
-              {
-                min: 3,
-                message: intl.formatMessage({
-                  id: 'pages.staff.field.usernameMin',
-                  defaultMessage: '账号至少 3 位',
-                }),
-              },
-            ]}
-          >
-            <Input
-              maxLength={50}
-              disabled={isEdit}
-              placeholder={intl.formatMessage({
-                id: 'pages.staff.field.usernamePlaceholder',
-                defaultMessage: '请输入员工账号',
-              })}
-            />
-          </Form.Item>
-          <Form.Item
-            name="nickname"
-            label={intl.formatMessage({
-              id: 'pages.staff.field.nickname',
-              defaultMessage: '昵称',
-            })}
-          >
-            <Input
-              maxLength={50}
-              placeholder={intl.formatMessage({
-                id: 'pages.staff.field.nicknamePlaceholder',
-                defaultMessage: '请输入昵称',
-              })}
-            />
-          </Form.Item>
-          <Form.Item
-            name="email"
-            label={intl.formatMessage({
-              id: 'pages.staff.field.email',
-              defaultMessage: '邮箱',
-            })}
-            rules={[
-              {
-                required: true,
-                message: intl.formatMessage({
-                  id: 'pages.staff.field.emailRequired',
-                  defaultMessage: '请输入邮箱',
-                }),
-              },
-              {
-                type: 'email',
-                message: intl.formatMessage({
-                  id: 'pages.staff.field.emailInvalid',
-                  defaultMessage: '请输入正确的邮箱',
-                }),
-              },
-            ]}
-          >
-            <Input
-              maxLength={255}
-              placeholder={intl.formatMessage({
-                id: 'pages.staff.field.emailPlaceholder',
-                defaultMessage: '请输入邮箱',
-              })}
-            />
-          </Form.Item>
-          <Form.Item
-            name="phone"
-            label={intl.formatMessage({
-              id: 'pages.staff.field.phone',
-              defaultMessage: '手机号',
-            })}
-            rules={[
-              {
-                validator: async (_, value?: string) => {
-                  const phone = value?.trim();
-                  if (!phone || phone.length >= 5) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(
-                    new Error(
-                      intl.formatMessage({
-                        id: 'pages.staff.field.phoneMin',
-                        defaultMessage: '手机号至少 5 位',
-                      }),
-                    ),
-                  );
-                },
-              },
-            ]}
-          >
-            <Input
-              maxLength={20}
-              placeholder={intl.formatMessage({
-                id: 'pages.staff.field.phonePlaceholder',
-                defaultMessage: '请输入手机号',
-              })}
-            />
-          </Form.Item>
-          <Form.Item
-            name="password"
-            label={intl.formatMessage({
-              id: isEdit
-                ? 'pages.staff.field.newPassword'
-                : 'pages.staff.field.password',
-              defaultMessage: isEdit ? '新密码（可选）' : '密码',
-            })}
-            rules={
-              isEdit
-                ? [
-                    {
-                      min: 6,
-                      message: intl.formatMessage({
-                        id: 'pages.staff.field.passwordMin',
-                        defaultMessage: '密码至少 6 位',
-                      }),
-                    },
-                  ]
-                : [
-                    {
-                      required: true,
-                      message: intl.formatMessage({
-                        id: 'pages.staff.field.passwordRequired',
-                        defaultMessage: '请输入密码',
-                      }),
-                    },
-                    {
-                      min: 6,
-                      message: intl.formatMessage({
-                        id: 'pages.staff.field.passwordMin',
-                        defaultMessage: '密码至少 6 位',
-                      }),
-                    },
-                  ]
-            }
-          >
-            <Input.Password
-              autoComplete="new-password"
-              placeholder={intl.formatMessage({
-                id: isEdit
-                  ? 'pages.staff.field.newPasswordPlaceholder'
-                  : 'pages.staff.field.passwordPlaceholder',
-                defaultMessage: isEdit ? '不修改请留空' : '请输入密码',
-              })}
-            />
-          </Form.Item>
-          <Form.Item
-            name="confirmPassword"
-            label={intl.formatMessage({
-              id: 'pages.staff.field.confirmPassword',
-              defaultMessage: '确认密码',
-            })}
-            dependencies={['password']}
-            rules={[
-              ({ getFieldValue }) => ({
-                validator: async (_, value?: string) => {
-                  const password = getFieldValue('password') as
-                    | string
-                    | undefined;
-                  if (!isEdit || password) {
-                    if (!value) {
-                      return Promise.reject(
-                        new Error(
-                          intl.formatMessage({
-                            id: 'pages.staff.field.confirmPasswordRequired',
-                            defaultMessage: '请再次输入密码',
-                          }),
-                        ),
-                      );
-                    }
-                  }
-                  return confirmPasswordMatch(getFieldValue, value);
-                },
-              }),
-            ]}
-          >
-            <Input.Password
-              autoComplete="new-password"
-              placeholder={intl.formatMessage({
-                id: 'pages.staff.field.confirmPasswordPlaceholder',
-                defaultMessage: '请再次输入密码',
-              })}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <StaffFormDrawer
+        open={drawerOpen}
+        editing={editing}
+        portalRole={portalRole}
+        onClose={() => {
+          setDrawerOpen(false);
+          setEditing(null);
+        }}
+        onSuccess={() => actionRef.current?.reload()}
+      />
     </PageContainer>
   );
 };

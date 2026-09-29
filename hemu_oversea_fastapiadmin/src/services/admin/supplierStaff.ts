@@ -1,5 +1,4 @@
 import { request } from '@umijs/max';
-import { AdminSupplierStaffApi } from '@/constants/api';
 import type {
   ApiResponse,
   PageData,
@@ -10,6 +9,7 @@ import type {
   UserPublic,
 } from '@/types/api';
 import { unwrapApiData } from '@/utils/http';
+import { staffApiPrefix } from './rbac';
 
 type RequestOptions = {
   skipErrorHandler?: boolean;
@@ -23,13 +23,14 @@ function requireData<T>(payload: T | null, message: string): T {
   return payload;
 }
 
-/** POST /api/v1/admin/supplier-staff/list */
-export async function fetchSupplierStaffList(
+/** 按当前登录门户身份调用 platform-staff 或 supplier-staff */
+export async function fetchStaffList(
+  portalRole: string | undefined,
   params: SupplierStaffListParams = {},
   options?: RequestOptions,
 ) {
   const res = await request<ApiResponse<PageData<UserPublic>>>(
-    AdminSupplierStaffApi.LIST,
+    `${staffApiPrefix(portalRole)}/list`,
     {
       method: 'POST',
       data: {
@@ -46,13 +47,13 @@ export async function fetchSupplierStaffList(
   );
 }
 
-/** POST /api/v1/admin/supplier-staff/create */
-export async function createSupplierStaff(
+export async function createStaff(
+  portalRole: string | undefined,
   params: SupplierStaffCreateParams,
   options?: RequestOptions,
 ) {
   const res = await request<ApiResponse<UserPublic>>(
-    AdminSupplierStaffApi.CREATE,
+    `${staffApiPrefix(portalRole)}/create`,
     {
       method: 'POST',
       data: params,
@@ -62,13 +63,13 @@ export async function createSupplierStaff(
   return requireData(unwrapApiData<UserPublic>(res), '创建员工失败');
 }
 
-/** POST /api/v1/admin/supplier-staff/update */
-export async function updateSupplierStaff(
+export async function updateStaff(
+  portalRole: string | undefined,
   params: SupplierStaffUpdateParams,
   options?: RequestOptions,
 ) {
   const res = await request<ApiResponse<UserPublic>>(
-    AdminSupplierStaffApi.UPDATE,
+    `${staffApiPrefix(portalRole)}/update`,
     {
       method: 'POST',
       data: params,
@@ -78,13 +79,13 @@ export async function updateSupplierStaff(
   return requireData(unwrapApiData<UserPublic>(res), '更新员工失败');
 }
 
-/** POST /api/v1/admin/supplier-staff/status */
-export async function updateSupplierStaffStatus(
+export async function updateStaffStatus(
+  portalRole: string | undefined,
   params: SupplierStaffStatusParams,
   options?: RequestOptions,
 ) {
   const res = await request<ApiResponse<UserPublic>>(
-    AdminSupplierStaffApi.STATUS,
+    `${staffApiPrefix(portalRole)}/status`,
     {
       method: 'POST',
       data: params,
@@ -94,13 +95,13 @@ export async function updateSupplierStaffStatus(
   return requireData(unwrapApiData<UserPublic>(res), '更新员工状态失败');
 }
 
-/** POST /api/v1/admin/supplier-staff/delete */
-export async function deleteSupplierStaff(
+export async function deleteStaff(
+  portalRole: string | undefined,
   id: number,
   options?: RequestOptions,
 ) {
   await request<ApiResponse<Record<string, never>>>(
-    AdminSupplierStaffApi.DELETE,
+    `${staffApiPrefix(portalRole)}/delete`,
     {
       method: 'POST',
       data: { id },
@@ -108,3 +109,31 @@ export async function deleteSupplierStaff(
     },
   );
 }
+
+/** @deprecated 使用 createStaff */
+export const createSupplierStaff = (
+  params: SupplierStaffCreateParams,
+  options?: RequestOptions,
+) => createStaff('supplier_admin', params, options);
+
+/** @deprecated */
+export const fetchSupplierStaffList = (
+  params?: SupplierStaffListParams,
+  options?: RequestOptions,
+) => fetchStaffList('supplier_admin', params, options);
+
+/** @deprecated */
+export const updateSupplierStaff = (
+  params: SupplierStaffUpdateParams,
+  options?: RequestOptions,
+) => updateStaff('supplier_admin', params, options);
+
+/** @deprecated */
+export const updateSupplierStaffStatus = (
+  params: SupplierStaffStatusParams,
+  options?: RequestOptions,
+) => updateStaffStatus('supplier_admin', params, options);
+
+/** @deprecated */
+export const deleteSupplierStaff = (id: number, options?: RequestOptions) =>
+  deleteStaff('supplier_admin', id, options);

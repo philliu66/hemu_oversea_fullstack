@@ -1,0 +1,33 @@
+/* 查看变更：disabled 控件仍用红色反显（覆盖 antd 灰色） */
+.hm-changed-text {
+  color: #cf1322 !important;
+}
+
+.hm-changed-control.ant-input[disabled],
+.hm-changed-control.ant-input-disabled,
+.hm-changed-control .ant-input[disabled],
+.hm-changed-control .ant-input-disabled {
+  color: #cf1322 !important;
+  -webkit-text-fill-color: #cf1322 !important;
+}
+
+.hm-changed-control.ant-input-number-disabled .ant-input-number-input,
+.hm-changed-control.ant-input-number-disabled input {
+  color: #cf1322 !important;
+  -webkit-text-fill-color: #cf1322 !important;
+}
+
+.hm-changed-control.ant-select-disabled .ant-select-selection-item,
+.hm-changed-control.ant-select-disabled .ant-select-selection-placeholder {
+  color: #cf1322 !important;
+}
+
+.hm-changed-control.ant-checkbox-wrapper,
+.hm-changed-control.ant-checkbox-wrapper > span:last-child {
+  color: #cf1322 !important;
+}
+
+.hm-changed-control.ant-cascader-picker-disabled .ant-select-selection-item,
+.hm-changed-control.ant-select-disabled.ant-cascader .ant-select-selection-item {
+  color: #cf1322 !important;
+}

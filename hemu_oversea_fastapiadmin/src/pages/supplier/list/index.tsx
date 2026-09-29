@@ -1,18 +1,17 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, useIntl } from '@umijs/max';
+import { useIntl } from '@umijs/max';
 import { App, Button, Popconfirm } from 'antd';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import { deleteSupplier, fetchSupplierList } from '@/services/admin/suppliers';
 import type { SupplierPublic } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
 import {
-  SUPPLIER_CREATE_PATH,
-  supplierDetailPath,
-  supplierEditPath,
-} from '../utils';
+  SupplierFormDrawer,
+  type SupplierDrawerMode,
+} from './SupplierFormDrawer';
 
 type SupplierTableParams = {
   current?: number;
@@ -24,6 +23,32 @@ const SupplierList: React.FC = () => {
   const intl = useIntl();
   const { message } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<SupplierDrawerMode>('create');
+  const [activeId, setActiveId] = useState<number>();
+
+  const openCreate = () => {
+    setActiveId(undefined);
+    setDrawerMode('create');
+    setDrawerOpen(true);
+  };
+
+  const openView = (id: number) => {
+    setActiveId(id);
+    setDrawerMode('view');
+    setDrawerOpen(true);
+  };
+
+  const openEdit = (id: number) => {
+    setActiveId(id);
+    setDrawerMode('edit');
+    setDrawerOpen(true);
+  };
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setActiveId(undefined);
+  };
 
   const columns: ProColumns<SupplierPublic>[] = [
     {
@@ -58,10 +83,7 @@ const SupplierList: React.FC = () => {
       search: false,
       ellipsis: true,
       render: (dom, entity) => (
-        <Button
-          type="link"
-          onClick={() => history.push(supplierDetailPath(entity.id))}
-        >
+        <Button type="link" onClick={() => openView(entity.id)}>
           {dom}
         </Button>
       ),
@@ -104,21 +126,13 @@ const SupplierList: React.FC = () => {
       search: false,
       width: 200,
       render: (_, record) => [
-        <Button
-          type="link"
-          key="detail"
-          onClick={() => history.push(supplierDetailPath(record.id))}
-        >
+        <Button type="link" key="detail" onClick={() => openView(record.id)}>
           {intl.formatMessage({
             id: 'pages.supplier.action.detail',
             defaultMessage: '查看',
           })}
         </Button>,
-        <Button
-          type="link"
-          key="edit"
-          onClick={() => history.push(supplierEditPath(record.id))}
-        >
+        <Button type="link" key="edit" onClick={() => openEdit(record.id)}>
           {intl.formatMessage({
             id: 'pages.supplier.action.edit',
             defaultMessage: '编辑',
@@ -178,7 +192,7 @@ const SupplierList: React.FC = () => {
             type="primary"
             key="create"
             icon={<PlusOutlined />}
-            onClick={() => history.push(SUPPLIER_CREATE_PATH)}
+            onClick={openCreate}
           >
             {intl.formatMessage({
               id: 'pages.supplier.action.create',
@@ -207,6 +221,19 @@ const SupplierList: React.FC = () => {
           }
         }}
         columns={columns}
+      />
+
+      <SupplierFormDrawer
+        open={drawerOpen}
+        mode={drawerMode}
+        supplierId={activeId}
+        onClose={closeDrawer}
+        onSuccess={() => actionRef.current?.reload()}
+        onSwitchToEdit={
+          drawerMode === 'view' && activeId
+            ? () => setDrawerMode('edit')
+            : undefined
+        }
       />
     </PageContainer>
   );

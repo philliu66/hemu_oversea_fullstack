@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.deps import Pagination, require_admin_user, require_supplier_admin
+from app.core.deps import Pagination, require_admin_user, require_perm
 from app.models.user import User
 from app.schemas.common import ApiResponse, PageData, success
 from app.schemas.mission import (
@@ -34,7 +34,7 @@ router = APIRouter(
 @router.post("/list", response_model=ApiResponse[PageData[MissionPublic]])
 def list_missions(
     payload: MissionList,
-    current_user: User = Depends(require_admin_user),
+    current_user: User = Depends(require_perm("mission.fission")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[PageData[MissionPublic]]:
     pagination = Pagination(page=payload.page, page_size=payload.page_size)
@@ -52,7 +52,7 @@ def list_missions(
 @router.post("/detail", response_model=ApiResponse[MissionPublic])
 def detail_mission(
     payload: MissionDetail,
-    current_user: User = Depends(require_admin_user),
+    current_user: User = Depends(require_perm("mission.fission")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionPublic]:
     return success(
@@ -68,7 +68,7 @@ def detail_mission(
 @router.post("/create", status_code=201, response_model=ApiResponse[MissionPublic])
 def create_mission(
     payload: MissionCreate,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("mission.fission.create")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionPublic]:
     return success(
@@ -85,7 +85,7 @@ def create_mission(
 @router.post("/mark-finished", response_model=ApiResponse[MissionPublic])
 def mark_mission_finished(
     payload: MissionMarkFinished,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("mission.fission.finish")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionPublic]:
     return success(
@@ -162,7 +162,7 @@ def fission_data_detail(
 )
 def add_fission_data(
     payload: MissionFissionDataAdd,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("mission.fission.data")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionFissionDataPublic]:
     return success(
@@ -180,7 +180,7 @@ def add_fission_data(
 @router.post("/fission-data/delete", response_model=ApiResponse[dict])
 def delete_fission_data(
     payload: MissionFissionDataOperate,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("mission.fission.data")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
     mission_service.delete_fission_data(
@@ -198,7 +198,7 @@ def delete_fission_data(
 )
 def mark_fission_data_finished(
     payload: MissionFissionDataOperate,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("mission.fission.data")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionFissionDataPublic]:
     return success(

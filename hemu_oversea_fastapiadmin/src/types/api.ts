@@ -35,6 +35,8 @@ export type UserPublic = {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  permission_codes?: string[];
+  roles?: { id: number; name: string }[];
 };
 
 /** 登录成功：token + 当前用户 */
@@ -57,6 +59,7 @@ export type SupplierPublic = {
 /** 供应商详情（含管理员账号） */
 export type SupplierDetailPublic = SupplierPublic & {
   admin_username: string | null;
+  permission_codes?: string[];
 };
 
 /** POST /api/v1/admin/suppliers/list */
@@ -74,6 +77,7 @@ export type SupplierCreateParams = {
   admin_username: string;
   /** 明文密码 */
   admin_password: string;
+  permission_codes: string[];
 };
 
 /** POST /api/v1/admin/suppliers/update */
@@ -82,6 +86,7 @@ export type SupplierUpdateParams = {
   name?: string;
   phone?: string;
   email?: string;
+  permission_codes?: string[];
 };
 
 /** POST /api/v1/admin/supplier-staff/list */
@@ -98,6 +103,7 @@ export type SupplierStaffCreateParams = {
   nickname?: string;
   email: string;
   phone?: string;
+  role_ids?: number[];
 };
 
 /** POST /api/v1/admin/supplier-staff/update */
@@ -108,6 +114,7 @@ export type SupplierStaffUpdateParams = {
   phone?: string;
   /** 可选：重置明文密码 */
   password?: string;
+  role_ids?: number[];
 };
 
 /** POST /api/v1/admin/supplier-staff/status */
@@ -345,6 +352,7 @@ export type DhProductListParams = {
 export type DhProductPublic = {
   id: number;
   store_id: number;
+  store_name?: string | null;
   item_code: string;
   site_id: string;
   is_seed: string;

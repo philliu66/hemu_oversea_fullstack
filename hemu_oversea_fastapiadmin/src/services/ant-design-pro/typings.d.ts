@@ -28,6 +28,7 @@ declare namespace API {
     org_type?: string;
     supplier_id?: number;
     is_active?: boolean;
+    permission_codes?: string[];
   };
 
   type LoginResult = {

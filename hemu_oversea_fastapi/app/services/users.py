@@ -150,7 +150,12 @@ def set_user_role(
         user.org_type = org_type
     if supplier_id is not None:
         user.supplier_id = supplier_id
-    elif role in {Role.SUPER_ADMIN, Role.PLATFORM_STAFF, Role.APP_USER}:
+    elif role in {
+        Role.PLATFORM_ADMIN,
+        Role.SUPER_ADMIN,
+        Role.PLATFORM_STAFF,
+        Role.APP_USER,
+    }:
         user.supplier_id = None
     revoke_all_sessions(db, user.id)
     db.commit()
@@ -173,7 +178,11 @@ def reset_user_password(
     db.commit()
 
 
-_PLATFORM_ROLES = {Role.SUPER_ADMIN.value, Role.PLATFORM_STAFF.value}
+_PLATFORM_ROLES = {
+    Role.PLATFORM_ADMIN.value,
+    Role.SUPER_ADMIN.value,
+    Role.PLATFORM_STAFF.value,
+}
 _SUPPLIER_PORTAL_ROLES = {Role.SUPPLIER_ADMIN.value, Role.SUPPLIER_STAFF.value}
 
 

@@ -5,12 +5,22 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.errors import forbidden, unauthorized
-from app.core.roles import ADMIN_PORTAL_ROLES, APP_PORTAL_ROLES, Role
+from app.core.roles import (
+    ADMIN_PORTAL_ROLES,
+    APP_PORTAL_ROLES,
+    Role,
+    normalize_portal_role,
+)
 from app.core.security import Audience, TokenError, decode_token
 from app.models.user import User
+from app.services import permissions as perm_service
 
 _bearer = HTTPBearer(auto_error=False)
-_STAFF_ROLE_VALUES = {role.value for role in ADMIN_PORTAL_ROLES}
+_STAFF_ROLE_VALUES = {
+    normalize_portal_role(role.value) or role.value for role in ADMIN_PORTAL_ROLES
+}
+_STAFF_ROLE_VALUES.add(Role.SUPER_ADMIN.value)
+_STAFF_ROLE_VALUES.add(Role.PLATFORM_ADMIN.value)
 _APP_ROLE_VALUES = {role.value for role in APP_PORTAL_ROLES}
 
 
@@ -65,7 +75,8 @@ def get_current_admin_user(
     db: Session = Depends(get_db),
 ) -> User:
     user = _user_from_access(creds, db, "admin")
-    if user.role not in _STAFF_ROLE_VALUES:
+    normalized = normalize_portal_role(user.role) or user.role
+    if normalized not in _STAFF_ROLE_VALUES and user.role not in _STAFF_ROLE_VALUES:
         raise unauthorized()
     return user
 
@@ -80,18 +91,43 @@ def get_current_account(
 
 def require_roles(*roles: Role):
     """管理端：先确认是 admin token（401），再核对角色（不够则 403）。"""
-    allowed = {role.value for role in roles}
+    allowed: set[str] = set()
+    for role in roles:
+        allowed.add(role.value)
+        if role == Role.PLATFORM_ADMIN:
+            allowed.add(Role.SUPER_ADMIN.value)
 
     def _checker(current_user: User = Depends(get_current_admin_user)) -> User:
-        if current_user.role not in allowed:
+        user_role = normalize_portal_role(current_user.role) or current_user.role
+        if current_user.role not in allowed and user_role not in allowed:
             raise forbidden()
         return current_user
 
     return _checker
 
 
-require_super_admin = require_roles(Role.SUPER_ADMIN)
-require_platform = require_roles(Role.SUPER_ADMIN, Role.PLATFORM_STAFF)
+def require_perm(*codes: str, require_all: bool = True):
+    """校验权限码；platform_admin 直接放行。"""
+
+    def _checker(
+        current_user: User = Depends(get_current_admin_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        if not perm_service.user_has_permissions(
+            db,
+            current_user,
+            *codes,
+            require_all=require_all,
+        ):
+            raise forbidden("无操作权限")
+        return current_user
+
+    return _checker
+
+
+require_platform_admin = require_roles(Role.PLATFORM_ADMIN)
+require_super_admin = require_platform_admin  # 兼容旧名
+require_platform = require_roles(Role.PLATFORM_ADMIN, Role.PLATFORM_STAFF)
 require_supplier_admin = require_roles(Role.SUPPLIER_ADMIN)
 require_supplier = require_roles(Role.SUPPLIER_ADMIN, Role.SUPPLIER_STAFF)
 require_admin_user = require_roles(*ADMIN_PORTAL_ROLES)

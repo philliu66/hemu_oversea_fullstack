@@ -8,7 +8,7 @@ import type {
   DhProductSelectedAttrValPublic,
 } from '@/types/api';
 import { buildDhImageUrl } from '@/utils/dhImage';
-import '@/pages/mission/fission/changedHighlight.css';
+import './changedHighlight.css';
 import DhgateAttrPicUpload from './DhgateAttrPicUpload';
 
 const CHANGED_COLOR = '#cf1322';
@@ -168,30 +168,15 @@ function buildDrafts(
     let fallbackCustomText = '';
     values.forEach((item) => {
       const option = optionById.get(item.attr_val_id);
-      const matchedCustomSlot = !!option && isCustomOption(option);
+      const customText = pickCustomText(item);
+      const valueAttrName = pickValueAttrName(item);
       const selectedIsCustomPlaceholder =
         isCustomName(item.line_attrval_name) ||
         isCustomName(item.line_attrval_name_cn);
 
-      // 1) 命中分类预置选项，且不是「自定义/其它」槽位 → 普通勾选
-      if (option && !matchedCustomSlot && !selectedIsCustomPlaceholder) {
-        checked.push(item.attr_val_id);
-        return;
-      }
-
-      // 2) 未命中预置选项，或命中自定义槽位 → 从 attr_list 反显自定义内容
-      if (!allowCustom(attr)) {
-        // 不支持自定义时，仍尽量勾选已有选项 id
-        if (option) {
-          checked.push(item.attr_val_id);
-        }
-        return;
-      }
-
-      draft.customChecked = true;
-      const customText = pickCustomText(item);
-      const valueAttrName = pickValueAttrName(item);
-      if (valueAttrName) {
+      // 带独立属性名的多行自定义（如 Function / Voltage）
+      if (allowCustom(attr) && valueAttrName) {
+        draft.customChecked = true;
         customRows.push({
           key: item.attr_val_id || `${valueAttrName}-${customRows.length}`,
           attrName: valueAttrName,
@@ -199,8 +184,30 @@ function buildDrafts(
         });
         return;
       }
+
+      // 命中预置选项（含「其他/Others」）：无额外自定义文案时当作普通选项选中
+      if (option && !customText) {
+        checked.push(item.attr_val_id);
+        return;
+      }
+
+      // 未命中预置，或命中「其他」槽位但写了自定义文案 → 自定义编辑
+      if (!allowCustom(attr)) {
+        if (option) {
+          checked.push(item.attr_val_id);
+        }
+        return;
+      }
+
+      draft.customChecked = true;
       if (customText) {
         fallbackCustomText = customText;
+      } else if (!option && !selectedIsCustomPlaceholder) {
+        // 兜底：无法识别的已选值仍尽量勾上 id
+        if (item.attr_val_id) {
+          checked.push(item.attr_val_id);
+          draft.customChecked = false;
+        }
       }
     });
     draft.customRows = customRows;
@@ -604,9 +611,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
     <div>
       {attrs.map((attr) => {
         const draft = drafts[attr.attr_id] || emptyDraft();
-        const optionIds = attr.values
-          .filter((item) => !isCustomOption(item))
-          .map((item) => item.attr_val_id);
+        const optionIds = attr.values.map((item) => item.attr_val_id);
         const allChecked =
           optionIds.length > 0 &&
           optionIds.every((id) => draft.checkedValues.includes(id));
@@ -687,12 +692,10 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                           customChecked: false,
                         })
                       }
-                      options={attr.values
-                        .filter((item) => !isCustomOption(item))
-                        .map((item) => ({
-                          value: item.attr_val_id,
-                          label: valueLabel(item),
-                        }))}
+                      options={attr.values.map((item) => ({
+                        value: item.attr_val_id,
+                        label: valueLabel(item),
+                      }))}
                       style={{ maxWidth: 480, width: '100%', minWidth: 280 }}
                     />
                     {canCustom ? (
@@ -737,9 +740,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                         {selectAllText}
                       </Checkbox>
                     ) : null}
-                    {attr.values
-                      .filter((item) => !isCustomOption(item))
-                      .map((item) => {
+                    {attr.values.map((item) => {
                         const pic = showPic
                           ? buildDhImageUrl(item.pic_url)
                           : undefined;

@@ -214,11 +214,6 @@ export function SeedProductSelectTable({
     [stores],
   );
 
-  const storeNameMap = useMemo(
-    () => Object.fromEntries(stores.map((store) => [store.id, store.name])),
-    [stores],
-  );
-
   const stateValueEnum = useMemo(
     () =>
       Object.fromEntries(
@@ -376,8 +371,7 @@ export function SeedProductSelectTable({
       search: false,
       width: 140,
       ellipsis: true,
-      render: (_, record) =>
-        storeNameMap[record.store_id] || String(record.store_id),
+      render: (_, record) => record.store_name || '-',
     },
     {
       title: intl.formatMessage({

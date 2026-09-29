@@ -31,6 +31,9 @@ type ProductImagesEditorProps = {
   onChange?: (images: DhProductImgPublic[]) => void;
 };
 
+/** uid 只跟列表下标绑定，微调改 md5/url 时不能变，否则 Upload 会叠出重复项 */
+const IMG_UID_PREFIX = 'product-img-';
+
 function cloneImg(img: DhProductImgPublic): DhProductImgPublic {
   return {
     img_url: img.img_url ?? null,
@@ -43,8 +46,16 @@ function hasTweakOriginal(img: DhProductImgPublic) {
   return Boolean(img.original?.img_url && img.img_url);
 }
 
-function getImgUid(img: DhProductImgPublic, index: number) {
-  return String(img.img_md5 || img.img_url || `img-${index}`);
+function getImgUid(_img: DhProductImgPublic, index: number) {
+  return `${IMG_UID_PREFIX}${index}`;
+}
+
+function parseImgUid(uid: string): number {
+  if (!uid.startsWith(IMG_UID_PREFIX)) {
+    return -1;
+  }
+  const index = Number(uid.slice(IMG_UID_PREFIX.length));
+  return Number.isInteger(index) && index >= 0 ? index : -1;
 }
 
 const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
@@ -84,8 +95,10 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
     [list],
   );
 
-  const findIndexByUid = (uid: string) =>
-    list.findIndex((img, index) => getImgUid(img, index) === uid);
+  const findIndexByUid = (uid: string) => {
+    const index = parseImgUid(uid);
+    return index >= 0 && index < list.length ? index : -1;
+  };
 
   const handleTweak = async (uid: string) => {
     const index = findIndexByUid(uid);
@@ -211,6 +224,8 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
         fileList={fileList}
         disabled={disabled || uploading}
         customRequest={customRequest}
+        // 完全受控：列表只由 props/onChange(业务) 驱动，避免内部合并叠出重复项
+        onChange={() => undefined}
         onPreview={(file) => {
           if (!file.url) {
             return;
@@ -223,7 +238,8 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
             return false;
           }
           handleDelete(file.uid);
-          return true;
+          // false：阻止 Upload 再改内部 fileList，删除结果以受控 props 为准
+          return false;
         }}
         onDownload={(file) => {
           if (disabled) {

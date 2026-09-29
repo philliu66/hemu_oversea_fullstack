@@ -1,18 +1,4 @@
 export const SUPPLIER_LIST_PATH = '/supplier/list';
-export const SUPPLIER_CREATE_PATH = '/supplier/create';
-
-export function supplierDetailPath(id: number) {
-  return `/supplier/detail/${id}`;
-}
-
-export function supplierEditPath(id: number) {
-  return `/supplier/edit/${id}`;
-}
-
-export function parseSupplierId(value?: string) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : undefined;
-}
 
 export function confirmPasswordValidator(
   getFieldValue: (name: string) => unknown,

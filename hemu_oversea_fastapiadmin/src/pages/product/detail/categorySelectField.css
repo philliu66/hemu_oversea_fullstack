@@ -1,0 +1,134 @@
+.hm-category-select-field {
+  width: 100%;
+}
+
+.hm-category-select-option {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hm-category-path-text {
+  display: inline-block;
+  max-width: 420px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #a0522d;
+  vertical-align: middle;
+}
+
+.hm-category-modal-search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.hm-category-modal-path {
+  margin-bottom: 10px;
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.hm-category-columns {
+  display: flex;
+  gap: 0;
+  min-height: 320px;
+  max-height: 420px;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.hm-category-column {
+  flex: 1;
+  min-width: 0;
+  border-right: 1px solid #f0f0f0;
+  background: #fff;
+}
+
+.hm-category-column:last-child {
+  border-right: none;
+}
+
+.hm-category-column-body {
+  height: 100%;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.hm-category-column-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  line-height: 22px;
+}
+
+.hm-category-column-item:hover {
+  background: #f5f5f5;
+}
+
+.hm-category-column-item.is-active {
+  background: #e6f4ff;
+  box-shadow: inset 3px 0 0 #1677ff;
+}
+
+.hm-category-column-item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hm-category-column-item-arrow {
+  flex-shrink: 0;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.hm-category-search-list {
+  min-height: 320px;
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
+.hm-category-search-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid #f5f5f5;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  line-height: 22px;
+  word-break: break-all;
+}
+
+.hm-category-search-item:hover {
+  background: #f5f5f5;
+}
+
+.hm-category-search-hit {
+  color: #cf1322;
+}
+
+.hm-category-empty {
+  padding: 48px 16px;
+  color: rgba(0, 0, 0, 0.45);
+  text-align: center;
+}

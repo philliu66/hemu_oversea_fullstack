@@ -10,7 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, defer
+from sqlalchemy.orm import Session, defer, joinedload
 
 from app.core.deps import Pagination
 from app.core.errors import bad_request, not_found
@@ -122,9 +122,12 @@ def _dh_product_state_label(state: str | None) -> str | None:
 
 
 def _to_dh_product_public(row: ProductDh) -> DhProductPublic:
+    store = row.__dict__.get("store")
+    store_name = store.name if store is not None else None
     data = DhProductPublic.model_validate(row)
     return data.model_copy(
         update={
+            "store_name": store_name,
             "main_image_url": _build_dh_main_image_url(row.main_image_url),
             "state": _dh_product_state_label(row.state),
         }
@@ -396,11 +399,16 @@ def _orphan_dh_seed_category(
     )
 
 
-def _seed_product_counts_by_cate_pub_id(db: Session) -> dict[str, int]:
+def _seed_product_counts_by_cate_pub_id(
+    db: Session,
+    *,
+    supplier_id: int,
+) -> dict[str, int]:
     """product_dh 中 is_seed=1 按 cate_pub_id groupby 的商品数。"""
     rows = db.execute(
         select(ProductDh.cate_pub_id, func.count())
         .where(
+            ProductDh.supplier_id == supplier_id,
             ProductDh.is_seed == "1",
             ProductDh.cate_pub_id.isnot(None),
             ProductDh.cate_pub_id != "",
@@ -418,6 +426,8 @@ def _seed_product_counts_by_cate_pub_id(db: Session) -> dict[str, int]:
 
 def _build_dh_seed_category_index(
     db: Session,
+    *,
+    supplier_id: int,
 ) -> tuple[
     dict[str, int],
     dict[str, ProductCategoryDh],
@@ -433,7 +443,7 @@ def _build_dh_seed_category_index(
     - children_map: 父 cate_pub_id → 直接子类目
     - subtree_counts: 各类目种子商品数（含全部下级汇总）
     """
-    own_counts = _seed_product_counts_by_cate_pub_id(db)
+    own_counts = _seed_product_counts_by_cate_pub_id(db, supplier_id=supplier_id)
     rows = db.scalars(select(ProductCategoryDh)).all()
     by_pub_id: dict[str, ProductCategoryDh] = {
         row.cate_pub_id: row for row in rows
@@ -484,6 +494,7 @@ def list_dh_seed_categories_by_parent(
     db: Session,
     *,
     parent_id: str | None,
+    supplier_id: int,
 ) -> list[DhSeedCategoryPublic]:
     """
     按父类目查询种子商品涉及的直接子类目（一层）。
@@ -500,7 +511,7 @@ def list_dh_seed_categories_by_parent(
         is_root = False
 
     own_counts, by_pub_id, children_map, subtree_counts = (
-        _build_dh_seed_category_index(db)
+        _build_dh_seed_category_index(db, supplier_id=supplier_id)
     )
 
     items: list[DhSeedCategoryPublic] = []
@@ -558,14 +569,19 @@ def list_dh_seed_categories_by_parent(
     return items
 
 
-def _cate_pub_ids_for_product_filter(db: Session, cate_pub_id: str) -> list[str]:
+def _cate_pub_ids_for_product_filter(
+    db: Session,
+    cate_pub_id: str,
+    *,
+    supplier_id: int,
+) -> list[str]:
     """选中类目及其全部下级 cate_pub_id（含自身）。"""
     selected = str(cate_pub_id).strip()
     if not selected:
         return []
 
     _own_counts, _by_pub_id, children_map, _subtree_counts = (
-        _build_dh_seed_category_index(db)
+        _build_dh_seed_category_index(db, supplier_id=supplier_id)
     )
     collected: list[str] = []
     seen: set[str] = set()
@@ -1025,6 +1041,7 @@ def _list_product_spec_self_defs(
 def list_dh_products(
     db: Session,
     *,
+    supplier_id: int,
     list_type: int,
     state: str | None,
     item_code: str | None,
@@ -1035,7 +1052,7 @@ def list_dh_products(
     pagination: Pagination,
 ) -> PageData[DhProductPublic]:
     """分页查询敦煌商品（product_dh）。"""
-    filters = []
+    filters = [ProductDh.supplier_id == supplier_id]
     # list_type: 0=全部，1=仅种子商品
     if list_type == 1:
         filters.append(ProductDh.is_seed == "1")
@@ -1049,17 +1066,18 @@ def list_dh_products(
     if store_id is not None:
         filters.append(ProductDh.store_id == store_id)
     if cate_pub_id is not None and str(cate_pub_id).strip():
-        cate_ids = _cate_pub_ids_for_product_filter(db, str(cate_pub_id).strip())
+        cate_ids = _cate_pub_ids_for_product_filter(
+            db,
+            str(cate_pub_id).strip(),
+            supplier_id=supplier_id,
+        )
         if cate_ids:
             filters.append(ProductDh.cate_pub_id.in_(cate_ids))
         else:
             filters.append(ProductDh.cate_pub_id == str(cate_pub_id).strip())
 
-    count_stmt = select(func.count()).select_from(ProductDh)
-    stmt = select(ProductDh)
-    if filters:
-        count_stmt = count_stmt.where(*filters)
-        stmt = stmt.where(*filters)
+    count_stmt = select(func.count()).select_from(ProductDh).where(*filters)
+    stmt = select(ProductDh).where(*filters)
 
     total = db.scalar(count_stmt) or 0
 
@@ -1071,11 +1089,15 @@ def list_dh_products(
     )
 
     rows = db.scalars(
-        stmt.options(defer(ProductDh.raw_json), defer(ProductDh.sku_json))
+        stmt.options(
+            joinedload(ProductDh.store),
+            defer(ProductDh.raw_json),
+            defer(ProductDh.sku_json),
+        )
         .order_by(order_expr, ProductDh.id.desc())
         .offset(pagination.offset)
         .limit(pagination.page_size)
-    ).all()
+    ).unique().all()
 
     return PageData(
         items=[_to_dh_product_public(row) for row in rows],

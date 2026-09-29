@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.deps import Pagination, require_admin_user, require_supplier_admin
+from app.core.deps import Pagination, require_admin_user, require_perm
 from app.models.user import User
 from app.schemas.common import ApiResponse, PageData, success
 from app.schemas.supplier_staff import (
@@ -25,7 +25,7 @@ router = APIRouter(
 @router.post("/list", response_model=ApiResponse[PageData[UserPublic]])
 def list_staff(
     payload: SupplierStaffList,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("personnel.staff")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[PageData[UserPublic]]:
     pagination = Pagination(page=payload.page, page_size=payload.page_size)
@@ -42,58 +42,63 @@ def list_staff(
 @router.post("/create", status_code=201, response_model=ApiResponse[UserPublic])
 def create_staff(
     payload: SupplierStaffCreate,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("personnel.staff.create")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[UserPublic]:
-    user = staff_service.create_staff(
-        db,
-        actor=current_user,
-        username=payload.username,
-        password=payload.password,
-        email=payload.email,
-        nickname=payload.nickname,
-        phone=payload.phone,
+    return success(
+        staff_service.create_staff(
+            db,
+            actor=current_user,
+            username=payload.username,
+            password=payload.password,
+            email=payload.email,
+            nickname=payload.nickname,
+            phone=payload.phone,
+            role_ids=payload.role_ids,
+        )
     )
-    return success(UserPublic.model_validate(user))
 
 
 @router.post("/update", response_model=ApiResponse[UserPublic])
 def update_staff(
     payload: SupplierStaffUpdate,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("personnel.staff.update")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[UserPublic]:
-    user = staff_service.update_staff(
-        db,
-        actor=current_user,
-        staff_id=payload.id,
-        nickname=payload.nickname,
-        email=payload.email,
-        phone=payload.phone,
-        password=payload.password,
+    return success(
+        staff_service.update_staff(
+            db,
+            actor=current_user,
+            staff_id=payload.id,
+            nickname=payload.nickname,
+            email=payload.email,
+            phone=payload.phone,
+            password=payload.password,
+            role_ids=payload.role_ids,
+        )
     )
-    return success(UserPublic.model_validate(user))
 
 
 @router.post("/status", response_model=ApiResponse[UserPublic])
 def update_staff_status(
     payload: SupplierStaffStatusUpdate,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("personnel.staff.update")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[UserPublic]:
-    user = staff_service.set_staff_active(
-        db,
-        actor=current_user,
-        staff_id=payload.id,
-        is_active=payload.is_active,
+    return success(
+        staff_service.set_staff_active(
+            db,
+            actor=current_user,
+            staff_id=payload.id,
+            is_active=payload.is_active,
+        )
     )
-    return success(UserPublic.model_validate(user))
 
 
 @router.post("/delete", response_model=ApiResponse[dict])
 def delete_staff(
     payload: SupplierStaffDelete,
-    current_user: User = Depends(require_supplier_admin),
+    current_user: User = Depends(require_perm("personnel.staff.delete")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
     staff_service.soft_delete_staff(

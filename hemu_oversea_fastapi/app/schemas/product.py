@@ -204,6 +204,7 @@ class DhProductPublic(BaseModel):
 
     id: int
     store_id: int = Field(description="店铺 ID")
+    store_name: str | None = Field(default=None, description="店铺名称")
     item_code: str = Field(description="商品编码")
     site_id: str = Field(description="站点语言")
     is_seed: str = Field(description="是否种子：1=是，0=否")

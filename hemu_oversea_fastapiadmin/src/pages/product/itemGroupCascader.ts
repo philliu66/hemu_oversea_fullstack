@@ -58,7 +58,32 @@ export function findItemGroupPath(
   return undefined;
 }
 
-/** 按完整路径从 options 解析展示名；任一节对不上或没有真实名称则返回空串（绝不回退成 ID）。 */
+/**
+ * 分组树里找不到当前 item_group_id 时，补一个叶子选项，避免 Cascader 初始空白。
+ * 常见于本地分组尚未完整同步，或平台侧分组已删但商品仍挂着旧 ID。
+ */
+export function withFallbackGroupOption(
+  options: ItemGroupCascaderOption[],
+  groupId: string | null | undefined,
+): ItemGroupCascaderOption[] {
+  const id = String(groupId || '').trim();
+  if (!id) {
+    return options;
+  }
+  if (findItemGroupPath(options, id)) {
+    return options;
+  }
+  return [
+    ...options,
+    {
+      value: id,
+      label: id,
+      isLeaf: true,
+    },
+  ];
+}
+
+/** 按完整路径从 options 解析展示名。 */
 export function resolveItemGroupLabels(
   options: ItemGroupCascaderOption[],
   path: string[] | undefined,
@@ -71,17 +96,14 @@ export function resolveItemGroupLabels(
   for (const raw of path) {
     const value = String(raw || '').trim();
     if (!value || !level?.length) {
-      return '';
+      return labels.length ? labels.join(' / ') : value;
     }
     const hit = level.find((item) => item.value === value);
     if (!hit) {
-      return '';
+      // 树里对不上时，至少把已解析到的名称 + 当前 ID 拼出来，避免整框空白
+      return [...labels, value].join(' / ');
     }
-    const label = String(hit.label ?? '').trim();
-    // groupDisplayName 在无中英文名时会回退成 group_id，这种展示要避免
-    if (!label || label === value) {
-      return '';
-    }
+    const label = String(hit.label ?? '').trim() || value;
     labels.push(label);
     level = hit.children;
   }

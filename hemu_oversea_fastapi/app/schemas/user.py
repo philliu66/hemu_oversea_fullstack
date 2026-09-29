@@ -68,3 +68,5 @@ class UserPublic(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    permission_codes: list[str] = Field(default_factory=list)
+    roles: list[dict] = Field(default_factory=list)

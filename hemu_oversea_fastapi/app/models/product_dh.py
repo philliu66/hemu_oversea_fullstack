@@ -4,12 +4,17 @@
 """
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.store import Store
+    from app.models.supplier import Supplier
 
 
 class ProductDh(Base):
@@ -24,6 +29,7 @@ class ProductDh(Base):
             name="uq_product_dh_store_item_site",
         ),
         Index("ix_product_dh_store_id", "store_id"),
+        Index("ix_product_dh_supplier_id", "supplier_id"),
         Index("ix_product_dh_cate_pub_id", "cate_pub_id"),
         Index("ix_product_dh_state", "state"),
         Index("ix_product_dh_is_seed", "is_seed"),
@@ -31,6 +37,11 @@ class ProductDh(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    supplier_id: Mapped[int] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="归属供应商 ID",
+    )
     store_id: Mapped[int] = mapped_column(
         ForeignKey("stores.id", ondelete="CASCADE"),
         nullable=False,
@@ -93,4 +104,15 @@ class ProductDh(Base):
         DateTime(timezone=True),
         nullable=True,
         comment="最近一次详情同步时间",
+    )
+
+    store: Mapped["Store"] = relationship(
+        "Store",
+        foreign_keys=[store_id],
+        lazy="raise",
+    )
+    supplier: Mapped["Supplier"] = relationship(
+        "Supplier",
+        foreign_keys=[supplier_id],
+        lazy="raise",
     )

@@ -32,9 +32,12 @@ router = APIRouter(
 @router.get("/me", response_model=ApiResponse[UserPublic])
 def read_me(
     current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
 ) -> ApiResponse[UserPublic]:
     """获取当前登录的管理端用户信息（刷新页面后可据此恢复前端状态）。"""
-    return success(UserPublic.model_validate(current_user))
+    from app.services import permissions as perm_service
+
+    return success(UserPublic(**perm_service.to_user_public_dict(current_user, db)))
 
 
 @router.get(

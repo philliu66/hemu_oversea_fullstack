@@ -20,6 +20,7 @@ from app.models.refresh_session import RefreshSession
 from app.models.user import User
 from app.schemas.auth import AuthLoginResponse, TokenPair
 from app.schemas.user import UserPublic
+from app.services import permissions as perm_service
 
 APP_ROLES: frozenset[str] = frozenset(role.value for role in APP_PORTAL_ROLES)
 ADMIN_ROLES: frozenset[str] = frozenset(role.value for role in ADMIN_PORTAL_ROLES)
@@ -90,7 +91,7 @@ def login_for_audience(
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
         token_type=tokens.token_type,
-        user=UserPublic.model_validate(user),
+        user=UserPublic(**perm_service.to_user_public_dict(user, db)),
     )
 
 

@@ -17,6 +17,10 @@ class SupplierCreate(BaseModel):
         max_length=128,
         description="供应商默认管理员明文密码",
     )
+    permission_codes: list[str] = Field(
+        min_length=1,
+        description="分配给该供应商的权限码列表",
+    )
 
 
 class SupplierUpdate(BaseModel):
@@ -24,6 +28,10 @@ class SupplierUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     phone: str | None = Field(default=None, min_length=5, max_length=20)
     email: str | None = Field(default=None, min_length=3, max_length=255)
+    permission_codes: list[str] | None = Field(
+        default=None,
+        description="更新供应商权限池；不传则不改",
+    )
 
 
 class SupplierDelete(BaseModel):
@@ -57,3 +65,4 @@ class SupplierDetailPublic(SupplierPublic):
     """供应商详情：额外返回默认管理员账号（不含密码）。"""
 
     admin_username: str | None = None
+    permission_codes: list[str] = Field(default_factory=list)

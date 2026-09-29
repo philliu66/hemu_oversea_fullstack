@@ -131,6 +131,15 @@ def _main_image_url(detail: dict[str, Any]) -> str | None:
     return None
 
 
+def _supplier_id_for_store(db: Session, store_id: int) -> int:
+    store = db.get(Store, store_id)
+    if store is None or store.is_deleted:
+        raise bad_request("店铺不存在")
+    if store.supplier_id is None:
+        raise bad_request("店铺未绑定供应商")
+    return store.supplier_id
+
+
 def _upsert_product_row(
     db: Session,
     *,
@@ -141,7 +150,9 @@ def _upsert_product_row(
     is_seed: str = "1",
 ) -> ProductDh:
     item_base = detail.get("itemBase") if isinstance(detail.get("itemBase"), dict) else {}
+    supplier_id = _supplier_id_for_store(db, store_id)
     values = {
+        "supplier_id": supplier_id,
         "cate_pub_id": _as_str(detail.get("catePubId")),
         "state": _as_str(detail.get("state")),
         "item_name": _as_str(item_base.get("itemName")),
@@ -188,10 +199,12 @@ def mark_product_sync_failed(
         raise bad_request("item_code 不能为空")
 
     now = datetime.now(_BJ)
+    supplier_id = _supplier_id_for_store(db, store_id)
     row = _get_product_row(db, store_id=store_id, item_code=code, site_id=site)
     if row is None:
         row = ProductDh(
             store_id=store_id,
+            supplier_id=supplier_id,
             item_code=code,
             site_id=site,
             is_seed=is_seed,
@@ -200,6 +213,7 @@ def mark_product_sync_failed(
         )
         db.add(row)
     else:
+        row.supplier_id = supplier_id
         row.sync_state = _SYNC_FAIL
         row.last_synced_at = now
         if is_seed == "1":

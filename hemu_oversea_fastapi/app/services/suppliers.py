@@ -64,9 +64,12 @@ def create_supplier(
     email: str,
     admin_username: str,
     admin_password: str,
+    permission_codes: list[str],
     created_by: int,
 ) -> Supplier:
     """创建供应商，并同步创建该供应商的默认管理员账号。"""
+    from app.services import permissions as perm_service
+
     code = _generate_unique_code(db)
     supplier = Supplier(
         code=code,
@@ -78,6 +81,11 @@ def create_supplier(
     db.add(supplier)
     try:
         db.flush()
+        perm_service.replace_supplier_pool(
+            db,
+            supplier_id=supplier.id,
+            permission_codes=permission_codes,
+        )
         user_service.create_user(
             db,
             username=admin_username,
@@ -159,7 +167,10 @@ def update_supplier(
     name: str | None = None,
     phone: str | None = None,
     email: str | None = None,
+    permission_codes: list[str] | None = None,
 ) -> Supplier:
+    from app.services import permissions as perm_service
+
     supplier = _get_alive_supplier(db, supplier_id)
     if name is not None:
         supplier.name = name
@@ -167,6 +178,12 @@ def update_supplier(
         supplier.phone = phone
     if email is not None:
         supplier.email = email
+    if permission_codes is not None:
+        perm_service.replace_supplier_pool(
+            db,
+            supplier_id=supplier.id,
+            permission_codes=permission_codes,
+        )
     try:
         db.commit()
         db.refresh(supplier)

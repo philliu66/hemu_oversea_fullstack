@@ -1,0 +1,281 @@
+"""权限目录种子数据。code 与前端 routeId / 按钮码对齐。"""
+
+from __future__ import annotations
+
+from typing import TypedDict
+
+
+class PermissionSeed(TypedDict):
+    code: str
+    parent_code: str | None
+    type: str  # menu | button
+    title: str
+    path: str | None
+    scope: str  # platform | supplier | common
+    sort_order: int
+
+
+# 扁平列表，parent_code 指向同表 code；插入时按依赖序处理。
+PERMISSION_SEEDS: list[PermissionSeed] = [
+    # common
+    {
+        "code": "personnel",
+        "parent_code": None,
+        "type": "menu",
+        "title": "人员管理",
+        "path": "/personnel",
+        "scope": "common",
+        "sort_order": 60,
+    },
+    {
+        "code": "personnel.staff",
+        "parent_code": "personnel",
+        "type": "menu",
+        "title": "员工管理",
+        "path": "/personnel/staff",
+        "scope": "common",
+        "sort_order": 61,
+    },
+    {
+        "code": "personnel.role",
+        "parent_code": "personnel",
+        "type": "menu",
+        "title": "角色管理",
+        "path": "/personnel/role",
+        "scope": "common",
+        "sort_order": 62,
+    },
+    {
+        "code": "personnel.staff.create",
+        "parent_code": "personnel.staff",
+        "type": "button",
+        "title": "新建员工",
+        "path": None,
+        "scope": "common",
+        "sort_order": 611,
+    },
+    {
+        "code": "personnel.staff.update",
+        "parent_code": "personnel.staff",
+        "type": "button",
+        "title": "编辑员工",
+        "path": None,
+        "scope": "common",
+        "sort_order": 612,
+    },
+    {
+        "code": "personnel.staff.delete",
+        "parent_code": "personnel.staff",
+        "type": "button",
+        "title": "删除员工",
+        "path": None,
+        "scope": "common",
+        "sort_order": 613,
+    },
+    {
+        "code": "personnel.role.create",
+        "parent_code": "personnel.role",
+        "type": "button",
+        "title": "新建角色",
+        "path": None,
+        "scope": "common",
+        "sort_order": 621,
+    },
+    {
+        "code": "personnel.role.update",
+        "parent_code": "personnel.role",
+        "type": "button",
+        "title": "编辑角色",
+        "path": None,
+        "scope": "common",
+        "sort_order": 622,
+    },
+    {
+        "code": "personnel.role.delete",
+        "parent_code": "personnel.role",
+        "type": "button",
+        "title": "删除角色",
+        "path": None,
+        "scope": "common",
+        "sort_order": 623,
+    },
+    # platform
+    {
+        "code": "supplier",
+        "parent_code": None,
+        "type": "menu",
+        "title": "供应商管理",
+        "path": "/supplier",
+        "scope": "platform",
+        "sort_order": 20,
+    },
+    {
+        "code": "supplier.list",
+        "parent_code": "supplier",
+        "type": "menu",
+        "title": "供应商列表",
+        "path": "/supplier/list",
+        "scope": "platform",
+        "sort_order": 21,
+    },
+    {
+        "code": "supplier.create",
+        "parent_code": "supplier.list",
+        "type": "button",
+        "title": "新建供应商",
+        "path": None,
+        "scope": "platform",
+        "sort_order": 211,
+    },
+    {
+        "code": "supplier.update",
+        "parent_code": "supplier.list",
+        "type": "button",
+        "title": "编辑供应商",
+        "path": None,
+        "scope": "platform",
+        "sort_order": 212,
+    },
+    {
+        "code": "supplier.delete",
+        "parent_code": "supplier.list",
+        "type": "button",
+        "title": "删除供应商",
+        "path": None,
+        "scope": "platform",
+        "sort_order": 213,
+    },
+    # supplier business
+    {
+        "code": "store",
+        "parent_code": None,
+        "type": "menu",
+        "title": "店铺管理",
+        "path": "/store",
+        "scope": "supplier",
+        "sort_order": 30,
+    },
+    {
+        "code": "store.list",
+        "parent_code": "store",
+        "type": "menu",
+        "title": "店铺列表",
+        "path": "/store/list",
+        "scope": "supplier",
+        "sort_order": 31,
+    },
+    {
+        "code": "store.inspection",
+        "parent_code": "store",
+        "type": "menu",
+        "title": "店铺巡检",
+        "path": "/store/inspection",
+        "scope": "supplier",
+        "sort_order": 32,
+    },
+    {
+        "code": "product",
+        "parent_code": None,
+        "type": "menu",
+        "title": "商品管理",
+        "path": "/product",
+        "scope": "supplier",
+        "sort_order": 40,
+    },
+    {
+        "code": "product.list",
+        "parent_code": "product",
+        "type": "menu",
+        "title": "商品列表",
+        "path": "/product/list",
+        "scope": "supplier",
+        "sort_order": 41,
+    },
+    {
+        "code": "product.category",
+        "parent_code": "product",
+        "type": "menu",
+        "title": "商品分类",
+        "path": "/product/category",
+        "scope": "supplier",
+        "sort_order": 42,
+    },
+    {
+        "code": "product.seedCategory",
+        "parent_code": "product",
+        "type": "menu",
+        "title": "种子商品分类",
+        "path": "/product/seed-category",
+        "scope": "supplier",
+        "sort_order": 43,
+    },
+    {
+        "code": "mission",
+        "parent_code": None,
+        "type": "menu",
+        "title": "任务管理",
+        "path": "/mission",
+        "scope": "supplier",
+        "sort_order": 50,
+    },
+    {
+        "code": "mission.fission",
+        "parent_code": "mission",
+        "type": "menu",
+        "title": "商品裂变",
+        "path": "/mission/fission",
+        "scope": "supplier",
+        "sort_order": 51,
+    },
+    {
+        "code": "mission.fission.create",
+        "parent_code": "mission.fission",
+        "type": "button",
+        "title": "新建裂变任务",
+        "path": None,
+        "scope": "supplier",
+        "sort_order": 511,
+    },
+    {
+        "code": "mission.fission.finish",
+        "parent_code": "mission.fission",
+        "type": "button",
+        "title": "标记结束",
+        "path": None,
+        "scope": "supplier",
+        "sort_order": 512,
+    },
+    {
+        "code": "mission.fission.data",
+        "parent_code": "mission.fission",
+        "type": "button",
+        "title": "设置任务数据",
+        "path": None,
+        "scope": "supplier",
+        "sort_order": 513,
+    },
+]
+
+# 默认平台员工角色应具备的权限码
+DEFAULT_PLATFORM_STAFF_PERMISSION_CODES: frozenset[str] = frozenset(
+    {
+        "supplier",
+        "supplier.list",
+        "supplier.create",
+        "supplier.update",
+        "personnel",
+        "personnel.staff",
+        "personnel.staff.create",
+        "personnel.staff.update",
+        "personnel.staff.delete",
+        "personnel.role",
+        "personnel.role.create",
+        "personnel.role.update",
+        "personnel.role.delete",
+    }
+)
+
+DEFAULT_PLATFORM_STAFF_ROLE_NAME = "默认平台员工"
+
+SUPPLIER_POOL_SCOPES: frozenset[str] = frozenset({"supplier", "common"})
+PLATFORM_TREE_SCOPES: frozenset[str] = frozenset({"platform", "common"})

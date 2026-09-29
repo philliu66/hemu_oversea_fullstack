@@ -101,3 +101,30 @@ export async function fetchDhCategoryAttrs(
     '获取分类属性失败',
   );
 }
+
+/** POST /api/v1/admin/categories/dh/search */
+export async function fetchDhCategorySearch(
+  params: {
+    keyword: string;
+    leaf_only?: boolean;
+    limit?: number;
+  },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<DhCategoryPublic[]>>(
+    AdminCategoryApi.DH_SEARCH,
+    {
+      method: 'POST',
+      data: {
+        keyword: params.keyword,
+        leaf_only: params.leaf_only ?? true,
+        limit: params.limit ?? 50,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhCategoryPublic[]>(res),
+    '搜索商品分类失败',
+  );
+}

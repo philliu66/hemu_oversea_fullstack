@@ -213,14 +213,6 @@ const ProductList: React.FC = () => {
     [stores],
   );
 
-  const storeNameMap = useMemo(
-    () =>
-      Object.fromEntries(
-        stores.map((store) => [store.id, store.name]),
-      ) as Record<number, string>,
-    [stores],
-  );
-
   const stateValueEnum = useMemo(
     () =>
       Object.fromEntries(
@@ -383,8 +375,7 @@ const ProductList: React.FC = () => {
       search: false,
       width: 140,
       ellipsis: true,
-      render: (_, record) =>
-        storeNameMap[record.store_id] || String(record.store_id),
+      render: (_, record) => record.store_name || '-',
     },
     {
       title: intl.formatMessage({

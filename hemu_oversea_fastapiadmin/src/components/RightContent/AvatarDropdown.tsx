@@ -41,17 +41,9 @@ const loginOut = async () => {
   } catch {
     // Local logout has already cleared user state; redirect should still proceed.
   }
-  const { search, pathname } = window.location;
-  const urlParams = new URL(window.location.href).searchParams;
-  const searchParams = new URLSearchParams({
-    redirect: pathname + search,
-  });
-  const redirect = urlParams.get('redirect');
-  if (window.location.pathname !== '/user/login' && !redirect) {
-    history.replace({
-      pathname: '/user/login',
-      search: searchParams.toString(),
-    });
+  // 退出不保留原路由，重新登录默认进首页，避免换账号后无菜单权限报错
+  if (window.location.pathname !== '/user/login') {
+    history.replace('/user/login');
   }
 };
 

@@ -1,9 +1,9 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, useIntl } from '@umijs/max';
+import { useIntl } from '@umijs/max';
 import { App, Button, Popconfirm, Space, Tag } from 'antd';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
   STORE_OAUTH_RESULT_MESSAGE_TYPE,
@@ -22,7 +22,10 @@ import {
 import type { StorePublic, StoreType } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
 import { openAuthorizeWindow } from '../openAuthorizeWindow';
-import { STORE_CREATE_PATH, storeDetailPath, storeEditPath } from '../utils';
+import {
+  StoreFormDrawer,
+  type StoreDrawerMode,
+} from './StoreFormDrawer';
 
 type StoreTableParams = {
   current?: number;
@@ -43,6 +46,9 @@ const StoreList: React.FC = () => {
   const intl = useIntl();
   const { message } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<StoreDrawerMode>('create');
+  const [activeId, setActiveId] = useState<number>();
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -86,6 +92,29 @@ const StoreList: React.FC = () => {
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [intl, message]);
+
+  const openCreate = () => {
+    setActiveId(undefined);
+    setDrawerMode('create');
+    setDrawerOpen(true);
+  };
+
+  const openView = (id: number) => {
+    setActiveId(id);
+    setDrawerMode('view');
+    setDrawerOpen(true);
+  };
+
+  const openEdit = (id: number) => {
+    setActiveId(id);
+    setDrawerMode('edit');
+    setDrawerOpen(true);
+  };
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setActiveId(undefined);
+  };
 
   const storeTypeValueEnum = Object.fromEntries(
     STORE_TYPES.map((type) => [
@@ -177,7 +206,7 @@ const StoreList: React.FC = () => {
           <Button
             type="link"
             style={{ paddingInline: 0 }}
-            onClick={() => history.push(storeDetailPath(entity.id))}
+            onClick={() => openView(entity.id)}
           >
             {entity.name}
           </Button>
@@ -244,21 +273,13 @@ const StoreList: React.FC = () => {
       width: 180,
       render: (_, record) => (
         <Space size={0} wrap>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => history.push(storeDetailPath(record.id))}
-          >
+          <Button type="link" size="small" onClick={() => openView(record.id)}>
             {intl.formatMessage({
               id: 'pages.store.action.detail',
               defaultMessage: '查看',
             })}
           </Button>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => history.push(storeEditPath(record.id))}
-          >
+          <Button type="link" size="small" onClick={() => openEdit(record.id)}>
             {intl.formatMessage({
               id: 'pages.store.action.edit',
               defaultMessage: '编辑',
@@ -328,7 +349,7 @@ const StoreList: React.FC = () => {
             type="primary"
             key="create"
             icon={<PlusOutlined />}
-            onClick={() => history.push(STORE_CREATE_PATH)}
+            onClick={openCreate}
           >
             {intl.formatMessage({
               id: 'pages.store.action.create',
@@ -338,18 +359,14 @@ const StoreList: React.FC = () => {
         ]}
         request={async (params) => {
           try {
-            const storeType =
-              params.store_type &&
-              STORE_TYPES.includes(
-                params.store_type as (typeof STORE_TYPES)[number],
-              )
-                ? (params.store_type as StoreType)
-                : undefined;
             const result = await fetchStoreList({
               page: params.current,
               page_size: params.pageSize,
               keyword: params.keyword?.trim() || undefined,
-              store_type: storeType,
+              store_type:
+                typeof params.store_type === 'string' && params.store_type
+                  ? (params.store_type as StoreType)
+                  : undefined,
             });
             return {
               data: result.items,
@@ -365,6 +382,19 @@ const StoreList: React.FC = () => {
           }
         }}
         columns={columns}
+      />
+
+      <StoreFormDrawer
+        open={drawerOpen}
+        mode={drawerMode}
+        storeId={activeId}
+        onClose={closeDrawer}
+        onSuccess={() => actionRef.current?.reload()}
+        onSwitchToEdit={
+          drawerMode === 'view' && activeId
+            ? () => setDrawerMode('edit')
+            : undefined
+        }
       />
     </PageContainer>
   );

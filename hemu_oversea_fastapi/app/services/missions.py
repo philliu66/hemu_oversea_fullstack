@@ -33,7 +33,7 @@ from app.services.products import _build_dh_main_image_url
 
 PLACEHOLDER_MESSAGE = "功能待补充"
 
-_PLATFORM_ROLES = {Role.SUPER_ADMIN.value, Role.PLATFORM_STAFF.value}
+_PLATFORM_ROLES = {Role.PLATFORM_ADMIN.value, Role.SUPER_ADMIN.value, Role.PLATFORM_STAFF.value}
 _SUPPLIER_PORTAL_ROLES = {Role.SUPPLIER_ADMIN.value, Role.SUPPLIER_STAFF.value}
 _MARKABLE_STATUSES = {MISSION_STATUS_PENDING, MISSION_STATUS_RUNNING}
 
@@ -79,6 +79,14 @@ def _get_visible_mission(
     if existing is None or existing.is_deleted:
         raise not_found("任务不存在")
     raise forbidden("无权查看该任务")
+
+
+def _require_supplier_actor(actor: User) -> int:
+    if actor.role not in _SUPPLIER_PORTAL_ROLES:
+        raise forbidden("只有供应商账号可以操作")
+    if actor.supplier_id is None:
+        raise bad_request("当前账号未绑定供应商")
+    return actor.supplier_id
 
 
 def _require_supplier_admin(actor: User) -> int:
@@ -136,7 +144,7 @@ def create_mission(
     description: str | None,
     worker_id: int,
 ) -> MissionPublic:
-    supplier_id = _require_supplier_admin(actor)
+    supplier_id = _require_supplier_actor(actor)
     cleaned_title = title.strip()
     if not cleaned_title:
         raise bad_request("请填写任务标题")
@@ -226,7 +234,7 @@ def mark_mission_finished(
     mission_id: int,
     actor: User,
 ) -> MissionPublic:
-    supplier_id = _require_supplier_admin(actor)
+    supplier_id = _require_supplier_actor(actor)
     mission = _get_visible_mission(
         db,
         mission_id=mission_id,
@@ -447,7 +455,7 @@ def add_fission_data(
     raw_json: dict,
 ) -> MissionFissionDataPublic:
     """加入任务。seed_json 冻结种子原文，raw_json 为改完后的正文，update_json 为二者差异。"""
-    supplier_id = _require_supplier_admin(actor)
+    supplier_id = _require_supplier_actor(actor)
     mission = _get_visible_mission(
         db,
         mission_id=mission_id,
@@ -462,6 +470,8 @@ def add_fission_data(
         raise not_found("种子商品不存在")
     if product.is_seed != "1":
         raise bad_request("只能选择种子商品")
+    if product.supplier_id != supplier_id:
+        raise forbidden("只能选择本供应商的种子商品")
     store = db.get(Store, product.store_id)
     if store is None or store.is_deleted or store.supplier_id != supplier_id:
         raise forbidden("只能选择本供应商的种子商品")
@@ -513,7 +523,7 @@ def _get_mutable_fission_row(
     mission_id: int,
     data_id: int,
 ) -> MissionDataDhFission:
-    supplier_id = _require_supplier_admin(actor)
+    supplier_id = _require_supplier_actor(actor)
     mission = _get_visible_mission(
         db,
         mission_id=mission_id,

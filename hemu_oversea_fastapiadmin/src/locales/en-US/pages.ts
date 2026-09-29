@@ -70,6 +70,7 @@ export default {
   'menu.product.seedCategory': 'Seed Categories',
   'menu.personnel': 'Personnel',
   'menu.personnel.staff': 'Staff',
+  'menu.personnel.role': 'Roles',
   'menu.mission': 'Missions',
   'menu.mission.fission': 'Product Fission',
   'menu.mission.fissionData': 'Mission Data',

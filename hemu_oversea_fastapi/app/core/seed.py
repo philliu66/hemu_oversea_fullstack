@@ -27,12 +27,12 @@ def ensure_seed_users() -> None:
         password = settings.BOOTSTRAP_PASSWORD
         supplier_id = supplier.id
 
-        super_admin = _ensure_user(
+        platform_admin = _ensure_user(
             db,
             username="superadmin",
             email="superadmin@example.com",
             password=password,
-            role=Role.SUPER_ADMIN,
+            role=Role.PLATFORM_ADMIN,
             org_type=OrgType.PLATFORM,
             supplier_id=None,
             created_by=None,
@@ -45,7 +45,7 @@ def ensure_seed_users() -> None:
             role=Role.PLATFORM_STAFF,
             org_type=OrgType.PLATFORM,
             supplier_id=None,
-            created_by=super_admin.id,
+            created_by=platform_admin.id,
         )
         supplier_admin = _ensure_user(
             db,

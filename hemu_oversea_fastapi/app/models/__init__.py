@@ -3,6 +3,13 @@ from app.models.base import Base
 from app.models.captcha import Captcha
 from app.models.login_attempt import LoginAttempt
 from app.models.mission import Mission, MissionDataDhFission, MissionLog
+from app.models.permission import (
+    BizRole,
+    Permission,
+    RolePermission,
+    SupplierPermission,
+    UserRole,
+)
 from app.models.product_category_dh import ProductCategoryDh
 from app.models.product_dh import ProductDh
 from app.models.product_group_dh import ProductGroupDh
@@ -20,12 +27,17 @@ __all__ = [
     "Mission",
     "MissionDataDhFission",
     "MissionLog",
+    "BizRole",
+    "Permission",
     "ProductCategoryDh",
     "ProductDh",
     "ProductGroupDh",
     "RefreshSession",
+    "RolePermission",
     "ShippingTemplateDh",
     "Store",
     "Supplier",
+    "SupplierPermission",
     "User",
+    "UserRole",
 ]

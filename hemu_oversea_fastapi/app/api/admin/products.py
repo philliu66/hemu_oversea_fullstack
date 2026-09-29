@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.deps import Pagination, require_admin_user
+from app.core.errors import bad_request
+from app.models.user import User
 from app.schemas.common import ApiResponse, PageData, success
 from app.schemas.product import (
     DhProductDetailPublic,
@@ -28,6 +30,7 @@ router = APIRouter(
 )
 def list_dh_products(
     payload: DhProductListRequest,
+    current_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[PageData[DhProductPublic]]:
     """
@@ -38,11 +41,15 @@ def list_dh_products(
     - 支持 item_code / item_name / store_id / cate_pub_id 筛选
     - cate_pub_id：按种子商品分类树筛选，包含选中类目及其下级
     - sort：0=同步时间倒序（默认），1=同步时间正序
+    - 仅返回当前账号所属供应商的商品
     """
+    if current_user.supplier_id is None:
+        raise bad_request("当前账号未绑定供应商，无法查询商品")
     pagination = Pagination(page=payload.page, page_size=payload.page_size)
     return success(
         product_service.list_dh_products(
             db,
+            supplier_id=current_user.supplier_id,
             list_type=payload.type,
             state=payload.state,
             item_code=payload.item_code,
