@@ -15,6 +15,8 @@ from app.schemas.store import (
     StoreAftersaleTemplatePublic,
     StoreAuthorize,
     StoreAuthorizePublic,
+    StoreBaseDiscountPublic,
+    StoreBaseDiscountRequest,
     StoreCreate,
     StoreDelete,
     StoreDetail,
@@ -68,6 +70,23 @@ def detail_store(
     db: Session = Depends(get_db),
 ) -> ApiResponse[StoreDetailPublic]:
     return success(store_service.get_store_detail(db, payload.id))
+
+
+@router.post(
+    "/base-discount/get",
+    response_model=ApiResponse[StoreBaseDiscountPublic],
+    summary="查询店铺基础折扣率",
+)
+def get_store_base_discount(
+    payload: StoreBaseDiscountRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[StoreBaseDiscountPublic]:
+    """
+    按店铺 ID 查询该店基础折扣率。
+
+    返回店铺名称与 base_discount（0.00～0.99），不请求敦煌。
+    """
+    return success(store_service.get_store_base_discount(db, payload.id))
 
 
 @router.post(

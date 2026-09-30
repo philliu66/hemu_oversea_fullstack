@@ -104,9 +104,12 @@ class DhCommissionUnitPublic(BaseModel):
 
 
 class DhCommissionRatePublic(BaseModel):
-    """类目佣金率（对应 LadderCommissionRateVO / commissions_rate_dh）。"""
+    """类目佣金率（对应 LadderCommissionRateVO / commissions_rate_dh）。
 
-    cate_id: str = Field(description="类目 ID cateId")
+    官方按二级类目绑定，cate_id 为二级类目 ID。
+    """
+
+    cate_id: str = Field(description="二级类目 ID cateId")
     unit_list: list[DhCommissionUnitPublic] = Field(
         default_factory=list,
         description="阶梯佣金率 unitList",
@@ -117,7 +120,10 @@ class DhCommissionRateRequest(BaseModel):
     cate_id: str = Field(
         min_length=1,
         max_length=64,
-        description="类目 ID（对应 dh.categorys.commissions 的 cateId）",
+        description=(
+            "二级类目 ID（catePubId / cateId）；"
+            "必须传类目路径中的第二级，勿传一级或叶子类目"
+        ),
     )
 
 

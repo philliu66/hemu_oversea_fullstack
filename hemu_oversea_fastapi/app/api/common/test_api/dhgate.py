@@ -190,7 +190,7 @@ def test_sync_commission_rates(
     """
     拉取全部类目佣金率并覆盖本地 commissions_rate_dh。
 
-    - 佣金率按类目绑定，不按店铺隔离
+    - 佣金率按二级类目绑定，不按店铺隔离
     - store_id 仅用于取 access_token
     - 每次调用先清空再写入
     """

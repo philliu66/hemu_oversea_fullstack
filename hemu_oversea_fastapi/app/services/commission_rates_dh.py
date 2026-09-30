@@ -1,7 +1,7 @@
 """敦煌类目佣金率入库（commissions_rate_dh）。
 
 策略：调用 dh.categorys.commissions，清空本地表后按类目全量写入最新数据。
-佣金率跟类目走，不绑定店铺；store_id 仅用于取 access_token。
+官方佣金率按二级类目绑定；store_id 仅用于取 access_token。
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ def get_commission_rate_by_cate_id(
     *,
     cate_id: str,
 ) -> DhCommissionRatePublic:
-    """按类目 ID 查询本地佣金率。"""
+    """按二级类目 ID 查询本地佣金率（勿传一级、叶子或其他层级类目 ID）。"""
     cate = (cate_id or "").strip()
     if not cate:
         raise not_found("类目佣金率不存在")

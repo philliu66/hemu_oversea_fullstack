@@ -47,6 +47,7 @@ export const AdminSupplierStaffApi = {
 export const AdminStoreApi = {
   LIST: '/api/v1/admin/stores/list',
   DETAIL: '/api/v1/admin/stores/detail',
+  BASE_DISCOUNT: '/api/v1/admin/stores/base-discount/get',
   AUTHORIZE_URL: '/api/v1/admin/stores/authorize-url',
   CREATE: '/api/v1/admin/stores/create',
   UPDATE: '/api/v1/admin/stores/update',

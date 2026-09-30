@@ -14,6 +14,7 @@ import {
   Divider,
   Form,
   Input,
+  Radio,
   Select,
   Skeleton,
   Space,
@@ -52,6 +53,7 @@ import {
 import { fetchDhProductDetail } from '@/services/admin/products';
 import {
   fetchStoreAftersaleTemplates,
+  fetchStoreBaseDiscount,
   fetchStoreList,
   fetchStoreProductGroups,
   fetchStoreShippingTemplates,
@@ -64,6 +66,7 @@ import type {
   DhMeasuresUnitPublic,
   DhProductDetailPublic,
   DhProductSelectedAttrPublic,
+  StoreBaseDiscountPublic,
 } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
 import CategoryAttrsFields from './CategoryAttrsFields';
@@ -413,9 +416,18 @@ export function ProductEditor({
   const [commissionRate, setCommissionRate] =
     useState<DhCommissionRatePublic | null>(null);
   const [commissionRateLoading, setCommissionRateLoading] = useState(false);
+  const [storeBaseDiscount, setStoreBaseDiscount] =
+    useState<StoreBaseDiscountPublic | null>(null);
+  const [storeBaseDiscountLoading, setStoreBaseDiscountLoading] =
+    useState(false);
+  /** 二级类目 catePubId；佣金率接口必须用二级类目 ID */
+  const [secondLevelCatePubId, setSecondLevelCatePubId] = useState<
+    string | undefined
+  >();
   const itemGroupLoadedRef = useRef(false);
   const categoryAttrsReqRef = useRef(0);
   const commissionRateReqRef = useRef(0);
+  const storeBaseDiscountReqRef = useRef(0);
 
   const publishDetail = useCallback((next: DhProductDetailPublic) => {
     setDetail(next);
@@ -461,6 +473,7 @@ export function ProductEditor({
     setLoading(true);
     setDetail(undefined);
     setCategoryPath(undefined);
+    setSecondLevelCatePubId(undefined);
     setCategoryAttrs([]);
     setCategoryAttrsLoading(false);
     categoryAttrsReqRef.current += 1;
@@ -518,6 +531,8 @@ export function ProductEditor({
                   (item) => item.cate_pub_id,
                 ),
               });
+              // 佣金率按二级类目绑定：取路径第二级节点
+              setSecondLevelCatePubId(pathData.path_items[1]?.cate_pub_id);
             } catch (pathError) {
               if (cancelled) {
                 return;
@@ -530,6 +545,7 @@ export function ProductEditor({
               form.setFieldsValue({
                 category_path: fallbackId ? [fallbackId] : undefined,
               });
+              setSecondLevelCatePubId(undefined);
               message.error(
                 pathError instanceof Error
                   ? pathError.message
@@ -542,6 +558,7 @@ export function ProductEditor({
           })();
         } else {
           setCategoryPath(undefined);
+          setSecondLevelCatePubId(undefined);
           setCategoryAttrs([]);
           setCategoryAttrsLoading(false);
         }
@@ -641,11 +658,8 @@ export function ProductEditor({
     };
   }, []);
 
-  const currentCatePubId =
-    detail?.category?.cate_pub_id || detail?.cate_pub_id || undefined;
-
   useEffect(() => {
-    const cateId = (currentCatePubId || '').trim();
+    const cateId = (secondLevelCatePubId || '').trim();
     if (!cateId) {
       commissionRateReqRef.current += 1;
       setCommissionRate(null);
@@ -656,6 +670,7 @@ export function ProductEditor({
     commissionRateReqRef.current = reqId;
     setCommissionRateLoading(true);
     setCommissionRate(null);
+    // 必须传二级类目 ID
     void fetchDhCommissionRate(cateId, { skipErrorHandler: true })
       .then((data) => {
         if (commissionRateReqRef.current !== reqId) {
@@ -674,7 +689,39 @@ export function ProductEditor({
           setCommissionRateLoading(false);
         }
       });
-  }, [currentCatePubId]);
+  }, [secondLevelCatePubId]);
+
+  useEffect(() => {
+    const storeId = detail?.store_id;
+    if (!storeId) {
+      storeBaseDiscountReqRef.current += 1;
+      setStoreBaseDiscount(null);
+      setStoreBaseDiscountLoading(false);
+      return;
+    }
+    const reqId = storeBaseDiscountReqRef.current + 1;
+    storeBaseDiscountReqRef.current = reqId;
+    setStoreBaseDiscountLoading(true);
+    setStoreBaseDiscount(null);
+    void fetchStoreBaseDiscount(storeId, { skipErrorHandler: true })
+      .then((data) => {
+        if (storeBaseDiscountReqRef.current !== reqId) {
+          return;
+        }
+        setStoreBaseDiscount(data);
+      })
+      .catch(() => {
+        if (storeBaseDiscountReqRef.current !== reqId) {
+          return;
+        }
+        setStoreBaseDiscount(null);
+      })
+      .finally(() => {
+        if (storeBaseDiscountReqRef.current === reqId) {
+          setStoreBaseDiscountLoading(false);
+        }
+      });
+  }, [detail?.store_id]);
 
   useEffect(() => {
     if (!detail?.store_id) {
@@ -793,6 +840,8 @@ export function ProductEditor({
           form.setFieldsValue({
             category_path: pathData.path_items.map((item) => item.cate_pub_id),
           });
+          // 佣金率按二级类目绑定：取路径第二级节点
+          setSecondLevelCatePubId(pathData.path_items[1]?.cate_pub_id);
           setDetail((prev) => {
             if (!prev) {
               return prev;
@@ -1320,39 +1369,68 @@ export function ProductEditor({
               })}
             />
           </Form.Item>
-          <SaleInfoFields
-            disabled={readOnly}
-            issample={detail?.issample}
-            measureId={detail?.measure_id}
-            measureOptions={measureOptions}
-            measuresLoading={measuresLoading}
-            packingQuantity={detail?.packing_quantity}
-            itemInventory={detail?.item_inventory}
-            maxSaleQty={detail?.max_sale_qty}
-            leadingTime={detail?.leading_time}
-            vaildDay={detail?.vaild_day}
-            onIssampleChange={(value) => {
-              patchDetail({ issample: value });
-            }}
-            onMeasureIdChange={(value) => {
-              patchDetail({ measure_id: value });
-            }}
-            onPackingQuantityChange={(value) => {
-              patchDetail({ packing_quantity: value });
-            }}
-            onItemInventoryChange={(value) => {
-              patchDetail({ item_inventory: value });
-            }}
-            onMaxSaleQtyChange={(value) => {
-              patchDetail({ max_sale_qty: value });
-            }}
-            onLeadingTimeChange={(value) => {
-              patchDetail({ leading_time: value });
-            }}
-            onVaildDayChange={(value) => {
-              patchDetail({ vaild_day: value });
-            }}
-          />
+          <Form.Item
+            label={intl.formatMessage({
+              id: 'pages.product.detail.sale.issample',
+              defaultMessage: '商品分级管理',
+            })}
+          >
+            <Radio.Group
+              disabled={readOnly}
+              value={
+                String(detail?.issample) === '2' ? '2' : '3'
+              }
+              onChange={(event) => {
+                patchDetail({ issample: event.target.value });
+              }}
+            >
+              <Radio value="3">
+                {intl.formatMessage({
+                  id: 'pages.product.detail.sale.issampleNonAdult',
+                  defaultMessage: '非成人属性',
+                })}
+              </Radio>
+              <Radio value="2">
+                {intl.formatMessage({
+                  id: 'pages.product.detail.sale.issampleAdult',
+                  defaultMessage: '成人属性',
+                })}
+              </Radio>
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item
+            label={intl.formatMessage({
+              id: 'pages.product.detail.sale.vaildDay',
+              defaultMessage: '产品有效期',
+            })}
+          >
+            <Radio.Group
+              disabled={readOnly}
+              value={detail?.vaild_day || undefined}
+              onChange={(event) => {
+                patchDetail({ vaild_day: event.target.value });
+              }}
+            >
+              <Radio value="90">
+                {intl.formatMessage({
+                  id: 'pages.product.detail.sale.vaildDay90',
+                  defaultMessage: '90天',
+                })}
+              </Radio>
+              <Radio value="30">
+                {intl.formatMessage({
+                  id: 'pages.product.detail.sale.vaildDay30',
+                  defaultMessage: '30天',
+                })}
+              </Radio>
+              <Radio value="14">
+                {intl.formatMessage({
+                  id: 'pages.product.detail.sale.vaildDay14',
+                  defaultMessage: '14天',
+                })}
+              </Radio>
+            </Radio.Group>
+          </Form.Item>
           {showSyncMeta ? (
             <>
               <Form.Item
@@ -1393,6 +1471,45 @@ export function ProductEditor({
               </Form.Item>
             </>
           ) : null}
+        </Card>
+
+        <Card
+          title={intl.formatMessage({
+            id: 'pages.product.detail.section.saleInfo',
+            defaultMessage: '销售信息',
+          })}
+          loading={loading}
+          style={{ marginTop: 16 }}
+        >
+          <SaleInfoFields
+            disabled={readOnly}
+            measureId={detail?.measure_id}
+            measureOptions={measureOptions}
+            measuresLoading={measuresLoading}
+            packingQuantity={detail?.packing_quantity}
+            minWholesaleQty={detail?.min_wholesale_qty}
+            itemInventory={detail?.item_inventory}
+            maxSaleQty={detail?.max_sale_qty}
+            leadingTime={detail?.leading_time}
+            onMeasureIdChange={(value) => {
+              patchDetail({ measure_id: value });
+            }}
+            onPackingQuantityChange={(value) => {
+              patchDetail({ packing_quantity: value });
+            }}
+            onMinWholesaleQtyChange={(value) => {
+              patchDetail({ min_wholesale_qty: value });
+            }}
+            onItemInventoryChange={(value) => {
+              patchDetail({ item_inventory: value });
+            }}
+            onMaxSaleQtyChange={(value) => {
+              patchDetail({ max_sale_qty: value });
+            }}
+            onLeadingTimeChange={(value) => {
+              patchDetail({ leading_time: value });
+            }}
+          />
         </Card>
       </ProForm>
 
@@ -1474,9 +1591,13 @@ export function ProductEditor({
           </span>
         </Divider>
         <CommissionRateHint
-          hasCategory={Boolean(currentCatePubId)}
-          loading={commissionRateLoading}
-          data={commissionRate}
+          categoryPath={categoryPath}
+          hasStore={Boolean(detail?.store_id)}
+          hasCategory={Boolean(secondLevelCatePubId)}
+          commissionLoading={commissionRateLoading}
+          commissionData={commissionRate}
+          storeDiscountLoading={storeBaseDiscountLoading}
+          storeDiscount={storeBaseDiscount}
         />
         <SpecSkuTable
           disabled={readOnly || categoryAttrsLoading}

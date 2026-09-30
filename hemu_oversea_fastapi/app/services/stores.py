@@ -15,6 +15,7 @@ from app.schemas.common import PageData
 from app.schemas.store import (
     StoreAftersaleTemplatePublic,
     StoreDetailPublic,
+    StoreBaseDiscountPublic,
     StorePublic,
     StoreShippingTemplatePublic,
 )
@@ -173,6 +174,16 @@ def get_store(db: Session, store_id: int) -> Store:
 
 def get_store_detail(db: Session, store_id: int) -> StoreDetailPublic:
     return _to_detail_public(_load_store_with_actors(db, store_id))
+
+
+def get_store_base_discount(db: Session, store_id: int) -> StoreBaseDiscountPublic:
+    """按店铺 ID 查询基础折扣率。"""
+    store = _get_alive_store(db, store_id)
+    return StoreBaseDiscountPublic(
+        id=store.id,
+        name=store.name,
+        base_discount=store.base_discount,
+    )
 
 
 def update_store(

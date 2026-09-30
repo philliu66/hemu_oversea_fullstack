@@ -47,6 +47,20 @@ class StoreDetail(BaseModel):
     id: int = Field(description="店铺 ID")
 
 
+class StoreBaseDiscountRequest(BaseModel):
+    id: int = Field(ge=1, description="店铺 ID")
+
+
+class StoreBaseDiscountPublic(BaseModel):
+    """店铺基础折扣率。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(description="店铺 ID")
+    name: str = Field(description="店铺名称")
+    base_discount: Decimal = Field(description="基础折扣率（0.00～0.99）")
+
+
 class StoreTemplateListRequest(BaseModel):
     store_id: int = Field(ge=1, description="店铺 ID")
 

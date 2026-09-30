@@ -153,6 +153,14 @@ export type StoreDetailPublic = StorePublic & {
   password: string;
 };
 
+/** POST /api/v1/admin/stores/base-discount/get */
+export type StoreBaseDiscountPublic = {
+  id: number;
+  name: string;
+  /** 基础折扣率（0.00～0.99） */
+  base_discount: number | string;
+};
+
 /** 店铺售后模板 */
 export type StoreAftersaleTemplatePublic = {
   after_sale_template_id: string;
@@ -305,7 +313,9 @@ export type DhCommissionUnitPublic = {
   commission_rate?: string | null;
 };
 
-/** POST /api/v1/admin/categories/dh/commission-rate/get */
+/** POST /api/v1/admin/categories/dh/commission-rate/get
+ * 官方按二级类目绑定佣金率，cate_id 须为二级类目 ID
+ */
 export type DhCommissionRatePublic = {
   cate_id: string;
   unit_list: DhCommissionUnitPublic[];

@@ -141,15 +141,17 @@ def get_dh_category_attrs(
 @router.post(
     "/dh/commission-rate/get",
     response_model=ApiResponse[DhCommissionRatePublic],
-    summary="查询类目佣金率",
+    summary="查询类目佣金率（须传二级类目 ID）",
 )
 def get_dh_commission_rate(
     payload: DhCommissionRateRequest,
     db: Session = Depends(get_db),
 ) -> ApiResponse[DhCommissionRatePublic]:
     """
-    按类目 ID（cateId）查询本地 commissions_rate_dh 佣金率。
+    按二级类目 ID（cateId）查询本地 commissions_rate_dh 佣金率。
 
-    数据由 testAPI dh.categorys.commissions 全量同步入库，本接口不请求敦煌。
+    - cate_id 必须传二级类目的 catePubId / cateId，勿传一级、叶子或其他层级类目 ID
+    - 官方 dh.categorys.commissions 的佣金率按二级类目绑定入库
+    - 数据由 testAPI 全量同步，本接口不请求敦煌
     """
     return success(get_commission_rate_by_cate_id(db, cate_id=payload.cate_id))

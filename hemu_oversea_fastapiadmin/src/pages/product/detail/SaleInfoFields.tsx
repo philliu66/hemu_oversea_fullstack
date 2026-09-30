@@ -13,23 +13,21 @@ export const ISSAMPLE_NON_ADULT = '3';
 export type StockStatus = 'in_stock' | 'in_transit' | 'pending';
 
 type SaleInfoFieldsProps = {
-  issample?: string | null;
   measureId?: string | null;
   measureOptions?: DhMeasuresUnitPublic[];
   measuresLoading?: boolean;
   packingQuantity?: number | null;
+  minWholesaleQty?: number | null;
   itemInventory?: DhItemInventoryPublic | null;
   maxSaleQty?: number | null;
   leadingTime?: number | null;
-  vaildDay?: string | null;
   disabled?: boolean;
-  onIssampleChange?: (value: string) => void;
   onMeasureIdChange?: (value: string | null) => void;
   onPackingQuantityChange?: (value: number | null) => void;
+  onMinWholesaleQtyChange?: (value: number | null) => void;
   onItemInventoryChange?: (value: DhItemInventoryPublic | null) => void;
   onMaxSaleQtyChange?: (value: number | null) => void;
   onLeadingTimeChange?: (value: number | null) => void;
-  onVaildDayChange?: (value: string) => void;
 };
 
 export function formatMeasureLabel(item: DhMeasuresUnitPublic): string {
@@ -134,36 +132,30 @@ function requiredLabel(text: string) {
 }
 
 /**
- * 销售/备货相关字段：与产品分组等同级 Form.Item，标签对齐表单 labelCol。
- * 备货地暂不渲染。
+ * 销售信息卡片字段：计件单位、销售方式、起定量、备货状态、备货期。
+ * 与产品分组等同级 Form.Item，标签对齐表单 labelCol。
  */
 const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
-  issample,
   measureId,
   measureOptions,
   measuresLoading = false,
   packingQuantity,
+  minWholesaleQty,
   itemInventory,
   maxSaleQty,
   leadingTime,
-  vaildDay,
   disabled = false,
-  onIssampleChange,
   onMeasureIdChange,
   onPackingQuantityChange,
+  onMinWholesaleQtyChange,
   onItemInventoryChange,
   onMaxSaleQtyChange,
   onLeadingTimeChange,
-  onVaildDayChange,
 }) => {
   const intl = useIntl();
   const stockStatus = deriveStockStatus(itemInventory);
   const packQty = packingQuantity == null ? 1 : packingQuantity;
   const sellByPack = packQty > 1;
-  const sampleValue =
-    String(issample) === ISSAMPLE_ADULT
-      ? ISSAMPLE_ADULT
-      : ISSAMPLE_NON_ADULT;
   const measureUnitLabel =
     resolveMeasureDisplayName(measureId, measureOptions) ||
     intl.formatMessage({
@@ -186,32 +178,6 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
 
   return (
     <>
-      <Form.Item
-        label={intl.formatMessage({
-          id: 'pages.product.detail.sale.issample',
-          defaultMessage: '商品分级管理',
-        })}
-      >
-        <Radio.Group
-          disabled={disabled}
-          value={sampleValue}
-          onChange={(event) => onIssampleChange?.(event.target.value)}
-        >
-          <Radio value={ISSAMPLE_NON_ADULT}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.sale.issampleNonAdult',
-              defaultMessage: '非成人属性',
-            })}
-          </Radio>
-          <Radio value={ISSAMPLE_ADULT}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.sale.issampleAdult',
-              defaultMessage: '成人属性',
-            })}
-          </Radio>
-        </Radio.Group>
-      </Form.Item>
-
       <Form.Item
         label={requiredLabel(
           intl.formatMessage({
@@ -290,6 +256,38 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
             </Space>
           </Radio>
         </Radio.Group>
+      </Form.Item>
+
+      <Form.Item
+        label={requiredLabel(
+          intl.formatMessage({
+            id: 'pages.product.detail.sale.minWholesaleQty',
+            defaultMessage: '起定量',
+          }),
+        )}
+      >
+        <Space size={8} align="center" wrap>
+          <InputNumber
+            min={1}
+            precision={0}
+            disabled={disabled}
+            value={minWholesaleQty ?? undefined}
+            style={{ width: 120 }}
+            onChange={(value) =>
+              onMinWholesaleQtyChange?.(
+                typeof value === 'number' ? value : null,
+              )
+            }
+          />
+          <span>
+            {sellByPack
+              ? intl.formatMessage({
+                  id: 'pages.product.detail.sale.minWholesaleQtyPack',
+                  defaultMessage: '包',
+                })
+              : measureUnitLabel}
+          </span>
+        </Space>
       </Form.Item>
 
       <Form.Item
@@ -388,38 +386,6 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
             })}
           </span>
         </Space>
-      </Form.Item>
-
-      <Form.Item
-        label={intl.formatMessage({
-          id: 'pages.product.detail.sale.vaildDay',
-          defaultMessage: '产品有效期',
-        })}
-      >
-        <Radio.Group
-          disabled={disabled}
-          value={vaildDay || undefined}
-          onChange={(event) => onVaildDayChange?.(event.target.value)}
-        >
-          <Radio value="90">
-            {intl.formatMessage({
-              id: 'pages.product.detail.sale.vaildDay90',
-              defaultMessage: '90天',
-            })}
-          </Radio>
-          <Radio value="30">
-            {intl.formatMessage({
-              id: 'pages.product.detail.sale.vaildDay30',
-              defaultMessage: '30天',
-            })}
-          </Radio>
-          <Radio value="14">
-            {intl.formatMessage({
-              id: 'pages.product.detail.sale.vaildDay14',
-              defaultMessage: '14天',
-            })}
-          </Radio>
-        </Radio.Group>
       </Form.Item>
     </>
   );

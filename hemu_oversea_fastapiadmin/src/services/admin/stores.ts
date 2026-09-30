@@ -7,6 +7,7 @@ import type {
   PageData,
   StoreAftersaleTemplatePublic,
   StoreAuthorizePublic,
+  StoreBaseDiscountPublic,
   StoreCreateParams,
   StoreDetailPublic,
   StoreInspectionPunishParams,
@@ -68,6 +69,25 @@ export async function fetchStoreDetail(id: number, options?: RequestOptions) {
   return requireData(
     unwrapApiData<StoreDetailPublic>(res),
     '获取店铺详情失败',
+  );
+}
+
+/** POST /api/v1/admin/stores/base-discount/get */
+export async function fetchStoreBaseDiscount(
+  id: number,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<StoreBaseDiscountPublic>>(
+    AdminStoreApi.BASE_DISCOUNT,
+    {
+      method: 'POST',
+      data: { id },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<StoreBaseDiscountPublic>(res),
+    '获取店铺基础折扣率失败',
   );
 }
 
