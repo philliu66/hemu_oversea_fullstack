@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { Checkbox, Input, InputNumber, Select, Space } from 'antd';
+import { App, Button, Checkbox, Input, InputNumber, Select, Space } from 'antd';
 import React, { useEffect, useState } from 'react';
 import type {
   DhCategoryAttrPublic,
@@ -10,14 +10,25 @@ import type {
 import { buildDhImageUrl } from '@/utils/dhImage';
 import './changedHighlight.css';
 import DhgateAttrPicUpload from './DhgateAttrPicUpload';
+import EditableOptionChip from './EditableOptionChip';
 
 const CHANGED_COLOR = '#cf1322';
 const CUSTOM_NAME_SET = new Set(['custom', '自定义', 'other', '其它', '其他']);
+/** 下拉「自定义」选项的占位 value（当类目值列表中没有显式自定义项时使用） */
+const CUSTOM_SELECT_VALUE = '__attr_custom__';
+/** 写回 attr_list 时空自定义内容的占位 attr_val_id，用于回流后仍能还原 customChecked */
+const CUSTOM_PLACEHOLDER_VAL_ID = 'custom';
 
 type CustomAttrRow = {
   key: string;
   attrName: string;
   content: string;
+};
+
+/** 规格属性「输入+添加」产生的多个自定义值 */
+type CustomAddedValue = {
+  id: string;
+  label: string;
 };
 
 type AttrDraft = {
@@ -27,6 +38,8 @@ type AttrDraft = {
   customText: string;
   /** 带独立属性名的多行自定义属性（如 Function / Voltage） */
   customRows: CustomAttrRow[];
+  /** 规格多选：通过添加按钮写入的多个自定义属性值 */
+  customValues: CustomAddedValue[];
   textValue: string;
 };
 
@@ -35,6 +48,11 @@ type CategoryAttrsCardProps = {
   selectedAttrs?: DhProductSelectedAttrPublic[];
   /** 勾选后展示已选值图片表（规格属性用） */
   showSelectedPics?: boolean;
+  /**
+   * 规格属性模式：多选自定义改为「输入框 + 添加」，可添加多个自定义属性值
+   * （普通类目属性仍用「自定义」勾选 + 表格）
+   */
+  customAddMode?: boolean;
   storeId?: number;
   /** 只读（查看详情） */
   disabled?: boolean;
@@ -90,6 +108,36 @@ function isCustomOption(item: DhCategoryAttrValPublic): boolean {
   );
 }
 
+/** 仅识别「自定义/custom」，不含 Other/其他（后者仍作为普通可选项） */
+function isExplicitCustomOption(item: DhCategoryAttrValPublic): boolean {
+  const names = [item.line_attrval_name, item.line_attrval_name_cn].map((name) =>
+    (name || '').trim().toLowerCase(),
+  );
+  return names.some((name) => name === 'custom' || name === '自定义');
+}
+
+function resolveCustomSelectValue(attr: DhCategoryAttrPublic): string {
+  return (
+    attr.values.find(isExplicitCustomOption)?.attr_val_id || CUSTOM_SELECT_VALUE
+  );
+}
+
+/** 是否为空自定义占位（仅勾选自定义、尚未填写内容） */
+function isCustomPlaceholderValue(item: {
+  attr_val_id?: string | null;
+  line_attrval_name?: string | null;
+  line_attrval_name_cn?: string | null;
+}): boolean {
+  const id = (item.attr_val_id || '').trim();
+  if (id === CUSTOM_PLACEHOLDER_VAL_ID || id === CUSTOM_SELECT_VALUE) {
+    return true;
+  }
+  return (
+    isCustomName(item.line_attrval_name) ||
+    isCustomName(item.line_attrval_name_cn)
+  );
+}
+
 /** 从详情 attr_list 的属性值中解析可展示的自定义文案 */
 function pickCustomText(item: {
   attr_val_id?: string;
@@ -108,10 +156,35 @@ function pickCustomText(item: {
   }
   // attr_val_id 若不是占位名，也可能是自定义内容标识
   const id = item.attr_val_id?.trim();
-  if (id && !isCustomName(id) && !/^\d+$/.test(id)) {
+  if (
+    id &&
+    !isCustomName(id) &&
+    id !== CUSTOM_PLACEHOLDER_VAL_ID &&
+    id !== CUSTOM_SELECT_VALUE &&
+    !/^\d+$/.test(id)
+  ) {
     return id;
   }
   return '';
+}
+
+/** 已选文案是否只是预置选项自身的名称（pushOption 回写后会带上选项名） */
+function isOptionOwnLabel(
+  option: DhCategoryAttrValPublic,
+  customText: string,
+): boolean {
+  const text = customText.trim();
+  if (!text) {
+    return true;
+  }
+  const labels = [
+    option.line_attrval_name,
+    option.line_attrval_name_cn,
+    valueLabel(option),
+  ]
+    .map((name) => (name || '').trim())
+    .filter(Boolean);
+  return labels.some((label) => label === text);
 }
 
 /** 值级属性名（自定义属性每一行的参数名） */
@@ -132,6 +205,7 @@ function emptyDraft(): AttrDraft {
     customChecked: false,
     customText: '',
     customRows: [],
+    customValues: [],
     textValue: '',
   };
 }
@@ -139,6 +213,7 @@ function emptyDraft(): AttrDraft {
 function buildDrafts(
   attrs: DhCategoryAttrPublic[],
   selectedAttrs?: DhProductSelectedAttrPublic[],
+  customAddMode = false,
 ): Record<string, AttrDraft> {
   const selectedMap = new Map(
     (selectedAttrs || []).map((item) => [String(item.attr_id), item]),
@@ -148,7 +223,7 @@ function buildDrafts(
   attrs.forEach((attr) => {
     const draft = emptyDraft();
     const optionById = new Map(
-      attr.values.map((item) => [item.attr_val_id, item]),
+      attr.values.map((item) => [String(item.attr_val_id), item]),
     );
     const selected = selectedMap.get(String(attr.attr_id));
     const values = selected?.values || [];
@@ -165,52 +240,91 @@ function buildDrafts(
 
     const checked: string[] = [];
     const customRows: CustomAttrRow[] = [];
+    const customValues: CustomAddedValue[] = [];
     let fallbackCustomText = '';
+    const useAddMode = customAddMode && !isSelectType(attr);
+
     values.forEach((item) => {
-      const option = optionById.get(item.attr_val_id);
+      const valId = String(item.attr_val_id ?? '').trim();
+      const option = valId ? optionById.get(valId) : undefined;
       const customText = pickCustomText(item);
       const valueAttrName = pickValueAttrName(item);
-      const selectedIsCustomPlaceholder =
-        isCustomName(item.line_attrval_name) ||
-        isCustomName(item.line_attrval_name_cn);
+
+      // 规格「添加」模式：未命中预置的值都作为可勾选的自定义属性值
+      if (useAddMode && allowCustom(attr) && !option) {
+        const label =
+          customText ||
+          valueAttrName ||
+          valId ||
+          '';
+        if (!label && !valId) {
+          return;
+        }
+        const id = valId || `custom-${label}`;
+        if (!customValues.some((row) => row.id === id)) {
+          customValues.push({ id, label: label || id });
+        }
+        if (!checked.includes(id)) {
+          checked.push(id);
+        }
+        return;
+      }
 
       // 带独立属性名的多行自定义（如 Function / Voltage）
-      if (allowCustom(attr) && valueAttrName) {
+      // 注意：详情接口常在预置值上也带回 attrName，不能仅凭有属性名就判自定义；
+      // 必须先排除已命中类目预置 attr_val_id 的情况。
+      if (allowCustom(attr) && valueAttrName && !option) {
         draft.customChecked = true;
         customRows.push({
-          key: item.attr_val_id || `${valueAttrName}-${customRows.length}`,
+          key: valId || `${valueAttrName}-${customRows.length}`,
           attrName: valueAttrName,
           content: customText,
         });
         return;
       }
 
-      // 命中预置选项（含「其他/Others」）：无额外自定义文案时当作普通选项选中
-      if (option && !customText) {
-        checked.push(item.attr_val_id);
+      // 空自定义占位 / 名称即为「自定义」→ 保持自定义编辑态
+      if (allowCustom(attr) && isCustomPlaceholderValue(item) && !option) {
+        draft.customChecked = true;
+        if (customText) {
+          fallbackCustomText = customText;
+        }
         return;
       }
 
-      // 未命中预置，或命中「其他」槽位但写了自定义文案 → 自定义编辑
-      if (!allowCustom(attr)) {
-        if (option) {
-          checked.push(item.attr_val_id);
+      // 命中预置选项：文案等于选项名时当作普通选中；仅当写了不同自定义文案才走自定义
+      if (option) {
+        if (
+          useAddMode ||
+          !allowCustom(attr) ||
+          isOptionOwnLabel(option, customText)
+        ) {
+          checked.push(option.attr_val_id);
+          return;
         }
+        draft.customChecked = true;
+        fallbackCustomText = customText;
+        return;
+      }
+
+      // 未命中预置 → 自定义编辑（或兜底勾选）
+      if (!allowCustom(attr)) {
         return;
       }
 
       draft.customChecked = true;
       if (customText) {
         fallbackCustomText = customText;
-      } else if (!option && !selectedIsCustomPlaceholder) {
+      } else if (!isCustomPlaceholderValue(item)) {
         // 兜底：无法识别的已选值仍尽量勾上 id
-        if (item.attr_val_id) {
-          checked.push(item.attr_val_id);
+        if (valId) {
+          checked.push(valId);
           draft.customChecked = false;
         }
       }
     });
     draft.customRows = customRows;
+    draft.customValues = customValues;
     // 无独立属性名时，退回单行「自定义」文案（取最后一条有效内容）
     if (customRows.length === 0 && fallbackCustomText) {
       draft.customText = fallbackCustomText;
@@ -232,6 +346,7 @@ function draftsToSelectedAttrs(
   attrs: DhCategoryAttrPublic[],
   drafts: Record<string, AttrDraft>,
   previousSelected?: DhProductSelectedAttrPublic[],
+  customAddMode = false,
 ): DhProductSelectedAttrPublic[] {
   const prevMap = new Map(
     (previousSelected || []).map((item) => [String(item.attr_id), item]),
@@ -247,19 +362,22 @@ function draftsToSelectedAttrs(
         .map((item) => [String(item.attr_val_id), item]),
     );
     const optionById = new Map(
-      attr.values.map((item) => [item.attr_val_id, item]),
+      attr.values.map((item) => [String(item.attr_val_id), item]),
     );
-    const customOption = attr.values.find(isCustomOption);
+    const explicitCustomOption = attr.values.find(isExplicitCustomOption);
+    const customOption =
+      explicitCustomOption || attr.values.find(isCustomOption);
     const values: DhProductSelectedAttrValPublic[] = [];
+    const useAddMode = customAddMode && !isSelectType(attr);
 
     const pushOption = (valId: string) => {
-      const option = optionById.get(valId);
+      const option = optionById.get(String(valId));
       const prevVal = prevByValId.get(String(valId));
       values.push({
         attr_id: attr.attr_id,
         attr_val_id: valId,
-        attr_name: prevVal?.attr_name ?? null,
-        attr_name_cn: prevVal?.attr_name_cn ?? null,
+        attr_name: null,
+        attr_name_cn: null,
         line_attrval_name:
           option?.line_attrval_name ?? prevVal?.line_attrval_name ?? null,
         line_attrval_name_cn:
@@ -273,16 +391,20 @@ function draftsToSelectedAttrs(
       content: string,
       attrName?: string,
       key?: string,
+      allowEmpty = false,
     ) => {
       const trimmed = content.trim();
       const name = (attrName || '').trim();
-      if (!trimmed && !name) {
+      if (!trimmed && !name && !allowEmpty) {
         return;
       }
       const valId =
         (key && String(key).trim()) ||
-        customOption?.attr_val_id ||
-        (name ? `custom-${name}` : 'custom');
+        (trimmed || name
+          ? explicitCustomOption?.attr_val_id ||
+            customOption?.attr_val_id ||
+            (name ? `custom-${name}` : CUSTOM_PLACEHOLDER_VAL_ID)
+          : CUSTOM_PLACEHOLDER_VAL_ID);
       const prevVal = prevByValId.get(String(valId));
       values.push({
         attr_id: attr.attr_id,
@@ -294,6 +416,21 @@ function draftsToSelectedAttrs(
         pic_url: prevVal?.pic_url ?? null,
         brand_id: prevVal?.brand_id ?? null,
       });
+    };
+
+    const pushCustomFromDraft = () => {
+      const before = values.length;
+      if (draft.customRows.length) {
+        draft.customRows.forEach((row) =>
+          pushCustom(row.content, row.attrName, row.key),
+        );
+      } else {
+        pushCustom(draft.customText, undefined, undefined, true);
+      }
+      // 仅勾选自定义、内容全空时仍写占位，避免父级回流冲掉 customChecked
+      if (values.length === before) {
+        pushCustom('', undefined, undefined, true);
+      }
     };
 
     if (isTextType(attr)) {
@@ -313,26 +450,32 @@ function draftsToSelectedAttrs(
       }
     } else if (isSelectType(attr)) {
       if (draft.customChecked) {
-        if (draft.customRows.length) {
-          draft.customRows.forEach((row) =>
-            pushCustom(row.content, row.attrName, row.key),
-          );
-        } else {
-          pushCustom(draft.customText);
-        }
+        pushCustomFromDraft();
       } else if (draft.selectValue) {
         pushOption(draft.selectValue);
       }
+    } else if (useAddMode) {
+      const customById = new Map(
+        draft.customValues.map((item) => [item.id, item]),
+      );
+      draft.checkedValues.forEach((id) => {
+        if (optionById.has(String(id))) {
+          pushOption(id);
+          return;
+        }
+        const custom = customById.get(id);
+        const prevVal = prevByValId.get(String(id));
+        const label =
+          custom?.label ||
+          prevVal?.line_attrval_name_cn ||
+          prevVal?.line_attrval_name ||
+          id;
+        pushCustom(String(label), undefined, id);
+      });
     } else {
       draft.checkedValues.forEach((id) => pushOption(id));
       if (draft.customChecked) {
-        if (draft.customRows.length) {
-          draft.customRows.forEach((row) =>
-            pushCustom(row.content, row.attrName, row.key),
-          );
-        } else {
-          pushCustom(draft.customText);
-        }
+        pushCustomFromDraft();
       }
     }
 
@@ -517,6 +660,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
   attrs,
   selectedAttrs,
   showSelectedPics = false,
+  customAddMode = false,
   storeId,
   disabled = false,
   changedAttrIds,
@@ -525,7 +669,16 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
 }) => {
   const changedAttrIdSet = new Set((changedAttrIds || []).map(String));
   const intl = useIntl();
+  const { message } = App.useApp();
   const [drafts, setDrafts] = useState<Record<string, AttrDraft>>({});
+  /** 规格「添加」输入框草稿（按 attr_id） */
+  const [addInputs, setAddInputs] = useState<Record<string, string>>({});
+  /** 正在编辑的自定义值：attrId + valueId */
+  const [editingCustom, setEditingCustom] = useState<{
+    attrId: string;
+    valueId: string;
+  }>();
+  const [editingCustomName, setEditingCustomName] = useState('');
   const selectedMap = new Map(
     (selectedAttrs || []).map((item) => [String(item.attr_id), item]),
   );
@@ -535,10 +688,39 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
   selectedAttrsRef.current = selectedAttrs;
   const attrsRef = React.useRef(attrs);
   attrsRef.current = attrs;
+  const customAddModeRef = React.useRef(customAddMode);
+  customAddModeRef.current = customAddMode;
 
   useEffect(() => {
-    setDrafts(buildDrafts(attrs, selectedAttrs));
-  }, [attrs, selectedAttrs]);
+    setDrafts((prev) => {
+      const built = buildDrafts(attrs, selectedAttrs, customAddMode);
+      if (!customAddMode) {
+        return built;
+      }
+      // 规格添加模式：父级 attr_list 只含已勾选项；未勾选的自定义值需从本地草稿合并回来
+      const merged: Record<string, AttrDraft> = { ...built };
+      attrs.forEach((attr) => {
+        if (isSelectType(attr) || isTextType(attr)) {
+          return;
+        }
+        const prevDraft = prev[attr.attr_id] || emptyDraft();
+        const nextDraft = built[attr.attr_id] || emptyDraft();
+        const byId = new Map(
+          nextDraft.customValues.map((item) => [item.id, item]),
+        );
+        prevDraft.customValues.forEach((item) => {
+          if (!byId.has(item.id)) {
+            byId.set(item.id, item);
+          }
+        });
+        merged[attr.attr_id] = {
+          ...nextDraft,
+          customValues: Array.from(byId.values()),
+        };
+      });
+      return merged;
+    });
+  }, [attrs, selectedAttrs, customAddMode]);
 
   const patchDraft = (attrId: string, patch: Partial<AttrDraft>) => {
     if (disabled) {
@@ -558,6 +740,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
           attrsRef.current,
           next,
           selectedAttrsRef.current,
+          customAddModeRef.current,
         );
         queueMicrotask(() => notify(selected));
       }
@@ -584,7 +767,122 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
     id: 'pages.product.detail.attrsCustomValuePlaceholder',
     defaultMessage: '请输入属性值',
   });
+  const addButtonText = intl.formatMessage({
+    id: 'pages.product.detail.specAttrs.add',
+    defaultMessage: '添加',
+  });
+  const addValuePlaceholder = intl.formatMessage({
+    id: 'pages.product.detail.attrsCustomAddPlaceholder',
+    defaultMessage: '请输入自定义属性值',
+  });
 
+  const handleAddCustomValue = (attr: DhCategoryAttrPublic) => {
+    if (disabled) {
+      return;
+    }
+    const label = (addInputs[attr.attr_id] || '').trim();
+    if (!label) {
+      message.warning(
+        intl.formatMessage({
+          id: 'pages.product.detail.specAttrs.nameRequired',
+          defaultMessage: '请输入规格名称',
+        }),
+      );
+      return;
+    }
+    const draft = drafts[attr.attr_id] || emptyDraft();
+    const builtinLabels = new Set(
+      attr.values.map((item) => valueLabel(item).trim().toLowerCase()),
+    );
+    const exists =
+      draft.customValues.some(
+        (item) => item.label.trim().toLowerCase() === label.toLowerCase(),
+      ) || builtinLabels.has(label.toLowerCase());
+    if (exists) {
+      message.warning(
+        intl.formatMessage({
+          id: 'pages.product.detail.specAttrs.nameDuplicate',
+          defaultMessage: '规格名称已存在',
+        }),
+      );
+      return;
+    }
+    const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    patchDraft(attr.attr_id, {
+      customValues: [...draft.customValues, { id, label }],
+      checkedValues: draft.checkedValues.includes(id)
+        ? draft.checkedValues
+        : [...draft.checkedValues, id],
+    });
+    setAddInputs((prev) => ({ ...prev, [attr.attr_id]: '' }));
+  };
+
+  const handleDeleteCustomValue = (attrId: string, valueId: string) => {
+    const draft = drafts[attrId] || emptyDraft();
+    patchDraft(attrId, {
+      customValues: draft.customValues.filter((row) => row.id !== valueId),
+      checkedValues: draft.checkedValues.filter((id) => id !== valueId),
+    });
+    if (
+      editingCustom?.attrId === attrId &&
+      editingCustom?.valueId === valueId
+    ) {
+      setEditingCustom(undefined);
+      setEditingCustomName('');
+    }
+  };
+
+  const startEditCustomValue = (attrId: string, item: CustomAddedValue) => {
+    setEditingCustom({ attrId, valueId: item.id });
+    setEditingCustomName(item.label);
+  };
+
+  const cancelEditCustomValue = () => {
+    setEditingCustom(undefined);
+    setEditingCustomName('');
+  };
+
+  const confirmEditCustomValue = (attr: DhCategoryAttrPublic) => {
+    if (!editingCustom || editingCustom.attrId !== attr.attr_id) {
+      return;
+    }
+    const name = editingCustomName.trim();
+    if (!name) {
+      message.warning(
+        intl.formatMessage({
+          id: 'pages.product.detail.specAttrs.nameRequired',
+          defaultMessage: '请输入规格名称',
+        }),
+      );
+      return;
+    }
+    const draft = drafts[attr.attr_id] || emptyDraft();
+    const builtinLabels = new Set(
+      attr.values.map((item) => valueLabel(item).trim().toLowerCase()),
+    );
+    const duplicate =
+      builtinLabels.has(name.toLowerCase()) ||
+      draft.customValues.some(
+        (item) =>
+          item.id !== editingCustom.valueId &&
+          item.label.trim().toLowerCase() === name.toLowerCase(),
+      );
+    if (duplicate) {
+      message.warning(
+        intl.formatMessage({
+          id: 'pages.product.detail.specAttrs.nameDuplicate',
+          defaultMessage: '规格名称已存在',
+        }),
+      );
+      return;
+    }
+    patchDraft(attr.attr_id, {
+      customValues: draft.customValues.map((item) =>
+        item.id === editingCustom.valueId ? { ...item, label: name } : item,
+      ),
+    });
+    cancelEditCustomValue();
+  };
   const renderAttrCustomEditor = (
     attr: DhCategoryAttrPublic,
     draft: AttrDraft,
@@ -611,13 +909,28 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
     <div>
       {attrs.map((attr) => {
         const draft = drafts[attr.attr_id] || emptyDraft();
-        const optionIds = attr.values.map((item) => item.attr_val_id);
+        const canCustom = allowCustom(attr);
+        const checkboxOptions = attr.values.filter(
+          (item) => !(canCustom && isExplicitCustomOption(item)),
+        );
+        const optionIds = checkboxOptions.map((item) => item.attr_val_id);
         const allChecked =
           optionIds.length > 0 &&
           optionIds.every((id) => draft.checkedValues.includes(id));
         const showPic = attr.style === '2' || attr.style === '3';
-        const canCustom = allowCustom(attr);
         const attrChanged = changedAttrIdSet.has(String(attr.attr_id));
+        const customSelectValue = resolveCustomSelectValue(attr);
+        const selectOptions = [
+          ...attr.values
+            .filter((item) => !(canCustom && isExplicitCustomOption(item)))
+            .map((item) => ({
+              value: item.attr_val_id,
+              label: valueLabel(item),
+            })),
+          ...(canCustom
+            ? [{ value: customSelectValue, label: customLabel }]
+            : []),
+        ];
 
         return (
           <div
@@ -678,115 +991,157 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                 )
               ) : isSelectType(attr) ? (
                 <>
-                  <Space wrap size={[12, 8]} style={{ width: '100%' }}>
-                    <Select
-                      allowClear
-                      showSearch
-                      optionFilterProp="label"
-                      placeholder={placeholder}
-                      value={draft.customChecked ? undefined : draft.selectValue}
-                      disabled={disabled || draft.customChecked}
-                      onChange={(value) =>
+                  <Select
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    placeholder={placeholder}
+                    value={
+                      draft.customChecked
+                        ? customSelectValue
+                        : draft.selectValue
+                    }
+                    disabled={disabled}
+                    onChange={(value) => {
+                      if (value == null) {
                         patchDraft(attr.attr_id, {
-                          selectValue: value,
+                          selectValue: undefined,
                           customChecked: false,
-                        })
+                        });
+                        return;
                       }
-                      options={attr.values.map((item) => ({
-                        value: item.attr_val_id,
-                        label: valueLabel(item),
-                      }))}
-                      style={{ maxWidth: 480, width: '100%', minWidth: 280 }}
-                    />
-                    {canCustom ? (
-                      <Checkbox
-                        checked={draft.customChecked}
-                        disabled={disabled}
-                        onChange={(event) =>
-                          patchDraft(attr.attr_id, {
-                            customChecked: event.target.checked,
-                            ...(event.target.checked
-                              ? { selectValue: undefined }
-                              : {}),
-                          })
-                        }
-                      >
-                        {customLabel}
-                      </Checkbox>
-                    ) : null}
-                  </Space>
+                      if (canCustom && value === customSelectValue) {
+                        patchDraft(attr.attr_id, {
+                          selectValue: undefined,
+                          customChecked: true,
+                        });
+                        return;
+                      }
+                      patchDraft(attr.attr_id, {
+                        selectValue: value,
+                        customChecked: false,
+                      });
+                    }}
+                    options={selectOptions}
+                    style={{ maxWidth: 480, width: '100%', minWidth: 280 }}
+                  />
                   {canCustom && draft.customChecked
                     ? renderAttrCustomEditor(attr, draft)
                     : null}
                 </>
               ) : (
                 <>
-                  <Space wrap size={[12, 8]}>
-                    {optionIds.length > 0 ? (
+                  {optionIds.length > 0 ? (
+                    <div style={{ marginBottom: 8 }}>
                       <Checkbox
                         checked={allChecked}
                         disabled={disabled}
                         indeterminate={
                           !allChecked && draft.checkedValues.length > 0
                         }
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const customCheckedIds = draft.customValues
+                            .map((item) => item.id)
+                            .filter((id) =>
+                              draft.checkedValues.includes(id),
+                            );
                           patchDraft(attr.attr_id, {
                             checkedValues: event.target.checked
-                              ? optionIds
-                              : [],
-                          })
-                        }
+                              ? [...optionIds, ...customCheckedIds]
+                              : customCheckedIds,
+                          });
+                        }}
                       >
                         {selectAllText}
                       </Checkbox>
-                    ) : null}
-                    {attr.values.map((item) => {
-                        const pic = showPic
-                          ? buildDhImageUrl(item.pic_url)
-                          : undefined;
-                        return (
-                          <Checkbox
-                            key={item.attr_val_id}
-                            disabled={disabled}
-                            checked={draft.checkedValues.includes(
-                              item.attr_val_id,
-                            )}
-                            onChange={(event) => {
-                              const checked = event.target.checked
-                                ? [...draft.checkedValues, item.attr_val_id]
-                                : draft.checkedValues.filter(
-                                    (id) => id !== item.attr_val_id,
-                                  );
-                              patchDraft(attr.attr_id, {
-                                checkedValues: checked,
-                              });
+                    </div>
+                  ) : null}
+                  <Space wrap size={[12, 8]}>
+                    {checkboxOptions.map((item) => {
+                      const pic = showPic
+                        ? buildDhImageUrl(item.pic_url)
+                        : undefined;
+                      return (
+                        <Checkbox
+                          key={item.attr_val_id}
+                          disabled={disabled}
+                          checked={draft.checkedValues.includes(
+                            item.attr_val_id,
+                          )}
+                          onChange={(event) => {
+                            const checked = event.target.checked
+                              ? [...draft.checkedValues, item.attr_val_id]
+                              : draft.checkedValues.filter(
+                                  (id) => id !== item.attr_val_id,
+                                );
+                            patchDraft(attr.attr_id, {
+                              checkedValues: checked,
+                            });
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
                             }}
                           >
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
+                            {pic ? (
+                              <img
+                                src={pic}
+                                alt=""
+                                width={16}
+                                height={16}
+                                style={{
+                                  objectFit: 'cover',
+                                  borderRadius: 2,
+                                }}
+                              />
+                            ) : null}
+                            {valueLabel(item)}
+                          </span>
+                        </Checkbox>
+                      );
+                    })}
+                    {customAddMode
+                      ? draft.customValues.map((item) => {
+                          const isEditing =
+                            editingCustom?.attrId === attr.attr_id &&
+                            editingCustom?.valueId === item.id;
+                          return (
+                            <EditableOptionChip
+                              key={item.id}
+                              label={item.label}
+                              checked={draft.checkedValues.includes(item.id)}
+                              disabled={disabled}
+                              editing={isEditing}
+                              editingValue={editingCustomName}
+                              onCheckedChange={(checked) => {
+                                // 仅控制是否出现在下方已选表，不删除选项本身
+                                patchDraft(attr.attr_id, {
+                                  checkedValues: checked
+                                    ? [...draft.checkedValues, item.id]
+                                    : draft.checkedValues.filter(
+                                        (id) => id !== item.id,
+                                      ),
+                                });
                               }}
-                            >
-                              {pic ? (
-                                <img
-                                  src={pic}
-                                  alt=""
-                                  width={16}
-                                  height={16}
-                                  style={{
-                                    objectFit: 'cover',
-                                    borderRadius: 2,
-                                  }}
-                                />
-                              ) : null}
-                              {valueLabel(item)}
-                            </span>
-                          </Checkbox>
-                        );
-                      })}
-                    {canCustom ? (
+                              onEditingValueChange={setEditingCustomName}
+                              onStartEdit={() =>
+                                startEditCustomValue(attr.attr_id, item)
+                              }
+                              onConfirmEdit={() =>
+                                confirmEditCustomValue(attr)
+                              }
+                              onCancelEdit={cancelEditCustomValue}
+                              onDelete={() =>
+                                handleDeleteCustomValue(attr.attr_id, item.id)
+                              }
+                            />
+                          );
+                        })
+                      : null}
+                    {!customAddMode && canCustom ? (
                       <Checkbox
                         checked={draft.customChecked}
                         disabled={disabled}
@@ -800,7 +1155,30 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                       </Checkbox>
                     ) : null}
                   </Space>
-                  {canCustom && draft.customChecked
+                  {customAddMode && canCustom && !disabled ? (
+                    <div style={{ marginTop: 8 }}>
+                      <Space.Compact style={{ maxWidth: 360, width: '100%' }}>
+                        <Input
+                          value={addInputs[attr.attr_id] || ''}
+                          onChange={(event) =>
+                            setAddInputs((prev) => ({
+                              ...prev,
+                              [attr.attr_id]: event.target.value,
+                            }))
+                          }
+                          onPressEnter={() => handleAddCustomValue(attr)}
+                          placeholder={addValuePlaceholder}
+                        />
+                        <Button
+                          type="primary"
+                          onClick={() => handleAddCustomValue(attr)}
+                        >
+                          {addButtonText}
+                        </Button>
+                      </Space.Compact>
+                    </div>
+                  ) : null}
+                  {!customAddMode && canCustom && draft.customChecked
                     ? renderAttrCustomEditor(attr, draft)
                     : null}
                 </>
@@ -820,12 +1198,16 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                         item,
                       ]),
                     );
+                    const customLabelById = new Map(
+                      draft.customValues.map((item) => [item.id, item.label]),
+                    );
                     const hasPicFeature =
                       showPic ||
                       attr.values.some((item) => Boolean(item.pic_url)) ||
                       (selected?.values || []).some((item) =>
                         Boolean(item.pic_url),
-                      );
+                      ) ||
+                      customAddMode;
                     if (!hasPicFeature) {
                       return null;
                     }
@@ -858,6 +1240,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                           ? `${en}(${cn})`
                           : en ||
                             cn ||
+                            customLabelById.get(String(id)) ||
                             (fromCategory ? valueLabel(fromCategory) : id);
                       const picUrl =
                         fromSelected?.pic_url ||
@@ -876,7 +1259,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                           marginTop: 12,
                           borderCollapse: 'collapse',
                           width: '100%',
-                          maxWidth: 720,
+                          maxWidth: 480,
                           fontSize: 13,
                         }}
                       >
@@ -901,6 +1284,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                                 padding: '6px 10px',
                                 textAlign: 'left',
                                 fontWeight: 500,
+                                width: 120,
                               }}
                             >
                               {intl.formatMessage({
@@ -919,29 +1303,76 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                                     border: '1px solid #d9d9d9',
                                     padding: '8px 10px',
                                     verticalAlign: 'middle',
+                                    width: 160,
                                   }}
                                 >
-                                  {item.label}
+                                  <Space size={8} wrap>
+                                    <span>{item.label}</span>
+                                    {!disabled ? (
+                                      <Button
+                                        type="link"
+                                        size="small"
+                                        danger
+                                        style={{ padding: 0, height: 'auto' }}
+                                        onClick={() => {
+                                          if (isSelectType(attr)) {
+                                            patchDraft(attr.attr_id, {
+                                              selectValue: undefined,
+                                              ...(item.id ===
+                                                CUSTOM_SELECT_VALUE ||
+                                              draft.selectValue ===
+                                                CUSTOM_SELECT_VALUE
+                                                ? { customChecked: false }
+                                                : null),
+                                            });
+                                            return;
+                                          }
+                                          patchDraft(attr.attr_id, {
+                                            checkedValues:
+                                              draft.checkedValues.filter(
+                                                (id) => id !== item.id,
+                                              ),
+                                          });
+                                        }}
+                                      >
+                                        {intl.formatMessage({
+                                          id: 'pages.product.detail.specAttrs.delete',
+                                          defaultMessage: '删除',
+                                        })}
+                                      </Button>
+                                    ) : null}
+                                  </Space>
                                 </td>
                                 <td
                                   style={{
                                     border: '1px solid #d9d9d9',
                                     padding: '8px 10px',
                                     verticalAlign: 'middle',
+                                    width: 120,
+                                    textAlign: 'center',
                                   }}
                                 >
-                                  <DhgateAttrPicUpload
-                                    storeId={storeId}
-                                    value={item.picUrl}
-                                    disabled={disabled}
-                                    onChange={(picUrl) =>
-                                      onValuePicChange?.(
-                                        attr.attr_id,
-                                        item.id,
-                                        picUrl,
-                                      )
-                                    }
-                                  />
+                                  <div
+                                    style={{
+                                      display: 'inline-flex',
+                                      justifyContent: 'center',
+                                      alignItems: 'center',
+                                    }}
+                                  >
+                                    <DhgateAttrPicUpload
+                                      storeId={storeId}
+                                      value={item.picUrl}
+                                      disabled={disabled}
+                                      compact
+                                      onChange={(picUrl) =>
+                                        onValuePicChange?.(
+                                          attr.attr_id,
+                                          item.id,
+                                          picUrl,
+                                        )
+                                      }
+                                    />
+                                  </div>
                                 </td>
                               </tr>
                             );

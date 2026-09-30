@@ -15,6 +15,7 @@ import {
   Form,
   Input,
   Select,
+  Skeleton,
   Space,
   Typography,
 } from 'antd';
@@ -46,6 +47,7 @@ import {
 import {
   fetchDhCategoryAttrs,
   fetchDhCategoryPath,
+  fetchDhCommissionRate,
 } from '@/services/admin/categories';
 import { fetchDhProductDetail } from '@/services/admin/products';
 import {
@@ -54,9 +56,12 @@ import {
   fetchStoreProductGroups,
   fetchStoreShippingTemplates,
 } from '@/services/admin/stores';
+import { fetchDhMeasuresUnitList } from '@/services/common/utils';
 import type {
   DhCategoryAttrPublic,
   DhCategoryPublic,
+  DhCommissionRatePublic,
+  DhMeasuresUnitPublic,
   DhProductDetailPublic,
   DhProductSelectedAttrPublic,
 } from '@/types/api';
@@ -67,9 +72,15 @@ import CategorySelectField, {
   formatCategoryPathDisplay,
 } from './CategorySelectField';
 import './changedHighlight.css';
+import CommissionRateHint from './CommissionRateHint';
 import ProductImagesEditor from './ProductImagesEditor';
 import SpecAttrsFields from './SpecAttrsFields';
 import SpecSkuTable from './SpecSkuTable';
+import PriceRangeFields from './PriceRangeFields';
+import PackageInfoFields from './PackageInfoFields';
+import SaleInfoFields, {
+  resolveMeasureDisplayName,
+} from './SaleInfoFields';
 
 const ITEM_NAME_MAX_LENGTH = 140;
 const CHANGED_COLOR = '#cf1322';
@@ -385,6 +396,8 @@ export function ProductEditor({
   const [categoryAttrs, setCategoryAttrs] = useState<DhCategoryAttrPublic[]>(
     [],
   );
+  /** 类目属性走敦煌三方接口，单独加载，不阻塞页面其它区块 */
+  const [categoryAttrsLoading, setCategoryAttrsLoading] = useState(false);
   const [itemGroupOptions, setItemGroupOptions] = useState<
     ItemGroupCascaderOption[]
   >([]);
@@ -393,7 +406,16 @@ export function ProductEditor({
     [],
   );
   const [shippingOptions, setShippingOptions] = useState<TemplateOption[]>([]);
+  const [measureOptions, setMeasureOptions] = useState<DhMeasuresUnitPublic[]>(
+    [],
+  );
+  const [measuresLoading, setMeasuresLoading] = useState(false);
+  const [commissionRate, setCommissionRate] =
+    useState<DhCommissionRatePublic | null>(null);
+  const [commissionRateLoading, setCommissionRateLoading] = useState(false);
   const itemGroupLoadedRef = useRef(false);
+  const categoryAttrsReqRef = useRef(0);
+  const commissionRateReqRef = useRef(0);
 
   const publishDetail = useCallback((next: DhProductDetailPublic) => {
     setDetail(next);
@@ -411,10 +433,37 @@ export function ProductEditor({
     });
   }, []);
 
+  const loadCategoryAttrs = useCallback(async (categoryId: number) => {
+    const reqId = categoryAttrsReqRef.current + 1;
+    categoryAttrsReqRef.current = reqId;
+    setCategoryAttrsLoading(true);
+    setCategoryAttrs([]);
+    try {
+      const attrs = await fetchDhCategoryAttrs(categoryId);
+      if (categoryAttrsReqRef.current !== reqId) {
+        return;
+      }
+      setCategoryAttrs(attrs.attrs || []);
+    } catch {
+      if (categoryAttrsReqRef.current !== reqId) {
+        return;
+      }
+      setCategoryAttrs([]);
+    } finally {
+      if (categoryAttrsReqRef.current === reqId) {
+        setCategoryAttrsLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setDetail(undefined);
+    setCategoryPath(undefined);
+    setCategoryAttrs([]);
+    setCategoryAttrsLoading(false);
+    categoryAttrsReqRef.current += 1;
     itemGroupLoadedRef.current = false;
     void (async () => {
       try {
@@ -441,73 +490,66 @@ export function ProductEditor({
           return;
         }
 
-        let nextCategoryPath: string[] | undefined;
-        if (data.category?.id) {
-          try {
-            const pathData = await fetchDhCategoryPath(data.category.id);
-            if (cancelled) {
-              return;
-            }
-            setCategoryPath(formatCategoryPathDisplay(pathData));
-            nextCategoryPath = pathData.path_items.map(
-              (item) => item.cate_pub_id,
-            );
-            const attrs = await fetchDhCategoryAttrs(data.category.id);
-            if (!cancelled) {
-              setCategoryAttrs(attrs.attrs || []);
-            }
-          } catch (pathError) {
-            if (cancelled) {
-              return;
-            }
-            setCategoryPath(
-              data.category ? formatCategoryLabel(data.category) : undefined,
-            );
-            const fallbackId =
-              data.cate_pub_id || data.category?.cate_pub_id;
-            nextCategoryPath = fallbackId ? [fallbackId] : undefined;
-            if (data.category?.id) {
-              try {
-                const attrs = await fetchDhCategoryAttrs(data.category.id);
-                if (!cancelled) {
-                  setCategoryAttrs(attrs.attrs || []);
-                }
-              } catch {
-                if (!cancelled) {
-                  setCategoryAttrs([]);
-                }
-              }
-            }
-            message.error(
-              pathError instanceof Error
-                ? pathError.message
-                : intl.formatMessage({
-                    id: 'pages.product.detail.categoryPathFailed',
-                    defaultMessage: '获取分类全路径失败',
-                  }),
-            );
-          }
-        } else {
-          setCategoryPath(undefined);
-          setCategoryAttrs([]);
-        }
-        if (cancelled) {
-          return;
-        }
+        // 先渲染详情主体，类目属性（敦煌三方）异步加载
         publishDetail(data);
         form.setFieldsValue({
           store_id: data.store_id || undefined,
-          category_path: nextCategoryPath,
+          category_path: data.cate_pub_id ? [data.cate_pub_id] : undefined,
           item_name: data.item_name || '',
           key_word1: data.key_word1 || '',
           key_word2: data.key_word2 || '',
           key_word3: data.key_word3 || '',
           customAttrs: toCustomAttrDrafts(data.attr_list),
         });
+        setLoading(false);
+
+        if (data.category?.id) {
+          const categoryId = data.category.id;
+          void loadCategoryAttrs(categoryId);
+          void (async () => {
+            try {
+              const pathData = await fetchDhCategoryPath(categoryId);
+              if (cancelled) {
+                return;
+              }
+              setCategoryPath(formatCategoryPathDisplay(pathData));
+              form.setFieldsValue({
+                category_path: pathData.path_items.map(
+                  (item) => item.cate_pub_id,
+                ),
+              });
+            } catch (pathError) {
+              if (cancelled) {
+                return;
+              }
+              setCategoryPath(
+                data.category ? formatCategoryLabel(data.category) : undefined,
+              );
+              const fallbackId =
+                data.cate_pub_id || data.category?.cate_pub_id;
+              form.setFieldsValue({
+                category_path: fallbackId ? [fallbackId] : undefined,
+              });
+              message.error(
+                pathError instanceof Error
+                  ? pathError.message
+                  : intl.formatMessage({
+                      id: 'pages.product.detail.categoryPathFailed',
+                      defaultMessage: '获取分类全路径失败',
+                    }),
+              );
+            }
+          })();
+        } else {
+          setCategoryPath(undefined);
+          setCategoryAttrs([]);
+          setCategoryAttrsLoading(false);
+        }
       } catch (error) {
         if (!cancelled) {
           setDetail(undefined);
           setCategoryAttrs([]);
+          setCategoryAttrsLoading(false);
           message.error(
             error instanceof Error
               ? error.message
@@ -516,20 +558,19 @@ export function ProductEditor({
                   defaultMessage: '加载商品详情失败',
                 }),
           );
-        }
-      } finally {
-        if (!cancelled) {
           setLoading(false);
         }
       }
     })();
     return () => {
       cancelled = true;
+      categoryAttrsReqRef.current += 1;
     };
   }, [
     form,
     initialDetail,
     intl,
+    loadCategoryAttrs,
     message,
     mode,
     publishDetail,
@@ -575,6 +616,65 @@ export function ProductEditor({
       cancelled = true;
     };
   }, [detail?.store_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMeasuresLoading(true);
+    void fetchDhMeasuresUnitList()
+      .then((list) => {
+        if (!cancelled) {
+          setMeasureOptions(list || []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMeasureOptions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMeasuresLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const currentCatePubId =
+    detail?.category?.cate_pub_id || detail?.cate_pub_id || undefined;
+
+  useEffect(() => {
+    const cateId = (currentCatePubId || '').trim();
+    if (!cateId) {
+      commissionRateReqRef.current += 1;
+      setCommissionRate(null);
+      setCommissionRateLoading(false);
+      return;
+    }
+    const reqId = commissionRateReqRef.current + 1;
+    commissionRateReqRef.current = reqId;
+    setCommissionRateLoading(true);
+    setCommissionRate(null);
+    void fetchDhCommissionRate(cateId, { skipErrorHandler: true })
+      .then((data) => {
+        if (commissionRateReqRef.current !== reqId) {
+          return;
+        }
+        setCommissionRate(data);
+      })
+      .catch(() => {
+        if (commissionRateReqRef.current !== reqId) {
+          return;
+        }
+        setCommissionRate(null);
+      })
+      .finally(() => {
+        if (commissionRateReqRef.current === reqId) {
+          setCommissionRateLoading(false);
+        }
+      });
+  }, [currentCatePubId]);
 
   useEffect(() => {
     if (!detail?.store_id) {
@@ -667,6 +767,21 @@ export function ProductEditor({
     [cascaderGroupOptions, form, itemGroupPath],
   );
 
+  const filterItemGroupOption = useCallback(
+    (inputValue: string, path: DefaultOptionType[]) => {
+      const keyword = inputValue.trim().toLowerCase();
+      if (!keyword) {
+        return true;
+      }
+      return path.some((option) => {
+        const label = String(option.label ?? '').toLowerCase();
+        const value = String(option.value ?? '').toLowerCase();
+        return label.includes(keyword) || value.includes(keyword);
+      });
+    },
+    [],
+  );
+
   const handleCategoryPick = useCallback(
     (picked: DhCategoryPublic) => {
       void (async () => {
@@ -675,8 +790,6 @@ export function ProductEditor({
           setCategoryPath(formatCategoryPathDisplay(pathData));
           const selectedCategory =
             pathData.path_items[pathData.path_items.length - 1] ?? picked;
-          const attrs = await fetchDhCategoryAttrs(picked.id);
-          setCategoryAttrs(attrs.attrs || []);
           form.setFieldsValue({
             category_path: pathData.path_items.map((item) => item.cate_pub_id),
           });
@@ -692,6 +805,7 @@ export function ProductEditor({
             onDetailChangeRef.current?.(next);
             return next;
           });
+          void loadCategoryAttrs(picked.id);
         } catch (error) {
           message.error(
             error instanceof Error
@@ -704,7 +818,7 @@ export function ProductEditor({
         }
       })();
     },
-    [form, intl, message],
+    [form, intl, loadCategoryAttrs, message],
   );
 
   const syncFormValues = (
@@ -771,6 +885,12 @@ export function ProductEditor({
     (attr) => !priceAttrIdSet.has(String(attr.attr_id)),
   );
   const normalSelectedAttrs = nonPriceProductAttrs(detail?.attr_list);
+  const measureUnitLabel =
+    resolveMeasureDisplayName(detail?.measure_id, measureOptions) ||
+    intl.formatMessage({
+      id: 'pages.product.detail.sale.measureFallback',
+      defaultMessage: '件',
+    });
 
   const handleNormalAttrsChange = useCallback(
     (nextSelected: DhProductSelectedAttrPublic[]) => {
@@ -960,7 +1080,6 @@ export function ProductEditor({
             }),
             isChanged('attr_list'),
           )}
-          loading={loading}
           style={{ marginTop: 16 }}
         >
           <Typography.Text
@@ -972,7 +1091,9 @@ export function ProductEditor({
               defaultMessage: '类目属性',
             })}
           </Typography.Text>
-          {normalCategoryAttrs.length > 0 ? (
+          {categoryAttrsLoading ? (
+            <Skeleton active paragraph={{ rows: 8 }} />
+          ) : normalCategoryAttrs.length > 0 ? (
             <CategoryAttrsFields
               attrs={normalCategoryAttrs}
               selectedAttrs={normalSelectedAttrs}
@@ -997,7 +1118,7 @@ export function ProductEditor({
             strong
             style={{
               display: 'block',
-              marginBottom: 12,
+              marginBottom: 8,
               color: changedCustomValues?.length ? CHANGED_COLOR : undefined,
             }}
           >
@@ -1052,7 +1173,7 @@ export function ProductEditor({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 8,
-                    marginBottom: 16,
+                    marginBottom: 8,
                     color: rowChanged ? CHANGED_COLOR : undefined,
                   }}
                 >
@@ -1186,6 +1307,7 @@ export function ProductEditor({
               options={cascaderGroupOptions}
               changeOnSelect
               allowClear
+              showSearch={{ filter: filterItemGroupOption }}
               displayRender={renderItemGroupDisplay}
               style={{
                 maxWidth: 480,
@@ -1198,6 +1320,39 @@ export function ProductEditor({
               })}
             />
           </Form.Item>
+          <SaleInfoFields
+            disabled={readOnly}
+            issample={detail?.issample}
+            measureId={detail?.measure_id}
+            measureOptions={measureOptions}
+            measuresLoading={measuresLoading}
+            packingQuantity={detail?.packing_quantity}
+            itemInventory={detail?.item_inventory}
+            maxSaleQty={detail?.max_sale_qty}
+            leadingTime={detail?.leading_time}
+            vaildDay={detail?.vaild_day}
+            onIssampleChange={(value) => {
+              patchDetail({ issample: value });
+            }}
+            onMeasureIdChange={(value) => {
+              patchDetail({ measure_id: value });
+            }}
+            onPackingQuantityChange={(value) => {
+              patchDetail({ packing_quantity: value });
+            }}
+            onItemInventoryChange={(value) => {
+              patchDetail({ item_inventory: value });
+            }}
+            onMaxSaleQtyChange={(value) => {
+              patchDetail({ max_sale_qty: value });
+            }}
+            onLeadingTimeChange={(value) => {
+              patchDetail({ leading_time: value });
+            }}
+            onVaildDayChange={(value) => {
+              patchDetail({ vaild_day: value });
+            }}
+          />
           {showSyncMeta ? (
             <>
               <Form.Item
@@ -1281,44 +1436,55 @@ export function ProductEditor({
             isChanged('item_spec_self_def_list') ||
             changedCategoryAttrIds.some((id) => priceAttrIdSet.has(id)),
         )}
-        loading={loading}
       >
-        <SpecAttrsFields
-          disabled={readOnly}
-          changedAttrIds={changedCategoryAttrIds}
-          priceCategoryAttrs={priceCategoryAttrs}
-          priceSelectedAttrs={priceSelectedAttrs}
-          specSelfDefs={detail?.item_spec_self_def_list}
-          storeId={detail?.store_id || undefined}
-          onSelectedAttrsChange={
-            readOnly ? undefined : handlePriceAttrsChange
-          }
-          onValuePicChange={
-            readOnly ? undefined : handleAttrValuePicChange
-          }
-          onSpecSelfDefsChange={(next) => {
-            setDetail((prev) => {
-              if (!prev) {
-                return prev;
-              }
-              const updated = { ...prev, item_spec_self_def_list: next };
-              onDetailChangeRef.current?.(updated);
-              return updated;
-            });
-          }}
-        />
-        <Divider plain>
-          {intl.formatMessage({
-            id: 'pages.product.detail.specSku.divider',
-            defaultMessage: '商品规格属性生成的规格sku',
-          })}
+        {categoryAttrsLoading ? (
+          <Skeleton active paragraph={{ rows: 6 }} style={{ marginBottom: 24 }} />
+        ) : (
+          <SpecAttrsFields
+            disabled={readOnly}
+            changedAttrIds={changedCategoryAttrIds}
+            priceCategoryAttrs={priceCategoryAttrs}
+            priceSelectedAttrs={priceSelectedAttrs}
+            specSelfDefs={detail?.item_spec_self_def_list}
+            storeId={detail?.store_id || undefined}
+            onSelectedAttrsChange={
+              readOnly ? undefined : handlePriceAttrsChange
+            }
+            onValuePicChange={
+              readOnly ? undefined : handleAttrValuePicChange
+            }
+            onSpecSelfDefsChange={(next) => {
+              setDetail((prev) => {
+                if (!prev) {
+                  return prev;
+                }
+                const updated = { ...prev, item_spec_self_def_list: next };
+                onDetailChangeRef.current?.(updated);
+                return updated;
+              });
+            }}
+          />
+        )}
+        <Divider plain style={{ margin: '28px 0' }}>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>
+            {intl.formatMessage({
+              id: 'pages.product.detail.specSku.divider',
+              defaultMessage: '商品规格属性生成的规格sku',
+            })}
+          </span>
         </Divider>
+        <CommissionRateHint
+          hasCategory={Boolean(currentCatePubId)}
+          loading={commissionRateLoading}
+          data={commissionRate}
+        />
         <SpecSkuTable
-          disabled={readOnly}
+          disabled={readOnly || categoryAttrsLoading}
           skuList={detail?.sku_list}
           priceSelectedAttrs={priceSelectedAttrs}
           specSelfDefs={detail?.item_spec_self_def_list}
           itemCode={detail?.item_code}
+          measureUnitLabel={measureUnitLabel}
           onChange={(next) => {
             setDetail((prev) => {
               if (!prev) {
@@ -1328,6 +1494,22 @@ export function ProductEditor({
               onDetailChangeRef.current?.(updated);
               return updated;
             });
+          }}
+        />
+        <PriceRangeFields
+          disabled={readOnly}
+          priceConfigType={detail?.price_config_type}
+          minWholesaleQty={detail?.min_wholesale_qty}
+          ranges={detail?.item_wholesale_range_list}
+          measureUnitLabel={measureUnitLabel}
+          onPriceConfigTypeChange={(value) => {
+            patchDetail({ price_config_type: value });
+          }}
+          onMinWholesaleQtyChange={(value) => {
+            patchDetail({ min_wholesale_qty: value });
+          }}
+          onRangesChange={(next) => {
+            patchDetail({ item_wholesale_range_list: next });
           }}
         />
       </Card>
@@ -1361,6 +1543,45 @@ export function ProductEditor({
           />
         </Card>
       ) : null}
+
+      <Card
+        title={changedLabel(
+          intl.formatMessage({
+            id: 'pages.product.detail.section.package',
+            defaultMessage: '包装信息',
+          }),
+          isChanged('gross_weight') ||
+            isChanged('length') ||
+            isChanged('width') ||
+            isChanged('height') ||
+            isChanged('item_weight_range'),
+        )}
+        loading={loading}
+      >
+        <PackageInfoFields
+          disabled={readOnly}
+          grossWeight={detail?.gross_weight}
+          length={detail?.length}
+          width={detail?.width}
+          height={detail?.height}
+          weightRange={detail?.item_weight_range}
+          onGrossWeightChange={(value) => {
+            patchDetail({ gross_weight: value });
+          }}
+          onLengthChange={(value) => {
+            patchDetail({ length: value });
+          }}
+          onWidthChange={(value) => {
+            patchDetail({ width: value });
+          }}
+          onHeightChange={(value) => {
+            patchDetail({ height: value });
+          }}
+          onWeightRangeChange={(value) => {
+            patchDetail({ item_weight_range: value });
+          }}
+        />
+      </Card>
 
       <Card
         title={intl.formatMessage({

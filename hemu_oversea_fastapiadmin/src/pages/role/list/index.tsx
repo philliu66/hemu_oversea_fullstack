@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useIntl, useModel } from '@umijs/max';
+import { useAccess, useIntl, useModel } from '@umijs/max';
 import { App, Button, Popconfirm } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
@@ -21,12 +21,17 @@ type TableParams = {
 
 const RoleListPage: React.FC = () => {
   const intl = useIntl();
+  const access = useAccess();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const portalRole = initialState?.currentUser?.role;
   const actionRef = useRef<ActionType | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<RolePublic | null>(null);
+
+  const canCreate = access.can('personnel.role.create');
+  const canUpdate = access.can('personnel.role.update');
+  const canDelete = access.can('personnel.role.delete');
 
   const openCreate = () => {
     setEditing(null);
@@ -96,37 +101,42 @@ const RoleListPage: React.FC = () => {
       }),
       valueType: 'option',
       width: 160,
+      hideInTable: !canUpdate && !canDelete,
       render: (_, record) => [
-        <a key="edit" onClick={() => openEdit(record)}>
-          {intl.formatMessage({
-            id: 'pages.role.action.edit',
-            defaultMessage: '编辑',
-          })}
-        </a>,
-        <Popconfirm
-          key="delete"
-          title={intl.formatMessage({
-            id: 'pages.role.delete.confirm',
-            defaultMessage: '确认删除该角色？',
-          })}
-          onConfirm={async () => {
-            await deleteRole(portalRole, record.id);
-            message.success(
-              intl.formatMessage({
-                id: 'pages.role.delete.success',
-                defaultMessage: '删除成功',
-              }),
-            );
-            actionRef.current?.reload();
-          }}
-        >
-          <a>
+        canUpdate ? (
+          <a key="edit" onClick={() => openEdit(record)}>
             {intl.formatMessage({
-              id: 'pages.role.action.delete',
-              defaultMessage: '删除',
+              id: 'pages.role.action.edit',
+              defaultMessage: '编辑',
             })}
           </a>
-        </Popconfirm>,
+        ) : null,
+        canDelete ? (
+          <Popconfirm
+            key="delete"
+            title={intl.formatMessage({
+              id: 'pages.role.delete.confirm',
+              defaultMessage: '确认删除该角色？',
+            })}
+            onConfirm={async () => {
+              await deleteRole(portalRole, record.id);
+              message.success(
+                intl.formatMessage({
+                  id: 'pages.role.delete.success',
+                  defaultMessage: '删除成功',
+                }),
+              );
+              actionRef.current?.reload();
+            }}
+          >
+            <a>
+              {intl.formatMessage({
+                id: 'pages.role.action.delete',
+                defaultMessage: '删除',
+              })}
+            </a>
+          </Popconfirm>
+        ) : null,
       ],
     },
   ];
@@ -141,19 +151,23 @@ const RoleListPage: React.FC = () => {
         actionRef={actionRef}
         rowKey="id"
         search={{ labelWidth: 'auto' }}
-        toolBarRender={() => [
-          <Button
-            type="primary"
-            key="create"
-            icon={<PlusOutlined />}
-            onClick={openCreate}
-          >
-            {intl.formatMessage({
-              id: 'pages.role.action.create',
-              defaultMessage: '新建角色',
-            })}
-          </Button>,
-        ]}
+        toolBarRender={() =>
+          canCreate
+            ? [
+                <Button
+                  type="primary"
+                  key="create"
+                  icon={<PlusOutlined />}
+                  onClick={openCreate}
+                >
+                  {intl.formatMessage({
+                    id: 'pages.role.action.create',
+                    defaultMessage: '新建角色',
+                  })}
+                </Button>,
+              ]
+            : []
+        }
         request={async (params) => {
           const data = await listRoles(portalRole, {
             keyword: params.keyword,

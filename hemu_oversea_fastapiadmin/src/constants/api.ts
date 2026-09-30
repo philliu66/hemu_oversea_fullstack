@@ -87,12 +87,15 @@ export const AdminCategoryApi = {
   DH_SEARCH: '/api/v1/admin/categories/dh/search',
   DH_PATH: '/api/v1/admin/categories/dh/path',
   DH_ATTRS: '/api/v1/admin/categories/dh/attrs',
+  DH_COMMISSION_RATE: '/api/v1/admin/categories/dh/commission-rate/get',
 } as const;
 
 /** 全局工具类路径 */
 export const CommonUtilsApi = {
   DHGATE_UPLOAD_IMG: '/api/v1/common/utils/dhgate/uploadimg',
   DHGATE_TWEAK_IMG: '/api/v1/common/utils/dhgate/tweakimg',
+  DHGATE_GET_MEASURES_UNIT_LIST:
+    '/api/v1/common/utils/dhgate/getmeasuresunitlist',
 } as const;
 
 /** 列表默认分页大小 */

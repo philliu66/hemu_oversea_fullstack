@@ -16,9 +16,12 @@ from app.schemas.product import (
     DhCategoryPathRequest,
     DhCategoryPublic,
     DhCategorySearchRequest,
+    DhCommissionRatePublic,
+    DhCommissionRateRequest,
     DhSeedCategoryPublic,
 )
 from app.services import products as product_service
+from app.services.commission_rates_dh import get_commission_rate_by_cate_id
 
 router = APIRouter(
     prefix="/categories",
@@ -133,3 +136,20 @@ def get_dh_category_attrs(
     内部调用 dh.category.get$2.0。
     """
     return success(product_service.get_dh_category_attrs(db, category_id=payload.id))
+
+
+@router.post(
+    "/dh/commission-rate/get",
+    response_model=ApiResponse[DhCommissionRatePublic],
+    summary="查询类目佣金率",
+)
+def get_dh_commission_rate(
+    payload: DhCommissionRateRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[DhCommissionRatePublic]:
+    """
+    按类目 ID（cateId）查询本地 commissions_rate_dh 佣金率。
+
+    数据由 testAPI dh.categorys.commissions 全量同步入库，本接口不请求敦煌。
+    """
+    return success(get_commission_rate_by_cate_id(db, cate_id=payload.cate_id))

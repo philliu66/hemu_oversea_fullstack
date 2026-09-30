@@ -305,7 +305,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
 
   return (
     <div className="hm-category-select-field">
-      <Space wrap size={8} style={{ width: '100%' }}>
+      <Space wrap size={8}>
         <Select
           showSearch
           allowClear={false}
@@ -340,20 +340,20 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
             defaultMessage: '选择分类',
           })}
         </Button>
-        {pathDisplay ? (
-          <Tooltip title={pathDisplay}>
-            <span
-              className={
-                changed
-                  ? 'hm-category-path-text hm-changed-text'
-                  : 'hm-category-path-text'
-              }
-            >
-              {pathDisplay}
-            </span>
-          </Tooltip>
-        ) : null}
       </Space>
+      {pathDisplay ? (
+        <Tooltip title={pathDisplay}>
+          <div
+            className={
+              changed
+                ? 'hm-category-path-text hm-changed-text'
+                : 'hm-category-path-text'
+            }
+          >
+            {pathDisplay}
+          </div>
+        </Tooltip>
+      ) : null}
 
       <Modal
         title={intl.formatMessage({

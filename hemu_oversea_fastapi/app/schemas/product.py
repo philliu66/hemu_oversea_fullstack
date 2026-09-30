@@ -87,6 +87,40 @@ class DhCategoryAttrsRequest(BaseModel):
     )
 
 
+class DhCommissionUnitPublic(BaseModel):
+    """阶梯佣金区间（对应 unitList 项）。"""
+
+    left_bound: str | None = Field(default=None, description="区间左边界 leftBound")
+    right_bound: str | None = Field(default=None, description="区间右边界 rightBound")
+    left_bound_close: bool | None = Field(
+        default=None, description="左边界是否闭合 leftBoundClose"
+    )
+    right_bound_close: bool | None = Field(
+        default=None, description="右边界是否闭合 rightBoundClose"
+    )
+    commission_rate: str | None = Field(
+        default=None, description="佣金率 commissionRate"
+    )
+
+
+class DhCommissionRatePublic(BaseModel):
+    """类目佣金率（对应 LadderCommissionRateVO / commissions_rate_dh）。"""
+
+    cate_id: str = Field(description="类目 ID cateId")
+    unit_list: list[DhCommissionUnitPublic] = Field(
+        default_factory=list,
+        description="阶梯佣金率 unitList",
+    )
+
+
+class DhCommissionRateRequest(BaseModel):
+    cate_id: str = Field(
+        min_length=1,
+        max_length=64,
+        description="类目 ID（对应 dh.categorys.commissions 的 cateId）",
+    )
+
+
 class DhCategoryAttrValPublic(BaseModel):
     """类目属性可选值。"""
 
@@ -227,6 +261,20 @@ class DhProductPublic(BaseModel):
 
 class DhProductDetailRequest(BaseModel):
     id: int = Field(description="商品 ID（product_dh.id）", ge=1)
+
+
+class DhMeasuresUnitPublic(BaseModel):
+    """计件单位（对应 dh.base.measures.get MeasureVO / measures_unit_dh）。"""
+
+    measure_id: str = Field(description="计量单位 ID（measureid）")
+    name: str | None = Field(default=None, description="英文名称（name）")
+    description: str | None = Field(default=None, description="描述（description）")
+    valid: str | None = Field(
+        default=None, description="是否有效（valid）：1有效/0无效"
+    )
+    cname: str | None = Field(default=None, description="中文名称（cname）")
+    short_name: str | None = Field(default=None, description="英文缩写（shortname）")
+    plural: str | None = Field(default=None, description="英文复数（plural）")
 
 
 class DhItemWholesaleRangePublic(BaseModel):

@@ -5,6 +5,7 @@ import {
   Drawer,
   Form,
   Input,
+  InputNumber,
   Select,
   Space,
   Spin,
@@ -33,6 +34,7 @@ type FormValues = {
   storeType: StoreType;
   name: string;
   identifier: string;
+  baseDiscount: number;
   account: string;
   password: string;
 };
@@ -100,6 +102,7 @@ export function StoreFormDrawer({
         storeType: undefined,
         name: undefined,
         identifier: undefined,
+        baseDiscount: 0,
         account: undefined,
         password: undefined,
       });
@@ -120,6 +123,7 @@ export function StoreFormDrawer({
           storeType: detail.store_type as StoreType,
           name: detail.name,
           identifier: detail.identifier,
+          baseDiscount: Number(detail.base_discount ?? 0),
           account: detail.account,
           password: detail.password,
         });
@@ -189,6 +193,7 @@ export function StoreFormDrawer({
           store_type: values.storeType,
           name: values.name.trim(),
           identifier: values.identifier.trim(),
+          base_discount: values.baseDiscount,
           account: values.account.trim(),
           password: values.password,
         });
@@ -204,6 +209,7 @@ export function StoreFormDrawer({
           store_type: values.storeType,
           name: values.name.trim(),
           identifier: values.identifier.trim(),
+          base_discount: values.baseDiscount,
           account: values.account.trim(),
           password: values.password,
         });
@@ -367,6 +373,48 @@ export function StoreFormDrawer({
             }
           >
             <Input maxLength={100} disabled={readOnly} />
+          </Form.Item>
+          <Form.Item
+            name="baseDiscount"
+            label={intl.formatMessage({
+              id: 'pages.store.field.baseDiscount',
+              defaultMessage: '基础折扣率',
+            })}
+            rules={
+              readOnly
+                ? undefined
+                : [
+                    {
+                      required: true,
+                      message: intl.formatMessage({
+                        id: 'pages.store.field.baseDiscountRequired',
+                        defaultMessage: '请输入基础折扣率',
+                      }),
+                    },
+                    {
+                      type: 'number',
+                      min: 0,
+                      max: 0.99,
+                      message: intl.formatMessage({
+                        id: 'pages.store.field.baseDiscountRange',
+                        defaultMessage: '基础折扣率范围为 0～0.99',
+                      }),
+                    },
+                  ]
+            }
+          >
+            <InputNumber
+              min={0}
+              max={0.99}
+              step={0.01}
+              precision={2}
+              style={{ width: '100%' }}
+              disabled={readOnly}
+              placeholder={intl.formatMessage({
+                id: 'pages.store.field.baseDiscountPlaceholder',
+                defaultMessage: '请输入基础折扣率（0～0.99）',
+              })}
+            />
           </Form.Item>
           <Form.Item
             name="account"

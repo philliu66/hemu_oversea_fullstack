@@ -301,6 +301,10 @@ export default {
   'pages.store.field.identifier': '店铺标识',
   'pages.store.field.identifierPlaceholder': '请输入店铺标识',
   'pages.store.field.identifierRequired': '请输入店铺标识',
+  'pages.store.field.baseDiscount': '基础折扣率',
+  'pages.store.field.baseDiscountPlaceholder': '请输入基础折扣率（0～0.99）',
+  'pages.store.field.baseDiscountRequired': '请输入基础折扣率',
+  'pages.store.field.baseDiscountRange': '基础折扣率范围为 0～0.99',
   'pages.store.field.account': '店铺账号',
   'pages.store.field.accountPlaceholder': '请输入店铺账号',
   'pages.store.field.accountRequired': '请输入店铺账号',
@@ -451,6 +455,11 @@ export default {
   'pages.product.detail.specSku.divider': '商品规格属性生成的规格sku',
   'pages.product.detail.specSku.hint':
     '以下列表由上方规格属性组合生成，可批量设置销售状态与预计收入。',
+  'pages.product.detail.commission.title': '当前类目佣金率标准',
+  'pages.product.detail.commission.empty':
+    '当前类目暂无佣金率数据，请先同步类目佣金率',
+  'pages.product.detail.commission.col.range': '价格区间（USD）',
+  'pages.product.detail.commission.col.rate': '佣金费率',
   'pages.product.detail.specAttrs.sectionTitle': '规格属性',
   'pages.product.detail.specSku.customSpec': '自定义规格',
   'pages.product.detail.specSku.saleStatus': '销售状态',

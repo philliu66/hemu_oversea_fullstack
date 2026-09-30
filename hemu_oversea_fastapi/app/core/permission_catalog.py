@@ -16,6 +16,7 @@ class PermissionSeed(TypedDict):
 
 
 # 扁平列表，parent_code 指向同表 code；插入时按依赖序处理。
+# 说明：欢迎页 /welcome 为登录后公共页，不进入权限目录、无需菜单权限码。
 PERMISSION_SEEDS: list[PermissionSeed] = [
     # common
     {

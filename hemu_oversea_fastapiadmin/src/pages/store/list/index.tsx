@@ -225,11 +225,28 @@ const StoreList: React.FC = () => {
     },
     {
       title: intl.formatMessage({
+        id: 'pages.store.field.baseDiscount',
+        defaultMessage: '基础折扣率',
+      }),
+      dataIndex: 'base_discount',
+      search: false,
+      width: 120,
+      render: (_, record) => {
+        const value = Number(record.base_discount);
+        if (!Number.isFinite(value)) {
+          return '-';
+        }
+        return value.toFixed(2);
+      },
+    },
+    {
+      title: intl.formatMessage({
         id: 'pages.store.field.createdBy',
         defaultMessage: '创建人',
       }),
       dataIndex: 'created_by',
       search: false,
+      hideInTable: true,
       width: 120,
       ellipsis: true,
       render: (_, record) => record.created_by || '-',

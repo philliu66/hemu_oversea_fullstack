@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useIntl } from '@umijs/max';
+import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Popconfirm } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
@@ -21,11 +21,16 @@ type SupplierTableParams = {
 
 const SupplierList: React.FC = () => {
   const intl = useIntl();
+  const access = useAccess();
   const { message } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<SupplierDrawerMode>('create');
   const [activeId, setActiveId] = useState<number>();
+
+  const canCreate = access.can('supplier.create');
+  const canUpdate = access.can('supplier.update');
+  const canDelete = access.can('supplier.delete');
 
   const openCreate = () => {
     setActiveId(undefined);
@@ -132,40 +137,44 @@ const SupplierList: React.FC = () => {
             defaultMessage: '查看',
           })}
         </Button>,
-        <Button type="link" key="edit" onClick={() => openEdit(record.id)}>
-          {intl.formatMessage({
-            id: 'pages.supplier.action.edit',
-            defaultMessage: '编辑',
-          })}
-        </Button>,
-        <Popconfirm
-          key="delete"
-          title={intl.formatMessage({
-            id: 'pages.supplier.delete.confirm',
-            defaultMessage: '确认删除该供应商？删除后其下属账号将一并停用。',
-          })}
-          onConfirm={async () => {
-            try {
-              await deleteSupplier(record.id);
-              message.success(
-                intl.formatMessage({
-                  id: 'pages.supplier.delete.success',
-                  defaultMessage: '删除成功',
-                }),
-              );
-              actionRef.current?.reload();
-            } catch {
-              // 错误已由全局拦截器处理
-            }
-          }}
-        >
-          <Button type="link" danger>
+        canUpdate ? (
+          <Button type="link" key="edit" onClick={() => openEdit(record.id)}>
             {intl.formatMessage({
-              id: 'pages.supplier.action.delete',
-              defaultMessage: '删除',
+              id: 'pages.supplier.action.edit',
+              defaultMessage: '编辑',
             })}
           </Button>
-        </Popconfirm>,
+        ) : null,
+        canDelete ? (
+          <Popconfirm
+            key="delete"
+            title={intl.formatMessage({
+              id: 'pages.supplier.delete.confirm',
+              defaultMessage: '确认删除该供应商？删除后其下属账号将一并停用。',
+            })}
+            onConfirm={async () => {
+              try {
+                await deleteSupplier(record.id);
+                message.success(
+                  intl.formatMessage({
+                    id: 'pages.supplier.delete.success',
+                    defaultMessage: '删除成功',
+                  }),
+                );
+                actionRef.current?.reload();
+              } catch {
+                // 错误已由全局拦截器处理
+              }
+            }}
+          >
+            <Button type="link" danger>
+              {intl.formatMessage({
+                id: 'pages.supplier.action.delete',
+                defaultMessage: '删除',
+              })}
+            </Button>
+          </Popconfirm>
+        ) : null,
       ],
     },
   ];
@@ -187,19 +196,23 @@ const SupplierList: React.FC = () => {
           pageSizeOptions: [10, 20, 50, 100],
           showSizeChanger: true,
         }}
-        toolBarRender={() => [
-          <Button
-            type="primary"
-            key="create"
-            icon={<PlusOutlined />}
-            onClick={openCreate}
-          >
-            {intl.formatMessage({
-              id: 'pages.supplier.action.create',
-              defaultMessage: '新建',
-            })}
-          </Button>,
-        ]}
+        toolBarRender={() =>
+          canCreate
+            ? [
+                <Button
+                  type="primary"
+                  key="create"
+                  icon={<PlusOutlined />}
+                  onClick={openCreate}
+                >
+                  {intl.formatMessage({
+                    id: 'pages.supplier.action.create',
+                    defaultMessage: '新建',
+                  })}
+                </Button>,
+              ]
+            : []
+        }
         request={async (params) => {
           try {
             const result = await fetchSupplierList({
@@ -230,7 +243,7 @@ const SupplierList: React.FC = () => {
         onClose={closeDrawer}
         onSuccess={() => actionRef.current?.reload()}
         onSwitchToEdit={
-          drawerMode === 'view' && activeId
+          drawerMode === 'view' && activeId && canUpdate
             ? () => setDrawerMode('edit')
             : undefined
         }

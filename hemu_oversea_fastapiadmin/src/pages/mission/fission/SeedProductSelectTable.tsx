@@ -85,10 +85,8 @@ function resolveCatePubId(
 }
 
 export function SeedProductSelectTable({
-  selectedId,
   onSelect,
 }: {
-  selectedId?: number;
   onSelect: (product: DhProductPublic) => void;
 }) {
   const intl = useIntl();
@@ -425,19 +423,14 @@ export function SeedProductSelectTable({
       search: false,
       width: 96,
       fixed: 'right',
-      render: (_, record) => {
-        const selected = record.id === selectedId;
-        return [
-          <Button type="link" key="select" onClick={() => onSelect(record)}>
-            {intl.formatMessage({
-              id: selected
-                ? 'pages.mission.add.selected'
-                : 'pages.mission.add.select',
-              defaultMessage: selected ? '已选择' : '选择',
-            })}
-          </Button>,
-        ];
-      },
+      render: (_, record) => [
+        <Button type="link" key="select" onClick={() => onSelect(record)}>
+          {intl.formatMessage({
+            id: 'pages.mission.add.select',
+            defaultMessage: '选择',
+          })}
+        </Button>,
+      ],
     },
   ];
 

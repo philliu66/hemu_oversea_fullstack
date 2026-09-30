@@ -29,6 +29,14 @@ class CategoryListTestRequest(StoreIdBody):
     """单店铺递归拉取全部展示类目。"""
 
 
+class MeasuresListTestRequest(StoreIdBody):
+    """拉取计件单位列表并全量覆盖 measures_unit_dh。"""
+
+
+class CommissionRateListTestRequest(StoreIdBody):
+    """拉取全部类目佣金率并全量覆盖 commissions_rate_dh（store_id 仅取 token）。"""
+
+
 class CategoryGetTestRequest(StoreIdBody):
     cate_pub_id: str = Field(
         min_length=1,

@@ -21,6 +21,7 @@ export default [
     name: 'welcome',
     icon: 'smile',
     component: './Welcome',
+    // 登录后公共页：不挂 routeId / access，所有人可见
   },
   {
     path: '/supplier',

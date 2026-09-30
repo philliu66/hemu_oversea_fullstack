@@ -2,6 +2,7 @@ import { request } from '@umijs/max';
 import { CommonUtilsApi } from '@/constants/api';
 import type {
   ApiResponse,
+  DhMeasuresUnitPublic,
   DhgateImgInfoPublic,
   DhgateTweakImgParams,
   DhgateTweakImgPublic,
@@ -81,5 +82,21 @@ export async function tweakDhgateImage(
   return requireData(
     unwrapApiData<DhgateTweakImgPublic>(res),
     '图片微调失败',
+  );
+}
+
+/** POST /api/v1/common/utils/dhgate/getmeasuresunitlist */
+export async function fetchDhMeasuresUnitList(options?: RequestOptions) {
+  const res = await request<ApiResponse<DhMeasuresUnitPublic[]>>(
+    CommonUtilsApi.DHGATE_GET_MEASURES_UNIT_LIST,
+    {
+      method: 'POST',
+      data: {},
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhMeasuresUnitPublic[]>(res),
+    '获取计件单位列表失败',
   );
 }

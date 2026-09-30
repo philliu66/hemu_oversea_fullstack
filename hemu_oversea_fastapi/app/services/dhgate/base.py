@@ -84,3 +84,19 @@ def list_punish(
         params=params,
         http_method="GET",
     )
+
+
+def list_measures(client: DhgateClient) -> dict:
+    """
+    获取计件单位列表。
+
+    method: dh.base.measures.get
+    version: 1.0
+    文档字段名为 meauserList（官方拼写）。
+    """
+    return client.call(
+        "dh.base.measures.get",
+        version="1.0",
+        params={},
+        http_method="POST",
+    )

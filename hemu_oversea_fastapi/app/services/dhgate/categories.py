@@ -95,6 +95,21 @@ def get_category_path(
     )
 
 
+def list_category_commissions(client: DhgateClient) -> dict[str, Any]:
+    """
+    获取佣金率列表（按佣金公式计算）。
+
+    method: dh.categorys.commissions
+    version: 1.0
+    """
+    return client.call(
+        "dh.categorys.commissions",
+        version="1.0",
+        params={},
+        http_method="POST",
+    )
+
+
 def _extract_cate_pub_list(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not payload:
         return []

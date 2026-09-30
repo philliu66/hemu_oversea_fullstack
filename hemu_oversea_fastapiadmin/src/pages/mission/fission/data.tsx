@@ -16,21 +16,22 @@ const MissionFissionDataPage: React.FC = () => {
   const missionId = parseMissionId(id);
   const [mission, setMission] = useState<MissionPublic>();
   const [loading, setLoading] = useState(true);
+  const canSetData = access.can('mission.fission.data');
 
   useEffect(() => {
-    if (!access.canSupplierAdmin) {
+    if (!canSetData) {
       message.warning(
         intl.formatMessage({
           id: 'pages.mission.forbiddenData',
-          defaultMessage: '只有供应商管理员可以设置任务数据',
+          defaultMessage: '无设置任务数据权限',
         }),
       );
       history.replace(MISSION_FISSION_PATH);
     }
-  }, [access.canSupplierAdmin, intl, message]);
+  }, [canSetData, intl, message]);
 
   useEffect(() => {
-    if (!missionId || !access.canSupplierAdmin) {
+    if (!missionId || !canSetData) {
       setLoading(false);
       return;
     }
@@ -55,7 +56,7 @@ const MissionFissionDataPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [access.canSupplierAdmin, missionId]);
+  }, [canSetData, missionId]);
 
   if (!missionId) {
     return (

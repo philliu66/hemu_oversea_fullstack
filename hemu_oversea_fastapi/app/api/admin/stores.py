@@ -107,6 +107,7 @@ def create_store(
         store_type=payload.store_type,
         name=payload.name,
         identifier=payload.identifier,
+        base_discount=payload.base_discount,
         account=payload.account,
         password=payload.password,
         actor_id=current_user.id,
@@ -128,6 +129,7 @@ def update_store(
         store_type=payload.store_type,
         name=payload.name,
         identifier=payload.identifier,
+        base_discount=payload.base_discount,
         account=payload.account,
         password=payload.password,
     )

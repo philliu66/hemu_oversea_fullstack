@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -40,6 +41,12 @@ class Store(Base):
     store_type: Mapped[str] = mapped_column(String(32))
     name: Mapped[str] = mapped_column(String(100))
     identifier: Mapped[str] = mapped_column(String(100))
+    base_discount: Mapped[Decimal] = mapped_column(
+        Numeric(3, 2),
+        nullable=False,
+        server_default="0",
+        comment="基础折扣（0.00～0.99）",
+    )
     account: Mapped[str] = mapped_column(String(100))
     password: Mapped[str] = mapped_column(String(255))
     access_token: Mapped[str | None] = mapped_column(Text, nullable=True)

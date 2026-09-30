@@ -18,13 +18,14 @@ import type {
 } from '@/types/api';
 
 const CUSTOM_SPEC_COL = '__custom_spec__';
-const TABLE_MAX_HEIGHT = 300;
 
 type SpecSkuTableProps = {
   skuList?: DhProductSkuPublic[];
   priceSelectedAttrs?: DhProductSelectedAttrPublic[];
   specSelfDefs?: DhProductSpecSelfDefPublic[];
   itemCode?: string | null;
+  /** 价格列单位后缀，联动计件单位（如 套） */
+  measureUnitLabel?: string;
   disabled?: boolean;
   onChange?: (next: DhProductSkuPublic[]) => void;
 };
@@ -123,6 +124,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
   priceSelectedAttrs,
   specSelfDefs,
   itemCode,
+  measureUnitLabel,
   disabled = false,
   onChange,
 }) => {
@@ -130,6 +132,13 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
   const list = skuList || [];
   const priceAttrs = priceSelectedAttrs || [];
   const specs = specSelfDefs || [];
+  const unitLabel =
+    (measureUnitLabel || '').trim() ||
+    intl.formatMessage({
+      id: 'pages.product.detail.sale.measureFallback',
+      defaultMessage: '件',
+    });
+  const priceUnitSuffix = `/${unitLabel}`;
 
   const [batchField, setBatchField] = useState<BatchField>();
   const [batchDrafts, setBatchDrafts] = useState<DhProductSkuPublic[]>([]);
@@ -398,10 +407,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
             precision={2}
             disabled={disabled}
             addonBefore="US$"
-            addonAfter={intl.formatMessage({
-              id: 'pages.product.detail.specSku.perPiece',
-              defaultMessage: '/件',
-            })}
+            addonAfter={priceUnitSuffix}
             style={{ width: '100%' }}
             onChange={(value) =>
               patchSku(index, {
@@ -494,10 +500,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
                 min={0}
                 precision={2}
                 addonBefore="US$"
-                addonAfter={intl.formatMessage({
-                  id: 'pages.product.detail.specSku.perPiece',
-                  defaultMessage: '/件',
-                })}
+                addonAfter={priceUnitSuffix}
                 style={{ width: '100%' }}
                 onChange={(value) =>
                   patchBatchDraft(index, {
@@ -522,10 +525,8 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
         columns={columns}
         size="small"
         bordered
-        sticky
         scroll={{
           x: Math.max(860, attrColumns.length * 120 + 500),
-          y: TABLE_MAX_HEIGHT,
         }}
         locale={{
           emptyText: intl.formatMessage({
@@ -590,10 +591,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
               min={0}
               precision={2}
               addonBefore="US$"
-              addonAfter={intl.formatMessage({
-                id: 'pages.product.detail.specSku.perPiece',
-                defaultMessage: '/件',
-              })}
+              addonAfter={priceUnitSuffix}
               style={{ width: 200 }}
               value={
                 batchUniform === undefined || batchUniform === null

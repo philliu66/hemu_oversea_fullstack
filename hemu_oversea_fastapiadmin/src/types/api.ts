@@ -136,6 +136,8 @@ export type StorePublic = {
   store_type: StoreType | string;
   name: string;
   identifier: string;
+  /** 基础折扣（0.00～0.99） */
+  base_discount: number | string;
   oauth_status: StoreOauthStatus | number;
   /** refresh_token 到期时间 */
   refresh_token_expires_at: string | null;
@@ -206,6 +208,7 @@ export type StoreCreateParams = {
   store_type: StoreType;
   name: string;
   identifier: string;
+  base_discount: number;
   account: string;
   password: string;
 };
@@ -216,6 +219,7 @@ export type StoreUpdateParams = {
   store_type?: StoreType;
   name?: string;
   identifier?: string;
+  base_discount?: number;
   account?: string;
   password?: string;
 };
@@ -290,6 +294,21 @@ export type DhCategoryAttrsPublic = {
   pub_name_cn: string | null;
   leaf: string;
   attrs: DhCategoryAttrPublic[];
+};
+
+/** 阶梯佣金区间（对应 unitList 项） */
+export type DhCommissionUnitPublic = {
+  left_bound?: string | null;
+  right_bound?: string | null;
+  left_bound_close?: boolean | null;
+  right_bound_close?: boolean | null;
+  commission_rate?: string | null;
+};
+
+/** POST /api/v1/admin/categories/dh/commission-rate/get */
+export type DhCommissionRatePublic = {
+  cate_id: string;
+  unit_list: DhCommissionUnitPublic[];
 };
 
 /** 商品产品属性值（对应 dh.item.get itemAttrValList） */
@@ -401,6 +420,17 @@ export type DhItemShiptoSkuPricePublic = {
 export type DhItemWholesaleRangePublic = {
   discount?: string | number | null;
   start_qty?: number | null;
+};
+
+/** 敦煌计件单位（measures_unit_dh / MeasureVO） */
+export type DhMeasuresUnitPublic = {
+  measure_id: string;
+  name?: string | null;
+  description?: string | null;
+  valid?: string | null;
+  cname?: string | null;
+  short_name?: string | null;
+  plural?: string | null;
 };
 
 export type DhItemWeightRangePublic = {

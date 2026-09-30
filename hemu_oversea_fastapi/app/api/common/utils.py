@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.errors import bad_request
 from app.schemas.common import ApiResponse, success
+from app.schemas.product import DhMeasuresUnitPublic
 from app.schemas.utils import (
     DhgateImgInfoPublic,
     DhgateTweakImgPublic,
@@ -18,6 +19,7 @@ from app.services.dhgate import (
     tweak_product_image,
     upload_product_image,
 )
+from app.services.measures_units_dh import list_measures_units_dh
 
 router = APIRouter(
     prefix="/utils",
@@ -157,3 +159,19 @@ async def tweak_dhgate_image(
         original_type=str(type or "").strip() or None,
     )
     return success(DhgateTweakImgPublic.model_validate(data))
+
+
+@router.post(
+    "/dhgate/getmeasuresunitlist",
+    response_model=ApiResponse[list[DhMeasuresUnitPublic]],
+    summary="查询敦煌计件单位列表",
+)
+def get_dhgate_measures_unit_list(
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[DhMeasuresUnitPublic]]:
+    """
+    查询本地 measures_unit_dh 计件单位（默认仅返回 valid=1）。
+
+    数据由 testAPI dh.base.measures.get 同步入库，本接口不请求敦煌。
+    """
+    return success(list_measures_units_dh(db, valid_only=True))

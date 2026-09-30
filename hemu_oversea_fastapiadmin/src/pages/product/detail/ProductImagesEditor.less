@@ -13,6 +13,34 @@
     cursor: pointer;
   }
 
+  &.is-compact {
+    display: inline-block;
+    line-height: 1;
+
+    .ant-upload-list {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .ant-upload.ant-upload-select,
+    .ant-upload-list-item-container {
+      width: 86px !important;
+      height: 86px !important;
+      margin-block: 0 !important;
+      margin-inline-end: 0 !important;
+    }
+
+    .product-detail-upload-trigger {
+      font-size: 12px;
+      line-height: 1.2;
+
+      > div {
+        margin-top: 4px !important;
+      }
+    }
+  }
+
   .ant-upload-list-item-actions {
     .anticon,
     .anticon-experiment,

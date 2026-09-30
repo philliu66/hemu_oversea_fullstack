@@ -6,12 +6,40 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import Pagination
 from app.core.errors import bad_request, conflict, forbidden, not_found
-from app.core.roles import Role
+from app.core.roles import Role, is_platform_admin
 from app.core.security import hash_password
 from app.models.user import User
 from app.schemas.common import PageData
 from app.schemas.user import SupplierUserOption, UserPublic
 from app.services.auth import revoke_all_sessions
+
+
+def _count_active_platform_admins(db: Session) -> int:
+    """统计仍可登录的平台管理员（含遗留 super_admin）。"""
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(
+                User.deleted_at.is_(None),
+                User.is_active.is_(True),
+                User.role.in_(
+                    [Role.PLATFORM_ADMIN.value, Role.SUPER_ADMIN.value]
+                ),
+            )
+        )
+        or 0
+    )
+
+
+def _forbid_losing_last_platform_admin(db: Session, user: User) -> None:
+    """禁止让系统失去最后一个可用的平台管理员。"""
+    if not is_platform_admin(user.role):
+        return
+    if not user.is_active or user.is_deleted:
+        return
+    if _count_active_platform_admins(db) <= 1:
+        raise bad_request("至少保留一名可用的平台管理员")
 
 
 def create_user(
@@ -118,6 +146,7 @@ def _forbid_self(actor: User, user_id: int, message: str) -> None:
 def soft_delete_user(db: Session, *, user_id: int, actor: User) -> None:
     _forbid_self(actor, user_id, "不能删除当前登录账号")
     user = _get_alive_user(db, user_id)
+    _forbid_losing_last_platform_admin(db, user)
     user.deleted_at = datetime.now(timezone.utc)
     revoke_all_sessions(db, user.id)
     db.commit()
@@ -126,6 +155,8 @@ def soft_delete_user(db: Session, *, user_id: int, actor: User) -> None:
 def set_user_active(db: Session, *, user_id: int, is_active: bool, actor: User) -> User:
     _forbid_self(actor, user_id, "不能启用或停用当前登录账号")
     user = _get_alive_user(db, user_id)
+    if not is_active:
+        _forbid_losing_last_platform_admin(db, user)
     user.is_active = is_active
     if not is_active:
         revoke_all_sessions(db, user.id)
@@ -145,6 +176,8 @@ def set_user_role(
 ) -> User:
     _forbid_self(actor, user_id, "不能修改当前登录账号的角色")
     user = _get_alive_user(db, user_id)
+    if is_platform_admin(user.role) and not is_platform_admin(role.value):
+        _forbid_losing_last_platform_admin(db, user)
     user.role = role.value
     if org_type is not None:
         user.org_type = org_type
@@ -226,6 +259,7 @@ def list_supplier_users(
 def soft_delete_self(db: Session, user: User) -> None:
     if user.is_deleted:
         raise not_found("用户不存在")
+    _forbid_losing_last_platform_admin(db, user)
     user.deleted_at = datetime.now(timezone.utc)
     revoke_all_sessions(db, user.id)
     db.commit()

@@ -1,7 +1,9 @@
 from app.models.aftersale_template_dh import AftersaleTemplateDh
 from app.models.base import Base
 from app.models.captcha import Captcha
+from app.models.commission_rate_dh import CommissionRateDh
 from app.models.login_attempt import LoginAttempt
+from app.models.measures_unit_dh import MeasuresUnitDh
 from app.models.mission import Mission, MissionDataDhFission, MissionLog
 from app.models.permission import (
     BizRole,
@@ -23,7 +25,9 @@ __all__ = [
     "AftersaleTemplateDh",
     "Base",
     "Captcha",
+    "CommissionRateDh",
     "LoginAttempt",
+    "MeasuresUnitDh",
     "Mission",
     "MissionDataDhFission",
     "MissionLog",

@@ -264,6 +264,12 @@ export default {
   'pages.store.field.identifier': 'Store Identifier',
   'pages.store.field.identifierPlaceholder': 'Enter store identifier',
   'pages.store.field.identifierRequired': 'Please enter store identifier',
+  'pages.store.field.baseDiscount': 'Base Discount Rate',
+  'pages.store.field.baseDiscountPlaceholder':
+    'Enter base discount rate (0～0.99)',
+  'pages.store.field.baseDiscountRequired': 'Please enter base discount rate',
+  'pages.store.field.baseDiscountRange':
+    'Base discount rate must be between 0 and 0.99',
   'pages.store.field.account': 'Store Account',
   'pages.store.field.accountPlaceholder': 'Enter store account',
   'pages.store.field.accountRequired': 'Please enter store account',
@@ -421,6 +427,11 @@ export default {
     'Spec SKUs generated from product specification attributes',
   'pages.product.detail.specSku.hint':
     'Generated from the specification attributes above. Batch-edit sale status and price.',
+  'pages.product.detail.commission.title': 'Category commission rates',
+  'pages.product.detail.commission.empty':
+    'No commission rate for this category. Sync category commissions first.',
+  'pages.product.detail.commission.col.range': 'Price range (USD)',
+  'pages.product.detail.commission.col.rate': 'Commission rate',
   'pages.product.detail.specAttrs.sectionTitle': 'Specification Attributes',
   'pages.product.detail.specSku.customSpec': 'Custom Spec',
   'pages.product.detail.specSku.saleStatus': 'Sale Status',

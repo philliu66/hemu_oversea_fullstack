@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +10,14 @@ class StoreCreate(BaseModel):
     store_type: StoreType = Field(description="店铺类型：dhgate / tiktok")
     name: str = Field(min_length=1, max_length=100, description="店铺名称")
     identifier: str = Field(min_length=1, max_length=100, description="店铺标识")
+    base_discount: Decimal = Field(
+        default=Decimal("0"),
+        ge=Decimal("0"),
+        le=Decimal("0.99"),
+        max_digits=3,
+        decimal_places=2,
+        description="基础折扣（0.00～0.99）",
+    )
     account: str = Field(min_length=1, max_length=100, description="店铺账号")
     password: str = Field(min_length=1, max_length=255, description="店铺密码")
 
@@ -18,6 +27,14 @@ class StoreUpdate(BaseModel):
     store_type: StoreType | None = Field(default=None, description="店铺类型")
     name: str | None = Field(default=None, min_length=1, max_length=100)
     identifier: str | None = Field(default=None, min_length=1, max_length=100)
+    base_discount: Decimal | None = Field(
+        default=None,
+        ge=Decimal("0"),
+        le=Decimal("0.99"),
+        max_digits=3,
+        decimal_places=2,
+        description="基础折扣（0.00～0.99）",
+    )
     account: str | None = Field(default=None, min_length=1, max_length=100)
     password: str | None = Field(default=None, min_length=1, max_length=255)
 
@@ -94,6 +111,7 @@ class StorePublic(BaseModel):
     store_type: str
     name: str
     identifier: str
+    base_discount: Decimal = Field(description="基础折扣（0.00～0.99）")
     oauth_status: int = Field(
         description="授权状态：0 未授权，1 已授权，2 授权已过期",
     )
@@ -117,6 +135,7 @@ class StoreDetailPublic(BaseModel):
     store_type: str
     name: str
     identifier: str
+    base_discount: Decimal = Field(description="基础折扣（0.00～0.99）")
     account: str = Field(description="店铺账号")
     password: str = Field(description="店铺密码")
     oauth_status: int = Field(

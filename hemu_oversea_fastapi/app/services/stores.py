@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -41,6 +42,7 @@ def _to_public(store: Store) -> StorePublic:
         store_type=store.store_type,
         name=store.name,
         identifier=store.identifier,
+        base_discount=store.base_discount,
         oauth_status=store.oauth_status,
         refresh_token_expires_at=store.refresh_token_expires_at,
         created_by=store.creator.username if store.creator else None,
@@ -57,6 +59,7 @@ def _to_detail_public(store: Store) -> StoreDetailPublic:
         store_type=store.store_type,
         name=store.name,
         identifier=store.identifier,
+        base_discount=store.base_discount,
         account=store.account,
         password=store.password,
         oauth_status=store.oauth_status,
@@ -92,6 +95,7 @@ def create_store(
     password: str,
     actor_id: int,
     supplier_id: int,
+    base_discount: Decimal = Decimal("0"),
 ) -> StorePublic:
     get_supplier(db, supplier_id)
     store = Store(
@@ -99,6 +103,7 @@ def create_store(
         store_type=store_type.value,
         name=name,
         identifier=identifier,
+        base_discount=base_discount,
         account=account,
         password=password,
         created_by=actor_id,
@@ -180,6 +185,7 @@ def update_store(
     identifier: str | None = None,
     account: str | None = None,
     password: str | None = None,
+    base_discount: Decimal | None = None,
 ) -> StorePublic:
     store = _get_alive_store(db, store_id)
     if store_type is not None:
@@ -192,6 +198,8 @@ def update_store(
         store.account = account
     if password is not None:
         store.password = password
+    if base_discount is not None:
+        store.base_discount = base_discount
     store.updated_by = actor_id
     try:
         db.commit()

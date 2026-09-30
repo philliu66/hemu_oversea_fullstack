@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useIntl, useModel } from '@umijs/max';
+import { useAccess, useIntl, useModel } from '@umijs/max';
 import { App, Button, Popconfirm, Space, Tag } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
@@ -22,12 +22,17 @@ type StaffTableParams = {
 
 const StaffListPage: React.FC = () => {
   const intl = useIntl();
+  const access = useAccess();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const portalRole = initialState?.currentUser?.role;
   const actionRef = useRef<ActionType | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<UserPublic | null>(null);
+
+  const canCreate = access.can('personnel.staff.create');
+  const canUpdate = access.can('personnel.staff.update');
+  const canDelete = access.can('personnel.staff.delete');
 
   const openCreate = () => {
     setEditing(null);
@@ -151,77 +156,84 @@ const StaffListPage: React.FC = () => {
       valueType: 'option',
       search: false,
       width: 220,
+      hideInTable: !canUpdate && !canDelete,
       render: (_, record) => (
         <Space size={0} wrap>
-          <Button type="link" onClick={() => openEdit(record)}>
-            {intl.formatMessage({
-              id: 'pages.staff.action.edit',
-              defaultMessage: '编辑',
-            })}
-          </Button>
-          <Popconfirm
-            title={intl.formatMessage({
-              id: record.is_active
-                ? 'pages.staff.disable.confirm'
-                : 'pages.staff.enable.confirm',
-              defaultMessage: record.is_active
-                ? '确认停用该员工？'
-                : '确认启用该员工？',
-            })}
-            onConfirm={async () => {
-              try {
-                await updateStaffStatus(portalRole, {
-                  id: record.id,
-                  is_active: !record.is_active,
-                });
-                message.success(
-                  intl.formatMessage({
-                    id: 'pages.staff.status.success',
-                    defaultMessage: '状态已更新',
-                  }),
-                );
-                actionRef.current?.reload();
-              } catch {
-                // 错误已由全局拦截器处理
-              }
-            }}
-          >
-            <Button type="link">
+          {canUpdate ? (
+            <Button type="link" onClick={() => openEdit(record)}>
               {intl.formatMessage({
+                id: 'pages.staff.action.edit',
+                defaultMessage: '编辑',
+              })}
+            </Button>
+          ) : null}
+          {canUpdate ? (
+            <Popconfirm
+              title={intl.formatMessage({
                 id: record.is_active
-                  ? 'pages.staff.action.disable'
-                  : 'pages.staff.action.enable',
-                defaultMessage: record.is_active ? '停用' : '启用',
+                  ? 'pages.staff.disable.confirm'
+                  : 'pages.staff.enable.confirm',
+                defaultMessage: record.is_active
+                  ? '确认停用该员工？'
+                  : '确认启用该员工？',
               })}
-            </Button>
-          </Popconfirm>
-          <Popconfirm
-            title={intl.formatMessage({
-              id: 'pages.staff.delete.confirm',
-              defaultMessage: '确认删除该员工？删除后不可登录。',
-            })}
-            onConfirm={async () => {
-              try {
-                await deleteStaff(portalRole, record.id);
-                message.success(
-                  intl.formatMessage({
-                    id: 'pages.staff.delete.success',
-                    defaultMessage: '删除成功',
-                  }),
-                );
-                actionRef.current?.reload();
-              } catch {
-                // 错误已由全局拦截器处理
-              }
-            }}
-          >
-            <Button type="link" danger>
-              {intl.formatMessage({
-                id: 'pages.staff.action.delete',
-                defaultMessage: '删除',
+              onConfirm={async () => {
+                try {
+                  await updateStaffStatus(portalRole, {
+                    id: record.id,
+                    is_active: !record.is_active,
+                  });
+                  message.success(
+                    intl.formatMessage({
+                      id: 'pages.staff.status.success',
+                      defaultMessage: '状态已更新',
+                    }),
+                  );
+                  actionRef.current?.reload();
+                } catch {
+                  // 错误已由全局拦截器处理
+                }
+              }}
+            >
+              <Button type="link">
+                {intl.formatMessage({
+                  id: record.is_active
+                    ? 'pages.staff.action.disable'
+                    : 'pages.staff.action.enable',
+                  defaultMessage: record.is_active ? '停用' : '启用',
+                })}
+              </Button>
+            </Popconfirm>
+          ) : null}
+          {canDelete ? (
+            <Popconfirm
+              title={intl.formatMessage({
+                id: 'pages.staff.delete.confirm',
+                defaultMessage: '确认删除该员工？删除后不可登录。',
               })}
-            </Button>
-          </Popconfirm>
+              onConfirm={async () => {
+                try {
+                  await deleteStaff(portalRole, record.id);
+                  message.success(
+                    intl.formatMessage({
+                      id: 'pages.staff.delete.success',
+                      defaultMessage: '删除成功',
+                    }),
+                  );
+                  actionRef.current?.reload();
+                } catch {
+                  // 错误已由全局拦截器处理
+                }
+              }}
+            >
+              <Button type="link" danger>
+                {intl.formatMessage({
+                  id: 'pages.staff.action.delete',
+                  defaultMessage: '删除',
+                })}
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       ),
     },
@@ -242,19 +254,23 @@ const StaffListPage: React.FC = () => {
           pageSizeOptions: [10, 20, 50, 100],
           showSizeChanger: true,
         }}
-        toolBarRender={() => [
-          <Button
-            type="primary"
-            key="create"
-            icon={<PlusOutlined />}
-            onClick={openCreate}
-          >
-            {intl.formatMessage({
-              id: 'pages.staff.action.create',
-              defaultMessage: '新建员工',
-            })}
-          </Button>,
-        ]}
+        toolBarRender={() =>
+          canCreate
+            ? [
+                <Button
+                  type="primary"
+                  key="create"
+                  icon={<PlusOutlined />}
+                  onClick={openCreate}
+                >
+                  {intl.formatMessage({
+                    id: 'pages.staff.action.create',
+                    defaultMessage: '新建员工',
+                  })}
+                </Button>,
+              ]
+            : []
+        }
         request={async (params) => {
           try {
             const result = await fetchStaffList(portalRole, {

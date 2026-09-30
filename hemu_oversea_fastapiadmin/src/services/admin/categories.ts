@@ -6,6 +6,7 @@ import type {
   DhCategoryListParams,
   DhCategoryPathPublic,
   DhCategoryPublic,
+  DhCommissionRatePublic,
   DhSeedCategoryPublic,
 } from '@/types/api';
 import { unwrapApiData } from '@/utils/http';
@@ -126,5 +127,24 @@ export async function fetchDhCategorySearch(
   return requireData(
     unwrapApiData<DhCategoryPublic[]>(res),
     '搜索商品分类失败',
+  );
+}
+
+/** POST /api/v1/admin/categories/dh/commission-rate/get */
+export async function fetchDhCommissionRate(
+  cateId: string,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<DhCommissionRatePublic>>(
+    AdminCategoryApi.DH_COMMISSION_RATE,
+    {
+      method: 'POST',
+      data: { cate_id: cateId },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhCommissionRatePublic>(res),
+    '获取类目佣金率失败',
   );
 }

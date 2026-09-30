@@ -120,6 +120,7 @@ export function createEmptyProductDetail(
     width: null,
     height: null,
     packing_quantity: null,
+    item_weight_range: null,
     price_min: null,
     price_max: null,
     sku_count: null,
@@ -137,6 +138,7 @@ export function createEmptyProductDetail(
     item_group_id: null,
     attr_list: [],
     item_spec_self_def_list: [],
+    item_wholesale_range_list: [],
     ...partial,
   };
 }

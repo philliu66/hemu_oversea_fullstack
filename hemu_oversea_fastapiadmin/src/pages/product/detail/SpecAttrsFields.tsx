@@ -1,14 +1,7 @@
-import {
-  CheckOutlined,
-  CloseOutlined,
-  DeleteOutlined,
-  EditOutlined,
-} from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import {
   App,
   Button,
-  Checkbox,
   Input,
   Space,
   Typography,
@@ -22,8 +15,13 @@ import type {
 } from '@/types/api';
 import CategoryAttrsFields from './CategoryAttrsFields';
 import DhgateAttrPicUpload from './DhgateAttrPicUpload';
+import EditableOptionChip from './EditableOptionChip';
 
-type SpecSelfDefDraft = DhProductSpecSelfDefPublic & { key: string };
+type SpecSelfDefDraft = DhProductSpecSelfDefPublic & {
+  key: string;
+  /** 是否选中（出现在下方图片表）；取消勾选不删除 */
+  selected: boolean;
+};
 
 type SpecAttrsFieldsProps = {
   /** 类目属性定义中，与价格相关的规格属性 */
@@ -74,11 +72,14 @@ function toDrafts(list?: DhProductSpecSelfDefPublic[]): SpecSelfDefDraft[] {
     spec_attr_name: item.spec_attr_name ?? null,
     attr_val_name: item.attr_val_name ?? null,
     pic_url: item.pic_url ?? null,
+    selected: true,
   }));
 }
 
 function toPublicList(drafts: SpecSelfDefDraft[]): DhProductSpecSelfDefPublic[] {
-  return drafts.map(({ key: _key, ...rest }) => rest);
+  return drafts
+    .filter((item) => item.selected)
+    .map(({ key: _key, selected: _selected, ...rest }) => rest);
 }
 
 function SpecSelectedImageTable({
@@ -86,6 +87,7 @@ function SpecSelectedImageTable({
   storeId,
   disabled = false,
   onValuePicChange,
+  onDeselectValue,
 }: {
   attr: DhProductSelectedAttrPublic;
   storeId?: number;
@@ -95,6 +97,7 @@ function SpecSelectedImageTable({
     attrValId: string,
     picUrl: string | null,
   ) => void;
+  onDeselectValue?: (attrId: string, attrValId: string) => void;
 }) {
   const intl = useIntl();
   const rows = attr.values || [];
@@ -113,7 +116,7 @@ function SpecSelectedImageTable({
         marginLeft: 100,
         borderCollapse: 'collapse',
         width: '100%',
-        maxWidth: 720,
+        maxWidth: 480,
         fontSize: 13,
       }}
     >
@@ -138,6 +141,7 @@ function SpecSelectedImageTable({
               padding: '6px 10px',
               textAlign: 'left',
               fontWeight: 500,
+              width: 120,
             }}
           >
             {intl.formatMessage({
@@ -157,25 +161,55 @@ function SpecSelectedImageTable({
                   border: '1px solid #d9d9d9',
                   padding: '8px 10px',
                   verticalAlign: 'middle',
+                  width: 160,
                 }}
               >
-                {valueTitle(item)}
+                <Space size={8} wrap>
+                  <span>{valueTitle(item)}</span>
+                  {!disabled && onDeselectValue ? (
+                    <Button
+                      type="link"
+                      size="small"
+                      danger
+                      style={{ padding: 0, height: 'auto' }}
+                      onClick={() =>
+                        onDeselectValue(attr.attr_id, String(valId))
+                      }
+                    >
+                      {intl.formatMessage({
+                        id: 'pages.product.detail.specAttrs.delete',
+                        defaultMessage: '删除',
+                      })}
+                    </Button>
+                  ) : null}
+                </Space>
               </td>
               <td
                 style={{
                   border: '1px solid #d9d9d9',
                   padding: '8px 10px',
                   verticalAlign: 'middle',
+                  width: 120,
+                  textAlign: 'center',
                 }}
               >
-                <DhgateAttrPicUpload
-                  storeId={storeId}
-                  value={item.pic_url}
-                  disabled={disabled}
-                  onChange={(picUrl) =>
-                    onValuePicChange?.(attr.attr_id, String(valId), picUrl)
-                  }
-                />
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <DhgateAttrPicUpload
+                    storeId={storeId}
+                    value={item.pic_url}
+                    disabled={disabled}
+                    compact
+                    onChange={(picUrl) =>
+                      onValuePicChange?.(attr.attr_id, String(valId), picUrl)
+                    }
+                  />
+                </div>
               </td>
             </tr>
           );
@@ -270,14 +304,28 @@ function CustomSpecSection({
 
   useEffect(() => {
     setDrafts((prev) => {
+      const incoming = toDrafts(specs);
+      const incomingNames = new Set(
+        incoming.map((item) => (item.attr_val_name || '').trim().toLowerCase()),
+      );
+      // 父级只存已选中的规格；本地未勾选项需合并回来，避免取消勾选被当成删除
+      const keptUnselected = prev.filter((item) => {
+        if (item.selected) {
+          return false;
+        }
+        const name = (item.attr_val_name || '').trim().toLowerCase();
+        return name && !incomingNames.has(name);
+      });
       const prevPublic = JSON.stringify(toPublicList(prev));
       const nextPublic = JSON.stringify(specs || []);
-      if (prevPublic === nextPublic) {
+      if (prevPublic === nextPublic && keptUnselected.length === 0) {
         return prev;
       }
-      setEditingKey(undefined);
-      setEditingName('');
-      return toDrafts(specs);
+      if (prevPublic !== nextPublic) {
+        setEditingKey(undefined);
+        setEditingName('');
+      }
+      return [...incoming, ...keptUnselected];
     });
   }, [specs]);
 
@@ -313,7 +361,7 @@ function CustomSpecSection({
       );
       return;
     }
-    const next: SpecSelfDefDraft[] = [
+  const next: SpecSelfDefDraft[] = [
       ...drafts,
       {
         key: `spec-new-${Date.now()}`,
@@ -321,6 +369,7 @@ function CustomSpecSection({
         spec_attr_name: null,
         attr_val_name: name,
         pic_url: null,
+        selected: true,
       },
     ];
     setAddValue('');
@@ -416,72 +465,28 @@ function CustomSpecSection({
               {drafts.map((item) => {
                 const isEditing = editingKey === item.key;
                 return (
-                  <span
+                  <EditableOptionChip
                     key={item.key}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '2px 8px',
-                      border: '1px solid #d9d9d9',
-                      borderRadius: 4,
-                      background: '#fafafa',
+                    label={item.attr_val_name || item.attr_val_id || '-'}
+                    checked={item.selected}
+                    disabled={disabled}
+                    editing={isEditing}
+                    editingValue={editingName}
+                    onCheckedChange={(checked) => {
+                      commit(
+                        drafts.map((row) =>
+                          row.key === item.key
+                            ? { ...row, selected: checked }
+                            : row,
+                        ),
+                      );
                     }}
-                  >
-                    <Checkbox
-                      checked
-                      disabled={disabled}
-                      onChange={(event) => {
-                        if (!event.target.checked) {
-                          handleDelete(item.key);
-                        }
-                      }}
-                    />
-                    {isEditing ? (
-                      <Input
-                        size="small"
-                        value={editingName}
-                        disabled={disabled}
-                        onChange={(event) => setEditingName(event.target.value)}
-                        onPressEnter={() => confirmEdit(item.key)}
-                        style={{ width: 140 }}
-                      />
-                    ) : (
-                      <span>{item.attr_val_name || item.attr_val_id || '-'}</span>
-                    )}
-                    {!disabled && isEditing ? (
-                      <>
-                        <CheckOutlined
-                          style={{ color: '#1677ff', cursor: 'pointer' }}
-                          onClick={() => confirmEdit(item.key)}
-                        />
-                        <CloseOutlined
-                          style={{ color: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
-                          onClick={cancelEdit}
-                        />
-                      </>
-                    ) : null}
-                    {!disabled && !isEditing ? (
-                      <>
-                        <EditOutlined
-                          style={{ color: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
-                          title={intl.formatMessage({
-                            id: 'pages.product.detail.specAttrs.edit',
-                            defaultMessage: '编辑',
-                          })}
-                          onClick={() => startEdit(item)}
-                        />
-                        <DeleteOutlined
-                          style={{ color: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
-                          title={intl.formatMessage({
-                            id: 'pages.product.detail.specAttrs.delete',
-                            defaultMessage: '删除',
-                          })}
-                          onClick={() => handleDelete(item.key)}
-                        />
-                      </>
-                    ) : null}
-                  </span>
+                    onEditingValueChange={setEditingName}
+                    onStartEdit={() => startEdit(item)}
+                    onConfirmEdit={() => confirmEdit(item.key)}
+                    onCancelEdit={cancelEdit}
+                    onDelete={() => handleDelete(item.key)}
+                  />
                 );
               })}
             </Space>
@@ -517,13 +522,13 @@ function CustomSpecSection({
         </div>
       </div>
 
-      {drafts.length ? (
+      {drafts.some((item) => item.selected) ? (
         <table
           style={{
             marginLeft: 100,
             borderCollapse: 'collapse',
             width: '100%',
-            maxWidth: 720,
+            maxWidth: 480,
             fontSize: 13,
           }}
         >
@@ -536,7 +541,7 @@ function CustomSpecSection({
                   padding: '6px 10px',
                   textAlign: 'left',
                   fontWeight: 500,
-                  width: 220,
+                  width: 160,
                 }}
               >
                 {intl.formatMessage({
@@ -551,6 +556,7 @@ function CustomSpecSection({
                   padding: '6px 10px',
                   textAlign: 'left',
                   fontWeight: 500,
+                  width: 120,
                 }}
               >
                 {intl.formatMessage({
@@ -561,7 +567,9 @@ function CustomSpecSection({
             </tr>
           </thead>
           <tbody>
-            {drafts.map((item) => {
+            {drafts
+              .filter((item) => item.selected)
+              .map((item) => {
               return (
                 <tr key={item.key}>
                   <td
@@ -569,32 +577,18 @@ function CustomSpecSection({
                       border: '1px solid #d9d9d9',
                       padding: 6,
                       verticalAlign: 'middle',
+                      width: 160,
                     }}
                   >
-                    <Input
-                      value={item.attr_val_name || ''}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        patchDraft(item.key, {
-                          attr_val_name: event.target.value,
-                        })
-                      }
-                    />
-                  </td>
-                  <td
-                    style={{
-                      border: '1px solid #d9d9d9',
-                      padding: '8px 10px',
-                      verticalAlign: 'middle',
-                    }}
-                  >
-                    <Space wrap>
-                      <DhgateAttrPicUpload
-                        storeId={storeId}
-                        value={item.pic_url}
+                    <Space size={8} style={{ width: '100%' }}>
+                      <Input
+                        value={item.attr_val_name || ''}
                         disabled={disabled}
-                        onChange={(picUrl) =>
-                          patchDraft(item.key, { pic_url: picUrl })
+                        style={{ flex: 1, minWidth: 0 }}
+                        onChange={(event) =>
+                          patchDraft(item.key, {
+                            attr_val_name: event.target.value,
+                          })
                         }
                       />
                       {!disabled ? (
@@ -602,7 +596,10 @@ function CustomSpecSection({
                           type="link"
                           size="small"
                           danger
-                          onClick={() => handleDelete(item.key)}
+                          style={{ padding: 0, height: 'auto', flexShrink: 0 }}
+                          onClick={() =>
+                            patchDraft(item.key, { selected: false })
+                          }
                         >
                           {intl.formatMessage({
                             id: 'pages.product.detail.specAttrs.delete',
@@ -611,6 +608,33 @@ function CustomSpecSection({
                         </Button>
                       ) : null}
                     </Space>
+                  </td>
+                  <td
+                    style={{
+                      border: '1px solid #d9d9d9',
+                      padding: '8px 10px',
+                      verticalAlign: 'middle',
+                      width: 120,
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <DhgateAttrPicUpload
+                        storeId={storeId}
+                        value={item.pic_url}
+                        disabled={disabled}
+                        compact
+                        onChange={(picUrl) =>
+                          patchDraft(item.key, { pic_url: picUrl })
+                        }
+                      />
+                    </div>
                   </td>
                 </tr>
               );
@@ -649,6 +673,7 @@ const SpecAttrsFields: React.FC<SpecAttrsFieldsProps> = ({
           attrs={priceCategoryAttrs}
           selectedAttrs={selected}
           showSelectedPics
+          customAddMode
           storeId={storeId}
           disabled={disabled}
           changedAttrIds={changedAttrIds}

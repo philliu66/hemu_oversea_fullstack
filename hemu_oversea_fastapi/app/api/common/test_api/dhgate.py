@@ -26,14 +26,17 @@ from app.schemas.test_api.dhgate import (
     CategoryGetTestRequest,
     CategoryListTestRequest,
     CategoryPathGetTestRequest,
+    CommissionRateListTestRequest,
     ItemAftersaleListTestRequest,
     ItemFissionAddTestRequest,
     ItemGetTestRequest,
     ItemGroupListTestRequest,
+    MeasuresListTestRequest,
     PunishBrandListTestRequest,
     PunishListTestRequest,
     ShippingTemplateListTestRequest,
 )
+from app.services.commission_rates_dh import sync_commission_rates_dh
 from app.services.dhgate import (
     DhgateClient,
     fission_add_item,
@@ -49,6 +52,7 @@ from app.services.dhgate import (
     list_shipping_templates,
     tweak_and_upload_main_image,
 )
+from app.services.measures_units_dh import sync_measures_units_dh
 from app.services.product_categories_dh import sync_product_categories_dh
 
 router = APIRouter(
@@ -148,6 +152,55 @@ def test_list_categories(
             "synced": sync_stats,
         },
     )
+
+
+@router.post(
+    "/measures/list",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调] dh.base.measures.get$1.0（清空后全量入库 measures_unit_dh）",
+)
+def test_sync_measures_units(
+    payload: MeasuresListTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    拉取敦煌计件单位列表并覆盖本地 measures_unit_dh。
+
+    - 每次调用先清空再写入，保证与平台最新数据一致
+    - 官方响应字段名为 meauserList（拼写以文档为准）
+    """
+    client = _test_client(db, payload.store_id)
+    synced = sync_measures_units_dh(
+        db,
+        store_id=payload.store_id,
+        client=client,
+    )
+    return success_with_dhgate_raw(client, synced)
+
+
+@router.post(
+    "/categorys/commissions",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调] dh.categorys.commissions$1.0（清空后全量入库 commissions_rate_dh）",
+)
+def test_sync_commission_rates(
+    payload: CommissionRateListTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    拉取全部类目佣金率并覆盖本地 commissions_rate_dh。
+
+    - 佣金率按类目绑定，不按店铺隔离
+    - store_id 仅用于取 access_token
+    - 每次调用先清空再写入
+    """
+    client = _test_client(db, payload.store_id)
+    synced = sync_commission_rates_dh(
+        db,
+        store_id=payload.store_id,
+        client=client,
+    )
+    return success_with_dhgate_raw(client, synced)
 
 
 @router.post(

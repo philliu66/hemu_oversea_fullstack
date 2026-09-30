@@ -1,11 +1,12 @@
 """敦煌网开放平台集成（OAuth、Client、领域 API）。"""
 
-from app.services.dhgate.base import list_punish, list_punish_brand
+from app.services.dhgate.base import list_measures, list_punish, list_punish_brand
 from app.services.dhgate.categories import (
     get_category,
     get_category_path,
     list_all_categories,
     list_category,
+    list_category_commissions,
 )
 from app.services.dhgate.album import (
     tweak_and_upload_main_image,
@@ -57,10 +58,12 @@ __all__ = [
     "get_item_html",
     "list_item_aftersale",
     "list_item_groups",
+    "list_measures",
     "list_shipping_templates",
     "handle_oauth_callback",
     "list_all_categories",
     "list_category",
+    "list_category_commissions",
     "list_punish",
     "list_punish_brand",
     "refresh_access_token",

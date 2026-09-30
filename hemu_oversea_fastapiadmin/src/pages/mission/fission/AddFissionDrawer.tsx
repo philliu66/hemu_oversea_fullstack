@@ -64,6 +64,8 @@ export function AddFissionDrawer({
   const [selected, setSelected] = useState<DhProductPublic>();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  /** 每次点选种子商品递增，强制第二步编辑器重新挂载并拉取初始详情 */
+  const [editorNonce, setEditorNonce] = useState(0);
   const baselineRef = useRef<DhProductDetailPublic | null>(null);
   const currentRef = useRef<DhProductDetailPublic | null>(null);
 
@@ -75,6 +77,7 @@ export function AddFissionDrawer({
   const resetDrawer = () => {
     setSelected(undefined);
     setStep(0);
+    setEditorNonce(0);
     resetEditor();
   };
 
@@ -85,12 +88,10 @@ export function AddFissionDrawer({
   }, [open]);
 
   const handleSelect = (product: DhProductPublic) => {
-    setSelected((prev) => {
-      if (prev?.id !== product.id) {
-        resetEditor();
-      }
-      return product;
-    });
+    // 退回第一步后再点选（含同一商品）都应重新加载初始数据，不保留上次编辑
+    resetEditor();
+    setSelected(product);
+    setEditorNonce((prev) => prev + 1);
     setStep(1);
   };
 
@@ -312,10 +313,7 @@ export function AddFissionDrawer({
             }}
           >
             <div onSubmit={(event) => event.stopPropagation()}>
-              <SeedProductSelectTable
-                selectedId={selected?.id}
-                onSelect={handleSelect}
-              />
+              <SeedProductSelectTable onSelect={handleSelect} />
             </div>
           </StepsForm.StepForm>
           <StepsForm.StepForm
@@ -328,7 +326,7 @@ export function AddFissionDrawer({
           >
             {selected ? (
               <FissionProductStep
-                key={selected.id}
+                key={`${selected.id}-${editorNonce}`}
                 productId={selected.id}
                 onDetailChange={handleDetailChange}
               />
