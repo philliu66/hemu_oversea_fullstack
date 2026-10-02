@@ -3,7 +3,7 @@ import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import enUS from '@root/docs/cheatsheet.en-US.md';
 import zhCN from '@root/docs/cheatsheet.zh-CN.md';
-import { getLocale, useIntl, useModel } from '@umijs/max';
+import { getLocale, useModel } from '@umijs/max';
 import { Card } from 'antd';
 import hljs from 'highlight.js';
 import React from 'react';
@@ -114,34 +114,24 @@ const infoCards = [
   {
     index: 1,
     href: 'https://umijs.org/docs/introduce/introduce',
-    titleId: 'pages.welcome.infoCard.umi.title',
-    titleDefault: 'Learn umi',
-    descId: 'pages.welcome.infoCard.umi.desc',
-    descDefault:
-      'umi is an extensible enterprise-level frontend framework based on routing, supporting both config-based and convention-based routes.',
+    title: '了解 umi',
+    desc: 'umi 是一个可扩展的企业级前端应用框架，以路由为基础，支持配置式路由和约定式路由。',
   },
   {
     index: 2,
     href: 'https://ant.design',
-    titleId: 'pages.welcome.infoCard.antd.title',
-    titleDefault: 'Learn Ant Design',
-    descId: 'pages.welcome.infoCard.antd.desc',
-    descDefault:
-      'antd is a React UI component library based on the Ant Design system, mainly for enterprise-level mid-end products.',
+    title: '了解 Ant Design',
+    desc: 'antd 是基于 Ant Design 设计体系的 React UI 组件库，主要用于研发企业级中后台产品。',
   },
   {
     index: 3,
     href: 'https://procomponents.ant.design',
-    titleId: 'pages.welcome.infoCard.procomponents.title',
-    titleDefault: 'Learn Pro Components',
-    descId: 'pages.welcome.infoCard.procomponents.desc',
-    descDefault:
-      'ProComponents provides higher-abstraction template components on top of Ant Design, with one-component-one-page philosophy.',
+    title: '了解 Pro Components',
+    desc: 'ProComponents 是基于 Ant Design 的高抽象模板组件，以一个组件就是一个页面为开发理念。',
   },
 ] as const;
 
 const Dev: React.FC = () => {
-  const intl = useIntl();
   const locale = getLocale();
   const normalizedLocale = locale.toLowerCase();
   const content =
@@ -156,20 +146,8 @@ const Dev: React.FC = () => {
     <PageContainer
       title={
         <>
-          {intl.formatMessage(
-            {
-              id: 'pages.welcome.celebrationTitle',
-              defaultMessage: '欢迎使用 {title}',
-            },
-            {
-              title: (
-                <span key="title" className="welcome-gradient-title">
-                  {Settings.title}
-                </span>
-              ),
-            },
-          )}
-          🎉
+          欢迎使用{' '}
+          <span className="welcome-gradient-title">{Settings.title}</span> 🎉
         </>
       }
     >
@@ -190,14 +168,8 @@ const Dev: React.FC = () => {
               key={card.href}
               index={card.index}
               href={card.href}
-              title={intl.formatMessage({
-                id: card.titleId,
-                defaultMessage: card.titleDefault,
-              })}
-              desc={intl.formatMessage({
-                id: card.descId,
-                defaultMessage: card.descDefault,
-              })}
+              title={card.title}
+              desc={card.desc}
             />
           ))}
         </div>

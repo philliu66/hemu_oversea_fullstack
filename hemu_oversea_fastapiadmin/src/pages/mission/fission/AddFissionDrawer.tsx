@@ -1,5 +1,4 @@
 import { StepsForm } from '@ant-design/pro-components';
-import { useIntl } from '@umijs/max';
 import { App, Button, Drawer, Space } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import { addMissionFissionData } from '@/services/admin/missions';
@@ -59,7 +58,6 @@ export function AddFissionDrawer({
   onClose: () => void;
   onAdded: () => void;
 }) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const [selected, setSelected] = useState<DhProductPublic>();
   const [step, setStep] = useState(0);
@@ -105,10 +103,7 @@ export function AddFissionDrawer({
   const handleConfirm = async () => {
     if (!selected) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.mission.add.selectRequired',
-          defaultMessage: '请先选择一个种子商品',
-        }),
+        '请先选择一个种子商品',
       );
       return false;
     }
@@ -116,10 +111,7 @@ export function AddFissionDrawer({
     const current = currentRef.current;
     if (!baseline || !current || current.id !== selected.id) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.mission.add.detailNotReady',
-          defaultMessage: '商品信息还在加载，请稍后再确认',
-        }),
+        '商品信息还在加载，请稍后再确认',
       );
       return false;
     }
@@ -133,10 +125,7 @@ export function AddFissionDrawer({
         raw_json: current,
       });
       message.success(
-        intl.formatMessage({
-          id: 'pages.mission.add.success',
-          defaultMessage: '已加入任务',
-        }),
+        '已加入任务',
       );
       onAdded();
       return true;
@@ -149,10 +138,7 @@ export function AddFissionDrawer({
 
   return (
     <Drawer
-      title={intl.formatMessage({
-        id: 'pages.mission.action.add',
-        defaultMessage: '手动添加',
-      })}
+      title={'手动添加'}
       open={open}
       width="80vw"
       destroyOnHidden
@@ -199,30 +185,21 @@ export function AddFissionDrawer({
               if (props.step === 0) {
                 return (
                   <Button type="primary" onClick={() => props.onSubmit?.()}>
-                    {intl.formatMessage({
-                      id: 'pages.mission.add.next',
-                      defaultMessage: '下一步',
-                    })}
+                    {'下一步'}
                   </Button>
                 );
               }
               return (
                 <Space>
                   <Button onClick={() => props.onPre?.()}>
-                    {intl.formatMessage({
-                      id: 'pages.mission.add.prev',
-                      defaultMessage: '上一步',
-                    })}
+                    {'上一步'}
                   </Button>
                   <Button
                     type="primary"
                     loading={submitting}
                     onClick={() => props.onSubmit?.()}
                   >
-                    {intl.formatMessage({
-                      id: 'pages.mission.add.confirm',
-                      defaultMessage: '确认添加',
-                    })}
+                    {'确认添加'}
                   </Button>
                 </Space>
               );
@@ -294,18 +271,12 @@ export function AddFissionDrawer({
           )}
         >
           <StepsForm.StepForm
-            title={intl.formatMessage({
-              id: 'pages.mission.add.step.seed',
-              defaultMessage: '选择种子商品',
-            })}
+            title={'选择种子商品'}
             component={false}
             onFinish={async () => {
               if (!selected) {
                 message.warning(
-                  intl.formatMessage({
-                    id: 'pages.mission.add.selectRequired',
-                    defaultMessage: '请先选择一个种子商品',
-                  }),
+                  '请先选择一个种子商品',
                 );
                 return false;
               }
@@ -317,10 +288,7 @@ export function AddFissionDrawer({
             </div>
           </StepsForm.StepForm>
           <StepsForm.StepForm
-            title={intl.formatMessage({
-              id: 'pages.mission.add.step.edit',
-              defaultMessage: '修改商品数据',
-            })}
+            title={'修改商品数据'}
             component={false}
             onFinish={handleConfirm}
           >

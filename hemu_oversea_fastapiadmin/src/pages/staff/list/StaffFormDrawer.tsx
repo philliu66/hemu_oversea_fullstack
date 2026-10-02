@@ -1,5 +1,4 @@
-import { useIntl } from '@umijs/max';
-import { App, Button, Drawer, Form, Input, Select, Space } from 'antd';
+﻿import { App, Button, Drawer, Form, Input, Select, Space } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchRoleOptions } from '@/services/admin/rbac';
 import { createStaff, updateStaff } from '@/services/admin/supplierStaff';
@@ -38,7 +37,6 @@ export function StaffFormDrawer({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
@@ -96,15 +94,9 @@ export function StaffFormDrawer({
   const title = useMemo(
     () =>
       isEdit
-        ? intl.formatMessage({
-            id: 'pages.staff.drawer.edit',
-            defaultMessage: '编辑员工',
-          })
-        : intl.formatMessage({
-            id: 'pages.staff.drawer.create',
-            defaultMessage: '新建员工',
-          }),
-    [intl, isEdit],
+        ? '编辑员工'
+        : '新建员工',
+    [isEdit],
   );
 
   const handleClose = () => {
@@ -126,10 +118,7 @@ export function StaffFormDrawer({
           role_ids: values.role_ids ?? [],
         });
         message.success(
-          intl.formatMessage({
-            id: 'pages.staff.edit.success',
-            defaultMessage: '保存成功',
-          }),
+          '保存成功',
         );
       } else {
         await createStaff(portalRole, {
@@ -141,10 +130,7 @@ export function StaffFormDrawer({
           role_ids: values.role_ids ?? [],
         });
         message.success(
-          intl.formatMessage({
-            id: 'pages.staff.create.success',
-            defaultMessage: '创建成功',
-          }),
+          '创建成功',
         );
       }
       onSuccess();
@@ -169,16 +155,10 @@ export function StaffFormDrawer({
       footer={
         <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button onClick={handleClose}>
-            {intl.formatMessage({
-              id: 'pages.staff.drawer.cancel',
-              defaultMessage: '取消',
-            })}
+            {'取消'}
           </Button>
           <Button type="primary" loading={submitting} onClick={handleSubmit}>
-            {intl.formatMessage({
-              id: 'pages.staff.drawer.submit',
-              defaultMessage: '确定',
-            })}
+            {'确定'}
           </Button>
         </Space>
       }
@@ -186,88 +166,55 @@ export function StaffFormDrawer({
       <Form form={form} layout="vertical" autoComplete="off" preserve={false}>
         <Form.Item
           name="username"
-          label={intl.formatMessage({
-            id: 'pages.staff.field.username',
-            defaultMessage: '账号',
-          })}
+          label={'账号'}
           rules={[
             {
               required: true,
-              message: intl.formatMessage({
-                id: 'pages.staff.field.usernameRequired',
-                defaultMessage: '请输入账号',
-              }),
+              message: '请输入账号',
             },
             {
               min: 3,
-              message: intl.formatMessage({
-                id: 'pages.staff.field.usernameMin',
-                defaultMessage: '账号至少 3 位',
-              }),
+              message: '账号至少 3 位',
             },
           ]}
         >
           <Input
             maxLength={50}
             disabled={isEdit}
-            placeholder={intl.formatMessage({
-              id: 'pages.staff.field.usernamePlaceholder',
-              defaultMessage: '请输入员工账号',
-            })}
+            placeholder={'请输入员工账号'}
           />
         </Form.Item>
         <Form.Item
           name="nickname"
-          label={intl.formatMessage({
-            id: 'pages.staff.field.nickname',
-            defaultMessage: '昵称',
-          })}
+          label={'昵称'}
         >
           <Input
             maxLength={50}
-            placeholder={intl.formatMessage({
-              id: 'pages.staff.field.nicknamePlaceholder',
-              defaultMessage: '请输入昵称',
-            })}
+            placeholder={'请输入昵称'}
           />
         </Form.Item>
         <Form.Item
           name="email"
-          label={intl.formatMessage({
-            id: 'pages.staff.field.email',
-            defaultMessage: '邮箱',
-          })}
+          label={'邮箱'}
           rules={[
             {
               required: true,
-              message: intl.formatMessage({
-                id: 'pages.staff.field.emailRequired',
-                defaultMessage: '请输入邮箱',
-              }),
+              message: '请输入邮箱',
             },
             {
               type: 'email',
-              message: intl.formatMessage({
-                id: 'pages.staff.field.emailInvalid',
-                defaultMessage: '请输入正确的邮箱',
-              }),
+              message: '请输入正确的邮箱',
             },
           ]}
         >
           <Input
             maxLength={255}
-            placeholder={intl.formatMessage({
-              id: 'pages.staff.field.emailPlaceholder',
-              defaultMessage: '请输入邮箱',
-            })}
+            placeholder={'请输入邮箱'}
           />
         </Form.Item>
         <Form.Item
           name="phone"
-          label={intl.formatMessage({
-            id: 'pages.staff.field.phone',
-            defaultMessage: '手机号',
-          })}
+          label={'手机号'}
           rules={[
             {
               validator: async (_, value?: string) => {
@@ -277,10 +224,7 @@ export function StaffFormDrawer({
                 }
                 return Promise.reject(
                   new Error(
-                    intl.formatMessage({
-                      id: 'pages.staff.field.phoneMin',
-                      defaultMessage: '手机号至少 5 位',
-                    }),
+                    '手机号至少 5 位',
                   ),
                 );
               },
@@ -289,27 +233,18 @@ export function StaffFormDrawer({
         >
           <Input
             maxLength={20}
-            placeholder={intl.formatMessage({
-              id: 'pages.staff.field.phonePlaceholder',
-              defaultMessage: '请输入手机号',
-            })}
+            placeholder={'请输入手机号'}
           />
         </Form.Item>
         <Form.Item
           name="role_ids"
-          label={intl.formatMessage({
-            id: 'pages.staff.field.roles',
-            defaultMessage: '角色',
-          })}
+          label={'角色'}
           rules={[
             {
               required: true,
               type: 'array',
               min: 1,
-              message: intl.formatMessage({
-                id: 'pages.staff.field.rolesRequired',
-                defaultMessage: '请选择角色',
-              }),
+              message: '请选择角色',
             },
           ]}
         >
@@ -317,10 +252,7 @@ export function StaffFormDrawer({
             mode="multiple"
             allowClear
             optionFilterProp="label"
-            placeholder={intl.formatMessage({
-              id: 'pages.staff.field.rolesPlaceholder',
-              defaultMessage: '请选择业务角色',
-            })}
+            placeholder={'请选择业务角色'}
             options={roleOptions.map((r) => ({
               label: r.name,
               value: r.id,
@@ -329,57 +261,35 @@ export function StaffFormDrawer({
         </Form.Item>
         <Form.Item
           name="password"
-          label={intl.formatMessage({
-            id: isEdit
-              ? 'pages.staff.field.newPassword'
-              : 'pages.staff.field.password',
-            defaultMessage: isEdit ? '新密码（可选）' : '密码',
-          })}
+          label={isEdit ? '新密码（可选）' : '密码'}
           rules={
             isEdit
               ? [
                   {
                     min: 6,
-                    message: intl.formatMessage({
-                      id: 'pages.staff.field.passwordMin',
-                      defaultMessage: '密码至少 6 位',
-                    }),
+                    message: '密码至少 6 位',
                   },
                 ]
               : [
                   {
                     required: true,
-                    message: intl.formatMessage({
-                      id: 'pages.staff.field.passwordRequired',
-                      defaultMessage: '请输入密码',
-                    }),
+                    message: '请输入密码',
                   },
                   {
                     min: 6,
-                    message: intl.formatMessage({
-                      id: 'pages.staff.field.passwordMin',
-                      defaultMessage: '密码至少 6 位',
-                    }),
+                    message: '密码至少 6 位',
                   },
                 ]
           }
         >
           <Input.Password
             autoComplete="new-password"
-            placeholder={intl.formatMessage({
-              id: isEdit
-                ? 'pages.staff.field.newPasswordPlaceholder'
-                : 'pages.staff.field.passwordPlaceholder',
-              defaultMessage: isEdit ? '不修改请留空' : '请输入密码',
-            })}
+            placeholder={isEdit ? '不修改请留空' : '请输入密码'}
           />
         </Form.Item>
         <Form.Item
           name="confirmPassword"
-          label={intl.formatMessage({
-            id: 'pages.staff.field.confirmPassword',
-            defaultMessage: '确认密码',
-          })}
+          label={'确认密码'}
           dependencies={['password']}
           rules={[
             ({ getFieldValue }) => ({
@@ -391,10 +301,7 @@ export function StaffFormDrawer({
                   if (!value) {
                     return Promise.reject(
                       new Error(
-                        intl.formatMessage({
-                          id: 'pages.staff.field.confirmPasswordRequired',
-                          defaultMessage: '请再次输入密码',
-                        }),
+                        '请再次输入密码',
                       ),
                     );
                   }
@@ -406,10 +313,7 @@ export function StaffFormDrawer({
         >
           <Input.Password
             autoComplete="new-password"
-            placeholder={intl.formatMessage({
-              id: 'pages.staff.field.confirmPasswordPlaceholder',
-              defaultMessage: '请再次输入密码',
-            })}
+            placeholder={'请再次输入密码'}
           />
         </Form.Item>
       </Form>

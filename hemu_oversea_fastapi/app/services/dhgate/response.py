@@ -79,3 +79,35 @@ def extract_result(data: dict) -> dict:
 
 def raise_reauth_required(message: str = "敦煌授权已失效，请重新授权") -> AppError:
     return bad_request(message, data={"oauth_reauth_required": True})
+
+
+def format_dhgate_error_message(exc: AppError, *, fallback: str = "敦煌 API 调用失败") -> str:
+    """从 AppError 中拼出可读的敦煌官方错误信息。"""
+    parts: list[str] = []
+    if exc.message:
+        parts.append(exc.message)
+    data = exc.data if isinstance(exc.data, dict) else {}
+    response = data.get("dhgate_response")
+    if isinstance(response, dict):
+        status = response.get("status")
+        if isinstance(status, dict):
+            status_message = status.get("message")
+            if status_message:
+                text = str(status_message)
+                if text not in parts:
+                    parts.append(text)
+            sub_errors = status.get("subErrors")
+            if isinstance(sub_errors, list):
+                for item in sub_errors:
+                    if not isinstance(item, dict):
+                        continue
+                    message = item.get("message")
+                    if message:
+                        text = str(message)
+                        if text not in parts:
+                            parts.append(text)
+        elif response.get("error_description"):
+            text = str(response["error_description"])
+            if text not in parts:
+                parts.append(text)
+    return "；".join(parts) or fallback

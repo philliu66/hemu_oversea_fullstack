@@ -17,11 +17,16 @@ from app.services.dhgate.album import (
 from app.services.dhgate.client import DhgateCallRecord, DhgateClient
 from app.services.dhgate.items import (
     add_item,
+    apply_package_weight_to_detail,
+    build_item_update_payload,
+    downshelf_items,
     fission_add_item,
     get_item,
     get_item_html,
     list_item_aftersale,
     list_item_groups,
+    update_item,
+    upshelf_items,
 )
 from app.services.dhgate.logistics import list_shipping_templates
 from app.services.dhgate.oauth import (
@@ -53,6 +58,9 @@ __all__ = [
     "get_dhgate_store",
     "get_dhgate_store_by_identifier",
     "add_item",
+    "apply_package_weight_to_detail",
+    "build_item_update_payload",
+    "downshelf_items",
     "fission_add_item",
     "get_item",
     "get_item_html",
@@ -69,6 +77,8 @@ __all__ = [
     "refresh_access_token",
     "tweak_and_upload_main_image",
     "tweak_product_image",
+    "update_item",
+    "upshelf_items",
     "upload_album_image",
     "upload_product_image",
 ]

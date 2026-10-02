@@ -1,4 +1,3 @@
-import { useIntl } from '@umijs/max';
 import {
   Card,
   Descriptions,
@@ -86,8 +85,6 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
   storeDiscountLoading = false,
   storeDiscount = null,
 }) => {
-  const intl = useIntl();
-
   const units = useMemo(
     () => sortUnits(commissionData?.unit_list || []),
     [commissionData?.unit_list],
@@ -105,22 +102,14 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
     <Space size={8} wrap>
       <Typography.Text strong>{storeDiscount.name}</Typography.Text>
       <Tag color="blue">
-        {intl.formatMessage({
-          id: 'pages.product.detail.commission.storeDiscountLabel',
-          defaultMessage: '基础折扣率',
-        })}
+        {'基础折扣率'}
         {' '}
         {formatPercent(storeDiscount.base_discount)}
       </Tag>
     </Space>
   ) : (
     <Typography.Text type="secondary">
-      {intl.formatMessage({
-        id: hasStore
-          ? 'pages.product.detail.commission.storeDiscountMissing'
-          : 'pages.product.detail.commission.storeEmpty',
-        defaultMessage: hasStore ? '暂无基础折扣率数据' : '未选择店铺',
-      })}
+      {hasStore ? '暂无基础折扣率数据' : '未选择店铺'}
     </Typography.Text>
   );
 
@@ -128,10 +117,7 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
     <Typography.Text>{categoryPath}</Typography.Text>
   ) : (
     <Typography.Text type="secondary">
-      {intl.formatMessage({
-        id: 'pages.product.detail.commission.categoryEmpty',
-        defaultMessage: '未选择类目',
-      })}
+      {'未选择类目'}
     </Typography.Text>
   );
 
@@ -139,10 +125,7 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
   if (!hasCategory) {
     commissionValue = (
       <Typography.Text type="secondary">
-        {intl.formatMessage({
-          id: 'pages.product.detail.commission.needSecondLevel',
-          defaultMessage: '选择至二级类目后可查看佣金率',
-        })}
+        {'选择至二级类目后可查看佣金率'}
       </Typography.Text>
     );
   } else if (commissionLoading) {
@@ -152,15 +135,12 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
   } else if (units.length === 0) {
     commissionValue = (
       <Typography.Text type="warning">
-        {intl.formatMessage({
-          id: 'pages.product.detail.commission.empty',
-          defaultMessage: '当前类目暂无佣金率数据，请先同步类目佣金率',
-        })}
+        {'当前类目暂无佣金率数据，请先同步类目佣金率'}
       </Typography.Text>
     );
   } else {
     commissionValue = (
-      <Space size={[8, 8]} wrap>
+      <Space size={[8, 8]} wrap align="center">
         {units.map((unit, index) => (
           <Tag
             key={`${unit.left_bound ?? ''}-${unit.right_bound ?? ''}-${index}`}
@@ -173,6 +153,9 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
             </Typography.Text>
           </Tag>
         ))}
+        <Typography.Text type="secondary">
+          {'（暂定依据美容仪类目计算佣金率）'}
+        </Typography.Text>
       </Space>
     );
   }
@@ -181,10 +164,7 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
     <Card
       size="small"
       style={{ marginBottom: 16 }}
-      title={intl.formatMessage({
-        id: 'pages.product.detail.commission.panelTitle',
-        defaultMessage: '当前店铺与类目定价参考',
-      })}
+      title={'当前店铺与类目定价参考'}
     >
       <Descriptions
         size="small"
@@ -193,26 +173,17 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
         contentStyle={{ minWidth: 0 }}
       >
         <Descriptions.Item
-          label={intl.formatMessage({
-            id: 'pages.product.detail.commission.currentStore',
-            defaultMessage: '当前店铺',
-          })}
+          label={'当前店铺'}
         >
           {storeValue}
         </Descriptions.Item>
         <Descriptions.Item
-          label={intl.formatMessage({
-            id: 'pages.product.detail.commission.currentCategory',
-            defaultMessage: '当前类目',
-          })}
+          label={'当前类目'}
         >
           {categoryValue}
         </Descriptions.Item>
         <Descriptions.Item
-          label={intl.formatMessage({
-            id: 'pages.product.detail.commission.categoryRate',
-            defaultMessage: '类目佣金率',
-          })}
+          label={'类目佣金率'}
         >
           {commissionValue}
         </Descriptions.Item>

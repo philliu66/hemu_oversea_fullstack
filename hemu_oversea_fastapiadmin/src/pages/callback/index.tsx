@@ -1,4 +1,4 @@
-import { useIntl, useSearchParams } from '@umijs/max';
+import { useSearchParams } from '@umijs/max';
 import { Result } from 'antd';
 import React, { useEffect, useMemo } from 'react';
 import {
@@ -41,7 +41,6 @@ function parseStoreId(raw: string | null): number | undefined {
 }
 
 const CallbackPage: React.FC = () => {
-  const intl = useIntl();
   const [searchParams] = useSearchParams();
 
   const status = useMemo<CallbackStatus>(() => {
@@ -90,36 +89,18 @@ const CallbackPage: React.FC = () => {
   const resultStatus = status === 'success' ? 'success' : 'error';
   const title =
     status === 'success'
-      ? intl.formatMessage({
-          id: 'pages.callback.oauth.successTitle',
-          defaultMessage: '授权成功',
-        })
+      ? '授权成功'
       : status === 'fail'
-        ? intl.formatMessage({
-            id: 'pages.callback.oauth.failTitle',
-            defaultMessage: '授权失败',
-          })
-        : intl.formatMessage({
-            id: 'pages.callback.oauth.unknownTitle',
-            defaultMessage: '授权结果未知',
-          });
+        ? '授权失败'
+        : '授权结果未知';
 
   const subTitle =
     msg ||
     (status === 'success'
-      ? intl.formatMessage({
-          id: 'pages.callback.oauth.successDefault',
-          defaultMessage: '店铺授权已完成，窗口将在 3 秒后自动关闭。',
-        })
+      ? '店铺授权已完成，窗口将在 3 秒后自动关闭。'
       : status === 'fail'
-        ? intl.formatMessage({
-            id: 'pages.callback.oauth.failDefault',
-            defaultMessage: '授权未完成，请关闭本窗口后重试。',
-          })
-        : intl.formatMessage({
-            id: 'pages.callback.oauth.unknownDefault',
-            defaultMessage: '未识别到有效的授权结果参数。',
-          }));
+        ? '授权未完成，请关闭本窗口后重试。'
+        : '未识别到有效的授权结果参数。');
 
   return (
     <div

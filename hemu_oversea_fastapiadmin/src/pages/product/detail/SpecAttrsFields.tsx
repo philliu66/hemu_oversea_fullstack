@@ -1,7 +1,7 @@
-import { useIntl } from '@umijs/max';
 import {
   App,
   Button,
+  Checkbox,
   Input,
   Space,
   Typography,
@@ -99,7 +99,6 @@ function SpecSelectedImageTable({
   ) => void;
   onDeselectValue?: (attrId: string, attrValId: string) => void;
 }) {
-  const intl = useIntl();
   const rows = attr.values || [];
   if (!rows.length) {
     return null;
@@ -144,10 +143,7 @@ function SpecSelectedImageTable({
               width: 120,
             }}
           >
-            {intl.formatMessage({
-              id: 'pages.product.detail.specAttrs.customPic',
-              defaultMessage: '自定义图片（无图可忽略）',
-            })}
+            {'自定义图片（无图可忽略）'}
           </th>
         </tr>
       </thead>
@@ -176,10 +172,7 @@ function SpecSelectedImageTable({
                         onDeselectValue(attr.attr_id, String(valId))
                       }
                     >
-                      {intl.formatMessage({
-                        id: 'pages.product.detail.specAttrs.delete',
-                        defaultMessage: '删除',
-                      })}
+                      {'删除'}
                     </Button>
                   ) : null}
                 </Space>
@@ -293,7 +286,6 @@ function CustomSpecSection({
   disabled?: boolean;
   onChange?: (next: DhProductSpecSelfDefPublic[]) => void;
 }) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const [drafts, setDrafts] = useState<SpecSelfDefDraft[]>(() =>
     toDrafts(specs),
@@ -341,10 +333,7 @@ function CustomSpecSection({
     const name = addValue.trim();
     if (!name) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.nameRequired',
-          defaultMessage: '请输入规格名称',
-        }),
+        '请输入规格名称',
       );
       return;
     }
@@ -354,10 +343,7 @@ function CustomSpecSection({
       )
     ) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.nameDuplicate',
-          defaultMessage: '规格名称已存在',
-        }),
+        '规格名称已存在',
       );
       return;
     }
@@ -398,10 +384,7 @@ function CustomSpecSection({
     const name = editingName.trim();
     if (!name) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.nameRequired',
-          defaultMessage: '请输入规格名称',
-        }),
+        '请输入规格名称',
       );
       return;
     }
@@ -413,10 +396,7 @@ function CustomSpecSection({
       )
     ) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.nameDuplicate',
-          defaultMessage: '规格名称已存在',
-        }),
+        '规格名称已存在',
       );
       return;
     }
@@ -454,10 +434,7 @@ function CustomSpecSection({
             lineHeight: '22px',
           }}
         >
-          {intl.formatMessage({
-            id: 'pages.product.detail.specAttrs.customSpec',
-            defaultMessage: '自定义规格',
-          })}
+          {'自定义规格'}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           {drafts.length ? (
@@ -492,10 +469,7 @@ function CustomSpecSection({
             </Space>
           ) : (
             <Typography.Text type="secondary">
-              {intl.formatMessage({
-                id: 'pages.product.detail.specSelfDef.empty',
-                defaultMessage: '暂无自定义规格',
-              })}
+              {'暂无自定义规格'}
             </Typography.Text>
           )}
           {!disabled ? (
@@ -505,16 +479,10 @@ function CustomSpecSection({
                   value={addValue}
                   onChange={(event) => setAddValue(event.target.value)}
                   onPressEnter={handleAdd}
-                  placeholder={intl.formatMessage({
-                    id: 'pages.product.detail.specAttrs.addPlaceholder',
-                    defaultMessage: '请输入自定义规格',
-                  })}
+                  placeholder={'请输入自定义规格'}
                 />
                 <Button type="primary" onClick={handleAdd}>
-                  {intl.formatMessage({
-                    id: 'pages.product.detail.specAttrs.add',
-                    defaultMessage: '添加',
-                  })}
+                  {'添加'}
                 </Button>
               </Space.Compact>
             </div>
@@ -544,10 +512,7 @@ function CustomSpecSection({
                   width: 160,
                 }}
               >
-                {intl.formatMessage({
-                  id: 'pages.product.detail.specAttrs.customSpec',
-                  defaultMessage: '自定义规格',
-                })}
+                {'自定义规格'}
               </th>
               <th
                 style={{
@@ -559,10 +524,7 @@ function CustomSpecSection({
                   width: 120,
                 }}
               >
-                {intl.formatMessage({
-                  id: 'pages.product.detail.specAttrs.customPic',
-                  defaultMessage: '自定义图片（无图可忽略）',
-                })}
+                {'自定义图片（无图可忽略）'}
               </th>
             </tr>
           </thead>
@@ -601,10 +563,7 @@ function CustomSpecSection({
                             patchDraft(item.key, { selected: false })
                           }
                         >
-                          {intl.formatMessage({
-                            id: 'pages.product.detail.specAttrs.delete',
-                            defaultMessage: '删除',
-                          })}
+                          {'删除'}
                         </Button>
                       ) : null}
                     </Space>

@@ -116,7 +116,8 @@ export default defineConfig({
    */
   title: '合木跨境Fast系统',
   layout: {
-    locale: true,
+    // 路由 name 已直接写中文，不再走 menu.* 国际化查找；locale 插件本身仍保留
+    locale: false,
     ...defaultSettings,
   },
   /**

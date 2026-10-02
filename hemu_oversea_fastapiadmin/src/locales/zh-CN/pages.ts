@@ -469,6 +469,8 @@ export default {
   'pages.product.detail.commission.currentStore': '当前店铺',
   'pages.product.detail.commission.currentCategory': '当前类目',
   'pages.product.detail.commission.categoryRate': '类目佣金率',
+  'pages.product.detail.commission.fixedBeautyDeviceNote':
+    '（暂定依据美容仪类目计算佣金率）',
   'pages.product.detail.commission.col.range': '价格区间（USD）',
   'pages.product.detail.commission.col.rate': '佣金费率',
   'pages.product.detail.specAttrs.sectionTitle': '规格属性',

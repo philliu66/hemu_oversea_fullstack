@@ -1,5 +1,4 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { useIntl } from '@umijs/max';
 import { createStyles } from 'antd-style';
 import React from 'react';
 import Settings from '../../config/defaultSettings';
@@ -44,26 +43,14 @@ const useStyles = createStyles(({ token, css }) => ({
 }));
 
 const Welcome: React.FC = () => {
-  const intl = useIntl();
   const { styles } = useStyles();
 
   return (
     <PageContainer title={false} pageHeaderRender={false}>
       <div className={styles.page}>
         <div className={styles.hero}>
-          {intl.formatMessage(
-            {
-              id: 'pages.welcome.celebrationTitle',
-              defaultMessage: '欢迎使用 {title}',
-            },
-            {
-              title: (
-                <span key="title" className={styles.title}>
-                  {Settings.title}
-                </span>
-              ),
-            },
-          )}
+          欢迎使用{' '}
+          <span className={styles.title}>{Settings.title}</span>
         </div>
       </div>
     </PageContainer>

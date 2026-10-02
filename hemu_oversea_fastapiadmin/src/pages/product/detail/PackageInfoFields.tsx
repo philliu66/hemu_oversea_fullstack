@@ -1,4 +1,3 @@
-import { useIntl } from '@umijs/max';
 import { Checkbox, InputNumber, Space, Typography } from 'antd';
 import React, { useMemo } from 'react';
 import type { DhItemWeightRangePublic } from '@/types/api';
@@ -54,7 +53,6 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
   onHeightChange,
   onWeightRangeChange,
 }) => {
-  const intl = useIntl();
   const ladderEnabled = hasWeightRange(weightRange);
 
   const volume = useMemo(() => {
@@ -102,10 +100,7 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
       >
         <div style={labelStyle}>
           <Typography.Text type="danger">*</Typography.Text>
-          {intl.formatMessage({
-            id: 'pages.product.detail.package.grossWeight',
-            defaultMessage: '包装后重量',
-          })}
+          {'包装后重量'}
           :
         </div>
         <Space wrap size={8} align="center" style={{ flex: 1, minWidth: 0 }}>
@@ -120,10 +115,7 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
             }
           />
           <Typography.Text type="secondary">
-            {intl.formatMessage({
-              id: 'pages.product.detail.package.grossWeightUnit',
-              defaultMessage: '(公斤/件/个)',
-            })}
+            {'(公斤/件/个)'}
           </Typography.Text>
           <Checkbox
             disabled={disabled}
@@ -140,10 +132,7 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
               }
             }}
           >
-            {intl.formatMessage({
-              id: 'pages.product.detail.package.weightLadder',
-              defaultMessage: '产品计重阶梯设定',
-            })}
+            {'产品计重阶梯设定'}
           </Checkbox>
         </Space>
       </div>
@@ -153,10 +142,7 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
           <div style={{ marginBottom: 10 }}>
             <Space wrap size={6} align="center">
               <span>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.package.ladderBasePrefix',
-                  defaultMessage: '买家购买',
-                })}
+                {'买家购买'}
               </span>
               <InputNumber
                 min={0}
@@ -171,20 +157,14 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
                 }
               />
               <span>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.package.ladderBaseSuffix',
-                  defaultMessage: '件/个以内，按单位产品重量计算运费。',
-                })}
+                {'件/个以内，按单位产品重量计算运费。'}
               </span>
             </Space>
           </div>
           <div>
             <Space wrap size={6} align="center">
               <span>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.package.ladderStepPrefix',
-                  defaultMessage: '在此基础上，买家每多买',
-                })}
+                {'在此基础上，买家每多买'}
               </span>
               <InputNumber
                 min={0}
@@ -199,10 +179,7 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
                 }
               />
               <span>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.package.ladderStepMid',
-                  defaultMessage: '件/个，重量增加',
-                })}
+                {'件/个，重量增加'}
               </span>
               <InputNumber
                 min={0}
@@ -217,10 +194,7 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
                 }
               />
               <span>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.package.ladderStepSuffix',
-                  defaultMessage: '公斤。',
-                })}
+                {'公斤。'}
               </span>
             </Space>
           </div>
@@ -230,10 +204,7 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
       <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={labelStyle}>
           <Typography.Text type="danger">*</Typography.Text>
-          {intl.formatMessage({
-            id: 'pages.product.detail.package.size',
-            defaultMessage: '包装后尺寸',
-          })}
+          {'包装后尺寸'}
           :
         </div>
         <Space wrap size={6} align="center" style={{ flex: 1, minWidth: 0 }}>
@@ -270,10 +241,7 @@ const PackageInfoFields: React.FC<PackageInfoFieldsProps> = ({
             }
           />
           <Typography.Text type="secondary">
-            {intl.formatMessage({
-              id: 'pages.product.detail.package.sizeUnitPrefix',
-              defaultMessage: '(单位: 厘米, 每件/个',
-            })}{' '}
+            {'(单位: 厘米, 每件/个'}{' '}
             <Typography.Text type="danger">
               {volume == null ? '-' : volume}
             </Typography.Text>{' '}

@@ -9,6 +9,8 @@
   https://open.dhgate.com/docs/api/detail/0c7a6c7045f44a5c97cc44bc0e822fce
 - dh.item.add$2.0（卖家发布产品信息）
   https://open.dhgate.com/docs/api/detail/7547475966da4fbdaca30aa956f8e218
+- dh.item.update$2.0（更新产品信息）
+  https://open.dhgate.com/docs/api/detail/（文档手册 dh.item.update$2.0）
 - dh.item.aftersale.list$2.0（获取售后模板列表）
   https://open.dhgate.com/docs/api/detail/d1ce0879df0a4564a75cbf0e1af7c4b2
 - dh.shipping.template.list$2.0（卖家获取运费模版列表）
@@ -263,6 +265,173 @@ def add_item(client: DhgateClient, payload: dict[str, Any]) -> dict[str, Any]:
         params=payload,
         http_method="POST",
     )
+
+
+def update_item(client: DhgateClient, payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    更新产品信息。
+
+    method: dh.item.update
+    version: 2.0
+    仅支持 POST；入参来自 dh.item.get 全量 + 按需修改字段。
+    """
+    if not payload:
+        raise bad_request("dh.item.update 入参不能为空")
+    item_code = str(payload.get("itemCode") or "").strip()
+    if not item_code:
+        raise bad_request("dh.item.update 缺少 itemCode")
+    return client.call(
+        "dh.item.update",
+        version="2.0",
+        params=payload,
+        http_method="POST",
+    )
+
+
+_MAX_BATCH_ITEM_CODES = 200
+
+
+def _normalize_item_codes(item_codes: list[str] | str) -> list[str]:
+    """
+    规范化产品编码列表。
+
+    官网 itemCodes：多个产品编码用英文半角逗号分隔，最多 200 个。
+    示例：211198221,211198222
+    """
+    if isinstance(item_codes, str):
+        raw_list = item_codes.split(",")
+    else:
+        raw_list: list[Any] = []
+        for item in list(item_codes or []):
+            text = str(item or "").strip()
+            if not text:
+                continue
+            if "," in text:
+                raw_list.extend(text.split(","))
+            else:
+                raw_list.append(text)
+    codes: list[str] = []
+    for raw in raw_list:
+        code = str(raw or "").strip()
+        if code and code not in codes:
+            codes.append(code)
+    if not codes:
+        raise bad_request("item_codes 不能为空")
+    if len(codes) > _MAX_BATCH_ITEM_CODES:
+        raise bad_request(f"item_codes 最多支持 {_MAX_BATCH_ITEM_CODES} 个产品")
+    return codes
+
+
+def _item_codes_param(item_codes: list[str] | str) -> str:
+    """输出官网要求的 itemCodes 逗号分隔字符串。"""
+    return ",".join(_normalize_item_codes(item_codes))
+
+
+def upshelf_items(
+    client: DhgateClient,
+    *,
+    item_codes: list[str] | str,
+    site_id: str | None = None,
+) -> dict[str, Any]:
+    """
+    批量上架产品。
+
+    method: dh.item.upshelf.list
+    version: 2.0
+    仅支持 POST；入参 itemCodes（逗号分隔字符串，最多 200 个），可选 siteId。
+    """
+    params: dict[str, Any] = {"itemCodes": _item_codes_param(item_codes)}
+    site = str(site_id or "").strip()
+    if site:
+        params["siteId"] = _normalize_site_id(site)
+    return client.call(
+        "dh.item.upshelf.list",
+        version="2.0",
+        params=params,
+        http_method="POST",
+    )
+
+
+def downshelf_items(
+    client: DhgateClient,
+    *,
+    item_codes: list[str] | str,
+    site_id: str | None = None,
+) -> dict[str, Any]:
+    """
+    批量下架产品。
+
+    method: dh.item.downshelf.list
+    version: 2.0
+    仅支持 POST；入参 itemCodes（逗号分隔字符串，最多 200 个），可选 siteId。
+    """
+    params: dict[str, Any] = {"itemCodes": _item_codes_param(item_codes)}
+    site = str(site_id or "").strip()
+    if site:
+        params["siteId"] = _normalize_site_id(site)
+    return client.call(
+        "dh.item.downshelf.list",
+        version="2.0",
+        params=params,
+        http_method="POST",
+    )
+
+
+def build_item_update_payload(
+    detail: dict[str, Any],
+    *,
+    item_code: str,
+    site_id: str = _DEFAULT_SITE_ID,
+) -> dict[str, Any]:
+    """
+    组装 dh.item.update 入参。
+
+    更新链路与发布无关：以 dh.item.get 详情为底稿，仅确保 itemCode / siteId，
+    其余字段（含 skuId / skuMD5 等）原样上送；业务侧先改对应字段再调用本函数。
+    """
+    code = str(item_code or "").strip()
+    if not code:
+        raise bad_request("item_code 不能为空（商品编码 itemCode）")
+    if not isinstance(detail, dict) or not detail:
+        raise bad_request("商品详情为空，无法更新")
+
+    payload = deepcopy(detail)
+    payload["itemCode"] = code
+    payload["siteId"] = _normalize_site_id(
+        str(payload.get("siteId") or site_id or _DEFAULT_SITE_ID)
+    )
+    return payload
+
+
+def apply_package_weight_to_detail(
+    detail: dict[str, Any],
+    *,
+    grossWeight: Any,
+    baseQt: int,
+    stepQt: int,
+    stepWeight: Any,
+) -> dict[str, Any]:
+    """
+    在详情副本上覆盖包装重量与计重阶梯（字段名与官网一致）。
+
+    对应 itemPackage.grossWeight / itemPackage.itemWeigthRange。
+    """
+    updated = deepcopy(detail) if isinstance(detail, dict) else {}
+    package = updated.get("itemPackage")
+    if not isinstance(package, dict):
+        package = {}
+        updated["itemPackage"] = package
+    else:
+        package = dict(package)
+        updated["itemPackage"] = package
+
+    package["grossWeight"] = str(grossWeight)
+    package["itemWeigthRange"] = {
+        "baseQt": int(baseQt),
+        "stepQt": int(stepQt),
+        "stepWeight": str(stepWeight),
+    }
+    return updated
 
 
 def apply_fission_update_info(

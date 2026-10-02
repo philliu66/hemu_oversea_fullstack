@@ -1,4 +1,3 @@
-import { useIntl } from '@umijs/max';
 import { Form, InputNumber, Radio, Select, Space, Typography } from 'antd';
 import React, { useMemo } from 'react';
 import type {
@@ -152,16 +151,12 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
   onMaxSaleQtyChange,
   onLeadingTimeChange,
 }) => {
-  const intl = useIntl();
   const stockStatus = deriveStockStatus(itemInventory);
   const packQty = packingQuantity == null ? 1 : packingQuantity;
   const sellByPack = packQty > 1;
   const measureUnitLabel =
     resolveMeasureDisplayName(measureId, measureOptions) ||
-    intl.formatMessage({
-      id: 'pages.product.detail.sale.measureFallback',
-      defaultMessage: '件',
-    });
+    '件';
 
   const selectOptions = useMemo(() => {
     const list = measureOptions || [];
@@ -180,10 +175,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
     <>
       <Form.Item
         label={requiredLabel(
-          intl.formatMessage({
-            id: 'pages.product.detail.sale.measure',
-            defaultMessage: '计件单位',
-          }),
+          '计件单位',
         )}
       >
         <Select
@@ -193,10 +185,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
           loading={measuresLoading}
           optionFilterProp="label"
           style={{ maxWidth: 280, width: '100%' }}
-          placeholder={intl.formatMessage({
-            id: 'pages.product.detail.sale.measurePlaceholder',
-            defaultMessage: '请选择计件单位',
-          })}
+          placeholder={'请选择计件单位'}
           options={selectOptions}
           value={measureId || undefined}
           onChange={(value) => onMeasureIdChange?.(value || null)}
@@ -205,10 +194,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
 
       <Form.Item
         label={requiredLabel(
-          intl.formatMessage({
-            id: 'pages.product.detail.sale.saleMethod',
-            defaultMessage: '销售方式',
-          }),
+          '销售方式',
         )}
       >
         <Radio.Group
@@ -223,21 +209,12 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
           }}
         >
           <Radio value="piece">
-            {intl.formatMessage(
-              {
-                id: 'pages.product.detail.sale.sellByPieceWithUnit',
-                defaultMessage: '按件卖 (单位: {unit})',
-              },
-              { unit: measureUnitLabel },
-            )}
+            {`按件卖 (单位: ${measureUnitLabel})`}
           </Radio>
           <Radio value="pack">
             <Space size={6} align="center" wrap>
               <span>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.sale.sellByPack',
-                  defaultMessage: '按包卖 (每包产品的数量',
-                })}
+                {'按包卖 (每包产品的数量'}
               </span>
               <InputNumber
                 min={2}
@@ -260,10 +237,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
 
       <Form.Item
         label={requiredLabel(
-          intl.formatMessage({
-            id: 'pages.product.detail.sale.minWholesaleQty',
-            defaultMessage: '起定量',
-          }),
+          '起定量',
         )}
       >
         <Space size={8} align="center" wrap>
@@ -281,10 +255,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
           />
           <span>
             {sellByPack
-              ? intl.formatMessage({
-                  id: 'pages.product.detail.sale.minWholesaleQtyPack',
-                  defaultMessage: '包',
-                })
+              ? '包'
               : measureUnitLabel}
           </span>
         </Space>
@@ -292,10 +263,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
 
       <Form.Item
         label={requiredLabel(
-          intl.formatMessage({
-            id: 'pages.product.detail.sale.stockStatus',
-            defaultMessage: '备货状态',
-          }),
+          '备货状态',
         )}
       >
         <div>
@@ -309,31 +277,19 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
             }
           >
             <Radio value="in_stock">
-              {intl.formatMessage({
-                id: 'pages.product.detail.sale.stockInStock',
-                defaultMessage: '有备货',
-              })}
+              {'有备货'}
             </Radio>
             <Radio value="in_transit">
-              {intl.formatMessage({
-                id: 'pages.product.detail.sale.stockInTransit',
-                defaultMessage: '备货途中',
-              })}
+              {'备货途中'}
             </Radio>
             <Radio value="pending">
-              {intl.formatMessage({
-                id: 'pages.product.detail.sale.stockPending',
-                defaultMessage: '待备货',
-              })}
+              {'待备货'}
             </Radio>
           </Radio.Group>
           <div style={{ marginTop: 10 }}>
             <Space size={8} align="center" wrap>
               <span>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.sale.maxSaleQtyPrefix',
-                  defaultMessage: '一次最大购买数量为',
-                })}
+                {'一次最大购买数量为'}
               </span>
               <InputNumber
                 min={1}
@@ -349,10 +305,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
               />
               <span>
                 {sellByPack
-                  ? intl.formatMessage({
-                      id: 'pages.product.detail.sale.maxSaleQtyPack',
-                      defaultMessage: '包',
-                    })
+                  ? '包'
                   : measureUnitLabel}
               </span>
             </Space>
@@ -362,10 +315,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
 
       <Form.Item
         label={requiredLabel(
-          intl.formatMessage({
-            id: 'pages.product.detail.sale.leadingTime',
-            defaultMessage: '备货期',
-          }),
+          '备货期',
         )}
       >
         <Space size={8} align="center" wrap>
@@ -380,10 +330,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
             }
           />
           <span>
-            {intl.formatMessage({
-              id: 'pages.product.detail.sale.leadingTimeUnit',
-              defaultMessage: '天',
-            })}
+            {'天'}
           </span>
         </Space>
       </Form.Item>

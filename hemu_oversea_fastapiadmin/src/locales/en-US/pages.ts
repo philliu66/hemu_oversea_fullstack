@@ -443,6 +443,8 @@ export default {
   'pages.product.detail.commission.currentStore': 'Current store',
   'pages.product.detail.commission.currentCategory': 'Current category',
   'pages.product.detail.commission.categoryRate': 'Category commission',
+  'pages.product.detail.commission.fixedBeautyDeviceNote':
+    '(Temporarily based on Beauty Device category commission)',
   'pages.product.detail.commission.col.range': 'Price range (USD)',
   'pages.product.detail.commission.col.rate': 'Commission rate',
   'pages.product.detail.specAttrs.sectionTitle': 'Specification Attributes',

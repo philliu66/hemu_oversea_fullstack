@@ -1,5 +1,4 @@
-import { useIntl } from '@umijs/max';
-import { App, Button, Drawer, Form, Input, Space, Spin, Tree } from 'antd';
+﻿import { App, Button, Drawer, Form, Input, Space, Spin, Tree } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -51,7 +50,6 @@ export function SupplierFormDrawer({
   onSuccess: () => void;
   onSwitchToEdit?: () => void;
 }) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
@@ -120,10 +118,7 @@ export function SupplierFormDrawer({
       .catch(() => {
         if (!cancelled) {
           message.error(
-            intl.formatMessage({
-              id: 'pages.supplier.notFound',
-              defaultMessage: '未找到该供应商',
-            }),
+            '未找到该供应商',
           );
         }
       })
@@ -135,26 +130,17 @@ export function SupplierFormDrawer({
     return () => {
       cancelled = true;
     };
-  }, [form, intl, isCreate, message, open, supplierId]);
+  }, [form, isCreate, message, open, supplierId]);
 
   const title = useMemo(() => {
     if (mode === 'create') {
-      return intl.formatMessage({
-        id: 'pages.supplier.drawer.create',
-        defaultMessage: '新建供应商',
-      });
+      return '新建供应商';
     }
     if (mode === 'edit') {
-      return intl.formatMessage({
-        id: 'pages.supplier.drawer.edit',
-        defaultMessage: '编辑供应商',
-      });
+      return '编辑供应商';
     }
-    return intl.formatMessage({
-      id: 'pages.supplier.drawer.view',
-      defaultMessage: '查看供应商',
-    });
-  }, [intl, mode]);
+    return '查看供应商';
+  }, [mode]);
 
   const handleClose = () => {
     form.resetFields();
@@ -178,10 +164,7 @@ export function SupplierFormDrawer({
           permission_codes: values.permission_codes ?? [],
         });
         message.success(
-          intl.formatMessage({
-            id: 'pages.supplier.create.success',
-            defaultMessage: '创建成功',
-          }),
+          '创建成功',
         );
       } else if (supplierId) {
         await updateSupplier({
@@ -192,10 +175,7 @@ export function SupplierFormDrawer({
           permission_codes: values.permission_codes ?? [],
         });
         message.success(
-          intl.formatMessage({
-            id: 'pages.supplier.edit.success',
-            defaultMessage: '保存成功',
-          }),
+          '保存成功',
         );
       }
       onSuccess();
@@ -222,37 +202,25 @@ export function SupplierFormDrawer({
           {readOnly ? (
             <>
               <Button onClick={handleClose}>
-                {intl.formatMessage({
-                  id: 'pages.supplier.drawer.close',
-                  defaultMessage: '关闭',
-                })}
+                {'关闭'}
               </Button>
               {onSwitchToEdit ? (
                 <Button type="primary" onClick={onSwitchToEdit}>
-                  {intl.formatMessage({
-                    id: 'pages.supplier.action.edit',
-                    defaultMessage: '编辑',
-                  })}
+                  {'编辑'}
                 </Button>
               ) : null}
             </>
           ) : (
             <>
               <Button onClick={handleClose}>
-                {intl.formatMessage({
-                  id: 'pages.supplier.drawer.cancel',
-                  defaultMessage: '取消',
-                })}
+                {'取消'}
               </Button>
               <Button
                 type="primary"
                 loading={submitting}
                 onClick={handleSubmit}
               >
-                {intl.formatMessage({
-                  id: 'pages.supplier.drawer.submit',
-                  defaultMessage: '确定',
-                })}
+                {'确定'}
               </Button>
             </>
           )}
@@ -262,38 +230,26 @@ export function SupplierFormDrawer({
       <Spin spinning={loading}>
         <Form form={form} layout="vertical" preserve={false}>
           <div className="mb-4 text-base font-medium">
-            {intl.formatMessage({
-              id: 'pages.supplier.section.basic',
-              defaultMessage: '供应商信息',
-            })}
+            {'供应商信息'}
           </div>
           {!isCreate ? (
             <Form.Item
               name="code"
-              label={intl.formatMessage({
-                id: 'pages.supplier.field.code',
-                defaultMessage: '供应商编码',
-              })}
+              label={'供应商编码'}
             >
               <Input disabled />
             </Form.Item>
           ) : null}
           <Form.Item
             name="name"
-            label={intl.formatMessage({
-              id: 'pages.supplier.field.name',
-              defaultMessage: '供应商名称',
-            })}
+            label={'供应商名称'}
             rules={
               readOnly
                 ? undefined
                 : [
                     {
                       required: true,
-                      message: intl.formatMessage({
-                        id: 'pages.supplier.field.nameRequired',
-                        defaultMessage: '请输入供应商名称',
-                      }),
+                      message: '请输入供应商名称',
                     },
                   ]
             }
@@ -302,27 +258,18 @@ export function SupplierFormDrawer({
           </Form.Item>
           <Form.Item
             name="phone"
-            label={intl.formatMessage({
-              id: 'pages.supplier.field.phone',
-              defaultMessage: '联系电话',
-            })}
+            label={'联系电话'}
             rules={
               readOnly
                 ? undefined
                 : [
                     {
                       required: true,
-                      message: intl.formatMessage({
-                        id: 'pages.supplier.field.phoneRequired',
-                        defaultMessage: '请输入联系电话',
-                      }),
+                      message: '请输入联系电话',
                     },
                     {
                       min: 5,
-                      message: intl.formatMessage({
-                        id: 'pages.supplier.field.phoneMin',
-                        defaultMessage: '联系电话至少 5 位',
-                      }),
+                      message: '联系电话至少 5 位',
                     },
                   ]
             }
@@ -331,27 +278,18 @@ export function SupplierFormDrawer({
           </Form.Item>
           <Form.Item
             name="email"
-            label={intl.formatMessage({
-              id: 'pages.supplier.field.email',
-              defaultMessage: '邮件地址',
-            })}
+            label={'邮件地址'}
             rules={
               readOnly
                 ? undefined
                 : [
                     {
                       required: true,
-                      message: intl.formatMessage({
-                        id: 'pages.supplier.field.emailRequired',
-                        defaultMessage: '请输入邮件地址',
-                      }),
+                      message: '请输入邮件地址',
                     },
                     {
                       type: 'email',
-                      message: intl.formatMessage({
-                        id: 'pages.supplier.field.emailInvalid',
-                        defaultMessage: '请输入正确的邮箱',
-                      }),
+                      message: '请输入正确的邮箱',
                     },
                   ]
             }
@@ -360,10 +298,7 @@ export function SupplierFormDrawer({
           </Form.Item>
           <Form.Item
             name="permission_codes"
-            label={intl.formatMessage({
-              id: 'pages.supplier.field.permissions',
-              defaultMessage: '开通权限',
-            })}
+            label={'开通权限'}
             rules={
               readOnly
                 ? undefined
@@ -372,10 +307,7 @@ export function SupplierFormDrawer({
                       required: true,
                       type: 'array',
                       min: 1,
-                      message: intl.formatMessage({
-                        id: 'pages.supplier.field.permissionsRequired',
-                        defaultMessage: '请选择开通权限',
-                      }),
+                      message: '请选择开通权限',
                     },
                   ]
             }
@@ -401,33 +333,21 @@ export function SupplierFormDrawer({
           </Form.Item>
 
           <div className="mb-4 mt-6 text-base font-medium">
-            {intl.formatMessage({
-              id: 'pages.supplier.section.admin',
-              defaultMessage: '管理员设置',
-            })}
+            {'管理员设置'}
           </div>
           <Form.Item
             name="adminUsername"
-            label={intl.formatMessage({
-              id: 'pages.supplier.field.adminUsername',
-              defaultMessage: '管理员账号',
-            })}
+            label={'管理员账号'}
             rules={
               isCreate
                 ? [
                     {
                       required: true,
-                      message: intl.formatMessage({
-                        id: 'pages.supplier.field.adminUsernameRequired',
-                        defaultMessage: '请输入管理员账号',
-                      }),
+                      message: '请输入管理员账号',
                     },
                     {
                       min: 3,
-                      message: intl.formatMessage({
-                        id: 'pages.supplier.field.adminUsernameMin',
-                        defaultMessage: '账号至少 3 位',
-                      }),
+                      message: '账号至少 3 位',
                     },
                   ]
                 : undefined
@@ -439,24 +359,15 @@ export function SupplierFormDrawer({
             <>
               <Form.Item
                 name="adminPassword"
-                label={intl.formatMessage({
-                  id: 'pages.supplier.field.adminPassword',
-                  defaultMessage: '管理员密码',
-                })}
+                label={'管理员密码'}
                 rules={[
                   {
                     required: true,
-                    message: intl.formatMessage({
-                      id: 'pages.supplier.field.adminPasswordRequired',
-                      defaultMessage: '请输入管理员密码',
-                    }),
+                    message: '请输入管理员密码',
                   },
                   {
                     min: 6,
-                    message: intl.formatMessage({
-                      id: 'pages.supplier.field.adminPasswordMin',
-                      defaultMessage: '密码至少 6 位',
-                    }),
+                    message: '密码至少 6 位',
                   },
                 ]}
               >
@@ -464,18 +375,12 @@ export function SupplierFormDrawer({
               </Form.Item>
               <Form.Item
                 name="confirmPassword"
-                label={intl.formatMessage({
-                  id: 'pages.supplier.field.confirmPassword',
-                  defaultMessage: '确认密码',
-                })}
+                label={'确认密码'}
                 dependencies={['adminPassword']}
                 rules={[
                   {
                     required: true,
-                    message: intl.formatMessage({
-                      id: 'pages.supplier.field.confirmPasswordRequired',
-                      defaultMessage: '请再次输入管理员密码',
-                    }),
+                    message: '请再次输入管理员密码',
                   },
                   ({ getFieldValue }) => ({
                     validator: confirmPasswordValidator(getFieldValue),

@@ -1,5 +1,5 @@
-import { PageContainer } from '@ant-design/pro-components';
-import { history, useAccess, useIntl, useParams } from '@umijs/max';
+﻿import { PageContainer } from '@ant-design/pro-components';
+import { history, useAccess, useParams } from '@umijs/max';
 import { App, Card, Spin } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { fetchMissionDetail } from '@/services/admin/missions';
@@ -9,7 +9,6 @@ import { MissionInfo } from './MissionInfo';
 import { MISSION_FISSION_PATH, parseMissionId } from './utils';
 
 const MissionFissionDataPage: React.FC = () => {
-  const intl = useIntl();
   const access = useAccess();
   const { message } = App.useApp();
   const { id } = useParams<{ id: string }>();
@@ -21,14 +20,11 @@ const MissionFissionDataPage: React.FC = () => {
   useEffect(() => {
     if (!canSetData) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.mission.forbiddenData',
-          defaultMessage: '无设置任务数据权限',
-        }),
+        '无设置任务数据权限',
       );
       history.replace(MISSION_FISSION_PATH);
     }
-  }, [canSetData, intl, message]);
+  }, [canSetData, message]);
 
   useEffect(() => {
     if (!missionId || !canSetData) {
@@ -62,10 +58,7 @@ const MissionFissionDataPage: React.FC = () => {
     return (
       <PageContainer onBack={() => history.push(MISSION_FISSION_PATH)}>
         <Card>
-          {intl.formatMessage({
-            id: 'pages.mission.invalidId',
-            defaultMessage: '任务 ID 无效',
-          })}
+          {'任务 ID 无效'}
         </Card>
       </PageContainer>
     );
@@ -73,10 +66,7 @@ const MissionFissionDataPage: React.FC = () => {
 
   return (
     <PageContainer
-      title={intl.formatMessage({
-        id: 'pages.mission.data.title',
-        defaultMessage: '设置任务数据',
-      })}
+      title={'设置任务数据'}
       onBack={() => history.push(MISSION_FISSION_PATH)}
     >
       <Spin spinning={loading}>

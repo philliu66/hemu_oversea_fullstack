@@ -13,7 +13,6 @@ import {
   DocLink,
   ErrorBoundary,
   Footer,
-  LangDropdown,
   OfflineBanner,
   VersionDropdown,
 } from '@/components';
@@ -114,15 +113,8 @@ export const layout: RunTimeLayoutConfig = ({
       return dom;
     },
     actionsRender: () => {
-      // `locale: false` opts out of the language switcher. ProLayout's own
-      // `locale` prop is a locale string, so narrow to the boolean toggle here.
-      const localeEnabled =
-        (initialState?.settings as { locale?: boolean })?.locale !== false;
-      return [
-        <DocLink key="doc" />,
-        <VersionDropdown key="version" />,
-        localeEnabled && <LangDropdown key="lang" />,
-      ].filter(Boolean);
+      // 暂不使用国际化切换；locale 插件仍保留在 config 中
+      return [<DocLink key="doc" />, <VersionDropdown key="version" />];
     },
     avatarProps: {
       src: initialState?.currentUser?.avatar,

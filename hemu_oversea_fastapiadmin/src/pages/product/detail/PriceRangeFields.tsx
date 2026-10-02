@@ -1,4 +1,3 @@
-import { useIntl } from '@umijs/max';
 import { Button, InputNumber, Radio, Space, Typography } from 'antd';
 import React, { useMemo } from 'react';
 import type { DhItemWholesaleRangePublic } from '@/types/api';
@@ -63,17 +62,13 @@ const PriceRangeFields: React.FC<PriceRangeFieldsProps> = ({
   onMinWholesaleQtyChange,
   onRangesChange,
 }) => {
-  const intl = useIntl();
   const list = useMemo(() => ranges || [], [ranges]);
   /** 首档 + 折扣档，合计最多 4 个 */
   const canAdd = 1 + list.length < MAX_RANGE_COUNT;
   const configType = priceConfigType || PRICE_CONFIG_SEPARATE;
   const unitLabel =
     (measureUnitLabel || '').trim() ||
-    intl.formatMessage({
-      id: 'pages.product.detail.sale.measureFallback',
-      defaultMessage: '件',
-    });
+    '件';
 
   const patchRange = (
     index: number,
@@ -131,18 +126,12 @@ const PriceRangeFields: React.FC<PriceRangeFieldsProps> = ({
           }}
         >
           <Typography.Text type="danger">*</Typography.Text>
-          {intl.formatMessage({
-            id: 'pages.product.detail.priceRange.label',
-            defaultMessage: '价格区间',
-          })}
+          {'价格区间'}
           :
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Typography.Text type="secondary" style={{ lineHeight: '32px' }}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.priceRange.hint',
-              defaultMessage: '您可以最多添加4个价格区间',
-            })}
+            {'您可以最多添加4个价格区间'}
           </Typography.Text>
 
           <div style={{ marginTop: 8, marginBottom: 12 }}>
@@ -154,28 +143,17 @@ const PriceRangeFields: React.FC<PriceRangeFieldsProps> = ({
               }
             >
               <Radio value={PRICE_CONFIG_UNIFIED}>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.priceRange.unified',
-                  defaultMessage: '统一设置价格',
-                })}
+                {'统一设置价格'}
               </Radio>
               <Radio value={PRICE_CONFIG_SEPARATE}>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.priceRange.separate',
-                  defaultMessage: '分别设置价格',
-                })}
+                {'分别设置价格'}
               </Radio>
             </Radio.Group>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Space wrap size={6} align="center">
-              <span>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.priceRange.buyPrefix',
-                  defaultMessage: '购买',
-                })}
-              </span>
+              <span>购买</span>
               <InputNumber
                 min={1}
                 precision={0}
@@ -188,25 +166,12 @@ const PriceRangeFields: React.FC<PriceRangeFieldsProps> = ({
                   )
                 }
               />
-              <span>
-                {intl.formatMessage(
-                  {
-                    id: 'pages.product.detail.priceRange.baseSuffix',
-                    defaultMessage: '{unit}及以上时，为表格中填写的预计收入。',
-                  },
-                  { unit: unitLabel },
-                )}
-              </span>
+              <span>{`${unitLabel}及以上时，为表格中填写的预计收入。`}</span>
             </Space>
 
             {list.map((item, index) => (
               <Space key={`range-${index}`} wrap size={6} align="center">
-                <span>
-                  {intl.formatMessage({
-                    id: 'pages.product.detail.priceRange.buyPrefix',
-                    defaultMessage: '购买',
-                  })}
-                </span>
+                <span>购买</span>
                 <InputNumber
                   min={1}
                   precision={0}
@@ -219,15 +184,7 @@ const PriceRangeFields: React.FC<PriceRangeFieldsProps> = ({
                     })
                   }
                 />
-                <span>
-                  {intl.formatMessage(
-                    {
-                      id: 'pages.product.detail.priceRange.discountMid',
-                      defaultMessage: '{unit}及以上时，预计收入降低',
-                    },
-                    { unit: unitLabel },
-                  )}
-                </span>
+                <span>{`${unitLabel}及以上时，预计收入降低`}</span>
                 <InputNumber
                   min={0}
                   precision={0}
@@ -250,10 +207,7 @@ const PriceRangeFields: React.FC<PriceRangeFieldsProps> = ({
                     style={{ paddingInline: 4 }}
                     onClick={() => handleRemove(index)}
                   >
-                    {intl.formatMessage({
-                      id: 'pages.product.detail.priceRange.delete',
-                      defaultMessage: '删除',
-                    })}
+                    删除
                   </Button>
                 ) : null}
               </Space>
@@ -263,10 +217,7 @@ const PriceRangeFields: React.FC<PriceRangeFieldsProps> = ({
           {!disabled && canAdd ? (
             <div style={{ marginTop: 12 }}>
               <Button type="dashed" onClick={handleAdd}>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.priceRange.add',
-                  defaultMessage: '添加价格区间',
-                })}
+                {'添加价格区间'}
               </Button>
             </div>
           ) : null}

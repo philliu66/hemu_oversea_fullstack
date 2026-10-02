@@ -4,7 +4,7 @@ export default [
     layout: false,
     routes: [
       {
-        name: 'login',
+        name: '登录',
         path: '/user/login',
         component: './user/login',
       },
@@ -13,19 +13,19 @@ export default [
   {
     path: '/callback',
     layout: false,
-    name: 'callback',
+    name: '授权回调',
     component: './callback',
   },
   {
     path: '/welcome',
-    name: 'welcome',
+    name: '欢迎',
     icon: 'smile',
     component: './Welcome',
     // 登录后公共页：不挂 routeId / access，所有人可见
   },
   {
     path: '/supplier',
-    name: 'supplier',
+    name: '供应商管理',
     icon: 'shop',
     routeId: 'supplier',
     access: 'canAccessRoute',
@@ -36,7 +36,7 @@ export default [
       },
       {
         path: '/supplier/list',
-        name: 'list',
+        name: '供应商列表',
         component: './supplier/list',
         routeId: 'supplier.list',
         access: 'canAccessRoute',
@@ -45,7 +45,7 @@ export default [
   },
   {
     path: '/store',
-    name: 'store',
+    name: '店铺管理',
     icon: 'shopping',
     routeId: 'store',
     access: 'canAccessRoute',
@@ -56,14 +56,14 @@ export default [
       },
       {
         path: '/store/list',
-        name: 'list',
+        name: '店铺列表',
         component: './store/list',
         routeId: 'store.list',
         access: 'canAccessRoute',
       },
       {
         path: '/store/inspection',
-        name: 'inspection',
+        name: '店铺巡检',
         component: './store/inspection',
         routeId: 'store.inspection',
         access: 'canAccessRoute',
@@ -72,7 +72,7 @@ export default [
   },
   {
     path: '/product',
-    name: 'product',
+    name: '商品管理',
     icon: 'appstore',
     routeId: 'product',
     access: 'canAccessRoute',
@@ -83,14 +83,14 @@ export default [
       },
       {
         path: '/product/list',
-        name: 'list',
+        name: '商品列表',
         component: './product/list',
         routeId: 'product.list',
         access: 'canAccessRoute',
       },
       {
         path: '/product/create',
-        name: 'create',
+        name: '新建商品',
         component: './product/detail',
         hideInMenu: true,
         routeId: 'product.list',
@@ -98,7 +98,7 @@ export default [
       },
       {
         path: '/product/detail/:id',
-        name: 'detail',
+        name: '商品详情',
         component: './product/detail',
         hideInMenu: true,
         routeId: 'product.list',
@@ -106,7 +106,7 @@ export default [
       },
       {
         path: '/product/edit/:id',
-        name: 'edit',
+        name: '编辑商品',
         component: './product/detail',
         hideInMenu: true,
         routeId: 'product.list',
@@ -114,14 +114,14 @@ export default [
       },
       {
         path: '/product/category',
-        name: 'category',
+        name: '商品分类',
         component: './product/category',
         routeId: 'product.category',
         access: 'canAccessRoute',
       },
       {
         path: '/product/seed-category',
-        name: 'seedCategory',
+        name: '种子商品分类',
         component: './product/seed-category',
         routeId: 'product.seedCategory',
         access: 'canAccessRoute',
@@ -130,7 +130,7 @@ export default [
   },
   {
     path: '/mission',
-    name: 'mission',
+    name: '任务管理',
     icon: 'schedule',
     routeId: 'mission',
     access: 'canAccessRoute',
@@ -141,14 +141,14 @@ export default [
       },
       {
         path: '/mission/fission',
-        name: 'fission',
+        name: '商品裂变',
         component: './mission/fission',
         routeId: 'mission.fission',
         access: 'canAccessRoute',
       },
       {
         path: '/mission/fission/:id/data',
-        name: 'fissionData',
+        name: '设置任务数据',
         component: './mission/fission/data',
         routeId: 'mission.fission',
         access: 'canAccessRoute',
@@ -156,7 +156,7 @@ export default [
       },
       {
         path: '/mission/fission/:id',
-        name: 'fissionDetail',
+        name: '任务详情',
         component: './mission/fission/detail',
         routeId: 'mission.fission',
         access: 'canAccessRoute',
@@ -166,7 +166,7 @@ export default [
   },
   {
     path: '/personnel',
-    name: 'personnel',
+    name: '人员管理',
     icon: 'team',
     routeId: 'personnel',
     access: 'canAccessRoute',
@@ -177,14 +177,14 @@ export default [
       },
       {
         path: '/personnel/staff',
-        name: 'staff',
+        name: '员工管理',
         component: './staff/list',
         routeId: 'personnel.staff',
         access: 'canAccessRoute',
       },
       {
         path: '/personnel/role',
-        name: 'role',
+        name: '角色管理',
         component: './role/list',
         routeId: 'personnel.role',
         access: 'canAccessRoute',
@@ -193,7 +193,7 @@ export default [
   },
   {
     path: '/dev',
-    name: 'dev',
+    name: '开发文档',
     component: './Dev',
     hideInMenu: true,
   },
@@ -203,7 +203,7 @@ export default [
     routes: [
       {
         path: '/account/settings',
-        name: 'account.settings',
+        name: '个人设置',
         component: './account/settings',
         hideInMenu: true,
       },

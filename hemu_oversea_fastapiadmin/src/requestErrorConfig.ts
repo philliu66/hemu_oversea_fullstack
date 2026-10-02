@@ -1,5 +1,5 @@
 ﻿import type { RequestConfig } from '@umijs/max';
-import { getIntl, history, request } from '@umijs/max';
+import { history, request } from '@umijs/max';
 import { message, notification } from 'antd';
 import { isUnauthorizedCode } from '@/constants/errorCodes';
 import type { ApiResponse } from '@/types/api';
@@ -42,12 +42,24 @@ type RequestOpts = {
   [key: string]: unknown;
 };
 
-function t(id: string, defaultMessage: string, values?: Record<string, any>) {
-  try {
-    return getIntl().formatMessage({ id, defaultMessage }, values);
-  } catch {
-    return defaultMessage;
+function interpolateMessage(
+  template: string,
+  values?: Record<string, unknown>,
+): string {
+  if (!values) {
+    return template;
   }
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => {
+    const value = values[key];
+    if (value === undefined || value === null) {
+      return `{${key}}`;
+    }
+    return String(value);
+  });
+}
+
+function t(_id: string, defaultMessage: string, values?: Record<string, unknown>) {
+  return interpolateMessage(defaultMessage, values);
 }
 
 function redirectToLogin() {

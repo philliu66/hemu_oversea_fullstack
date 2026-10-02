@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useAccess, useIntl } from '@umijs/max';
+import { useAccess } from '@umijs/max';
 import { App, Button, Popconfirm } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
@@ -20,7 +20,6 @@ type SupplierTableParams = {
 };
 
 const SupplierList: React.FC = () => {
-  const intl = useIntl();
   const access = useAccess();
   const { message } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
@@ -57,33 +56,21 @@ const SupplierList: React.FC = () => {
 
   const columns: ProColumns<SupplierPublic>[] = [
     {
-      title: intl.formatMessage({
-        id: 'pages.supplier.field.keyword',
-        defaultMessage: '关键词',
-      }),
+      title: '关键词',
       dataIndex: 'keyword',
       hideInTable: true,
       fieldProps: {
-        placeholder: intl.formatMessage({
-          id: 'pages.supplier.field.keywordPlaceholder',
-          defaultMessage: '名称 / 编码 / 邮箱 / 电话',
-        }),
+        placeholder: '名称 / 编码 / 邮箱 / 电话',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.supplier.field.code',
-        defaultMessage: '供应商编码',
-      }),
+      title: '供应商编码',
       dataIndex: 'code',
       search: false,
       width: 120,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.supplier.field.name',
-        defaultMessage: '供应商名称',
-      }),
+      title: '供应商名称',
       dataIndex: 'name',
       search: false,
       ellipsis: true,
@@ -94,72 +81,48 @@ const SupplierList: React.FC = () => {
       ),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.supplier.field.phone',
-        defaultMessage: '联系电话',
-      }),
+      title: '联系电话',
       dataIndex: 'phone',
       search: false,
       width: 140,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.supplier.field.email',
-        defaultMessage: '邮件地址',
-      }),
+      title: '邮件地址',
       dataIndex: 'email',
       search: false,
       ellipsis: true,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.supplier.field.createdAt',
-        defaultMessage: '创建时间',
-      }),
+      title: '创建时间',
       dataIndex: 'created_at',
       search: false,
       width: 180,
       render: (_, record) => formatDateTime(record.created_at),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.supplier.field.option',
-        defaultMessage: '操作',
-      }),
+      title: '操作',
       dataIndex: 'option',
       valueType: 'option',
       search: false,
       width: 200,
       render: (_, record) => [
         <Button type="link" key="detail" onClick={() => openView(record.id)}>
-          {intl.formatMessage({
-            id: 'pages.supplier.action.detail',
-            defaultMessage: '查看',
-          })}
+          {'查看'}
         </Button>,
         canUpdate ? (
           <Button type="link" key="edit" onClick={() => openEdit(record.id)}>
-            {intl.formatMessage({
-              id: 'pages.supplier.action.edit',
-              defaultMessage: '编辑',
-            })}
+            {'编辑'}
           </Button>
         ) : null,
         canDelete ? (
           <Popconfirm
             key="delete"
-            title={intl.formatMessage({
-              id: 'pages.supplier.delete.confirm',
-              defaultMessage: '确认删除该供应商？删除后其下属账号将一并停用。',
-            })}
+            title={'确认删除该供应商？删除后其下属账号将一并停用。'}
             onConfirm={async () => {
               try {
                 await deleteSupplier(record.id);
                 message.success(
-                  intl.formatMessage({
-                    id: 'pages.supplier.delete.success',
-                    defaultMessage: '删除成功',
-                  }),
+                  '删除成功',
                 );
                 actionRef.current?.reload();
               } catch {
@@ -168,10 +131,7 @@ const SupplierList: React.FC = () => {
             }}
           >
             <Button type="link" danger>
-              {intl.formatMessage({
-                id: 'pages.supplier.action.delete',
-                defaultMessage: '删除',
-              })}
+              {'删除'}
             </Button>
           </Popconfirm>
         ) : null,
@@ -182,10 +142,7 @@ const SupplierList: React.FC = () => {
   return (
     <PageContainer>
       <ProTable<SupplierPublic, SupplierTableParams>
-        headerTitle={intl.formatMessage({
-          id: 'pages.supplier.list.title',
-          defaultMessage: '供应商列表',
-        })}
+        headerTitle={'供应商列表'}
         actionRef={actionRef}
         rowKey="id"
         search={{
@@ -205,10 +162,7 @@ const SupplierList: React.FC = () => {
                   icon={<PlusOutlined />}
                   onClick={openCreate}
                 >
-                  {intl.formatMessage({
-                    id: 'pages.supplier.action.create',
-                    defaultMessage: '新建',
-                  })}
+                  {'新建'}
                 </Button>,
               ]
             : []

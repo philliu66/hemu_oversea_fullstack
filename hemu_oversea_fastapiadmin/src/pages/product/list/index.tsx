@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, useIntl, useModel } from '@umijs/max';
+import { history, useModel } from '@umijs/max';
 import { App, Button, Image, Space, Typography } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -90,7 +90,6 @@ function resolveCatePubId(
 }
 
 const ProductList: React.FC = () => {
-  const intl = useIntl();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const supplierId = initialState?.currentUser?.supplier_id;
@@ -114,10 +113,7 @@ const ProductList: React.FC = () => {
           message.error(
             error instanceof Error
               ? error.message
-              : intl.formatMessage({
-                  id: 'pages.product.list.loadCategoriesFailed',
-                  defaultMessage: '加载商品分类失败',
-                }),
+              : '加载商品分类失败',
           );
         }
       }
@@ -125,7 +121,7 @@ const ProductList: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [intl, message]);
+  }, [message]);
 
   const loadCategoryData: CascaderProps<SeedCategoryOption>['loadData'] = (
     selectedOptions,
@@ -156,10 +152,7 @@ const ProductList: React.FC = () => {
         message.error(
           error instanceof Error
             ? error.message
-            : intl.formatMessage({
-                id: 'pages.product.list.loadCategoriesFailed',
-                defaultMessage: '加载商品分类失败',
-              }),
+            : '加载商品分类失败',
         );
       }
     })();
@@ -187,10 +180,7 @@ const ProductList: React.FC = () => {
           message.error(
             error instanceof Error
               ? error.message
-              : intl.formatMessage({
-                  id: 'pages.product.list.loadStoresFailed',
-                  defaultMessage: '加载店铺列表失败',
-                }),
+              : '加载店铺列表失败',
           );
         }
       }
@@ -198,7 +188,7 @@ const ProductList: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [intl, message, supplierId]);
+  }, [message, supplierId]);
 
   const storeValueEnum = useMemo(
     () =>
@@ -219,50 +209,32 @@ const ProductList: React.FC = () => {
         DH_PRODUCT_STATES.map((code) => [
           code,
           {
-            text: intl.formatMessage({
-              id: `pages.product.list.state.${code}`,
-              defaultMessage: DH_PRODUCT_STATE_LABEL[code],
-            }),
+            text: DH_PRODUCT_STATE_LABEL[code],
           },
         ]),
       ),
-    [intl],
+    [],
   );
 
   const columns: ProColumns<DhProductPublic>[] = [
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.itemCode',
-        defaultMessage: '商品编码',
-      }),
+      title: '商品编码',
       dataIndex: 'item_code',
       hideInTable: true,
       fieldProps: {
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.itemCodePlaceholder',
-          defaultMessage: '精确匹配',
-        }),
+        placeholder: '精确匹配',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.itemName',
-        defaultMessage: '商品标题',
-      }),
+      title: '商品标题',
       dataIndex: 'item_name',
       hideInTable: true,
       fieldProps: {
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.itemNamePlaceholder',
-          defaultMessage: '模糊匹配',
-        }),
+        placeholder: '模糊匹配',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.category',
-        defaultMessage: '商品分类',
-      }),
+      title: '商品分类',
       dataIndex: 'cate_pub_id',
       hideInTable: true,
       valueType: 'cascader',
@@ -271,18 +243,12 @@ const ProductList: React.FC = () => {
         loadData: loadCategoryData,
         changeOnSelect: true,
         allowClear: true,
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.categoryPlaceholder',
-          defaultMessage: '全部',
-        }),
+        placeholder: '全部',
         styles: { popup: { listItem: { width: 180, maxWidth: 180 } } },
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.store',
-        defaultMessage: '店铺',
-      }),
+      title: '店铺',
       dataIndex: 'store_id',
       hideInTable: true,
       valueType: 'select',
@@ -291,34 +257,22 @@ const ProductList: React.FC = () => {
         allowClear: true,
         showSearch: true,
         optionFilterProp: 'label',
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.storePlaceholder',
-          defaultMessage: '请选择店铺',
-        }),
+        placeholder: '请选择店铺',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.state',
-        defaultMessage: '状态',
-      }),
+      title: '状态',
       dataIndex: 'state',
       hideInTable: true,
       valueType: 'select',
       valueEnum: stateValueEnum,
       fieldProps: {
         allowClear: true,
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.statePlaceholder',
-          defaultMessage: '请选择状态',
-        }),
+        placeholder: '请选择状态',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.product',
-        defaultMessage: '商品',
-      }),
+      title: '商品',
       dataIndex: 'product',
       search: false,
       width: 320,
@@ -367,10 +321,7 @@ const ProductList: React.FC = () => {
       ),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.store',
-        defaultMessage: '店铺',
-      }),
+      title: '店铺',
       dataIndex: 'store_name',
       search: false,
       width: 140,
@@ -378,10 +329,7 @@ const ProductList: React.FC = () => {
       render: (_, record) => record.store_name || '-',
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.state',
-        defaultMessage: '状态',
-      }),
+      title: '状态',
       dataIndex: 'state',
       search: false,
       width: 140,
@@ -389,31 +337,19 @@ const ProductList: React.FC = () => {
       render: (_, record) => record.state || '-',
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.field.syncState',
-        defaultMessage: '同步状态',
-      }),
+      title: '同步状态',
       dataIndex: 'sync_state',
       search: false,
       width: 100,
       render: (_, record) =>
         formatSyncState(
           record.sync_state,
-          intl.formatMessage({
-            id: 'pages.product.detail.sync.success',
-            defaultMessage: '成功',
-          }),
-          intl.formatMessage({
-            id: 'pages.product.detail.sync.fail',
-            defaultMessage: '失败',
-          }),
+          '成功',
+          '失败',
         ),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.lastSyncedAt',
-        defaultMessage: '同步时间',
-      }),
+      title: '同步时间',
       dataIndex: 'last_synced_at',
       search: false,
       width: 168,
@@ -422,10 +358,7 @@ const ProductList: React.FC = () => {
     // 操作列暂时隐藏，进入商品只保留点击标题进入编辑。
     // 恢复时需重新引入 productDetailPath、productCreatePath。
     // {
-    //   title: intl.formatMessage({
-    //     id: 'pages.product.list.field.option',
-    //     defaultMessage: '操作',
-    //   }),
+    //   title: '操作',
     //   dataIndex: 'option',
     //   valueType: 'option',
     //   search: false,
@@ -433,13 +366,13 @@ const ProductList: React.FC = () => {
     //   fixed: 'right',
     //   render: (_, record) => [
     //     <Button type="link" key="detail" onClick={() => history.push(productDetailPath(record.id))}>
-    //       {intl.formatMessage({ id: 'pages.product.action.detail', defaultMessage: '查看' })}
+    //       {'查看'}
     //     </Button>,
     //     <Button type="link" key="edit" onClick={() => history.push(productEditPath(record.id))}>
-    //       {intl.formatMessage({ id: 'pages.product.action.edit', defaultMessage: '编辑' })}
+    //       {'编辑'}
     //     </Button>,
     //     <Button type="link" key="copy" onClick={() => history.push(productCreatePath({ from: record.id }))}>
-    //       {intl.formatMessage({ id: 'pages.product.action.copy', defaultMessage: '复制' })}
+    //       {'复制'}
     //     </Button>,
     //   ],
     // },
@@ -448,10 +381,7 @@ const ProductList: React.FC = () => {
   return (
     <PageContainer>
       <ProTable<DhProductPublic, ProductTableParams>
-        headerTitle={intl.formatMessage({
-          id: 'pages.product.list.title',
-          defaultMessage: '商品列表',
-        })}
+        headerTitle={'商品列表'}
         actionRef={actionRef}
         rowKey="id"
         size="middle"
@@ -470,23 +400,13 @@ const ProductList: React.FC = () => {
             icon={<PlusOutlined />}
             onClick={() => history.push(PRODUCT_CREATE_PATH)}
           >
-            {intl.formatMessage({
-              id: 'pages.product.action.create',
-              defaultMessage: '新建',
-            })}
+            {'新建'}
           </Button>,
         ]}
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,
           showSizeChanger: true,
-          showTotal: (total) =>
-            intl.formatMessage(
-              {
-                id: 'pages.product.list.total',
-                defaultMessage: '共 {total} 条',
-              },
-              { total },
-            ),
+          showTotal: (total) => `共 ${total} 条`,
         }}
         columns={columns}
         request={async (params) => {

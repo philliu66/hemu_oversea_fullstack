@@ -1,5 +1,4 @@
-import { useIntl } from '@umijs/max';
-import { App, Button, Input, Modal, Select, Space, Spin, Tooltip } from 'antd';
+﻿import { App, Button, Input, Modal, Select, Space, Spin, Tooltip } from 'antd';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   fetchDhCategories,
@@ -85,7 +84,6 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
   changed = false,
   onPick,
 }) => {
-  const intl = useIntl();
   const { message } = App.useApp();
 
   const [siblingOptions, setSiblingOptions] = useState<DhCategoryPublic[]>([]);
@@ -115,16 +113,13 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
         message.error(
           error instanceof Error
             ? error.message
-            : intl.formatMessage({
-                id: 'pages.product.category.loadFailed',
-                defaultMessage: '加载商品分类失败',
-              }),
+            : '加载商品分类失败',
         );
       } finally {
         setSiblingsLoading(false);
       }
     },
-    [intl, message],
+    [message],
   );
 
   useEffect(() => {
@@ -167,10 +162,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
       message.error(
         error instanceof Error
           ? error.message
-          : intl.formatMessage({
-              id: 'pages.product.category.loadFailed',
-              defaultMessage: '加载商品分类失败',
-            }),
+          : '加载商品分类失败',
       );
     } finally {
       setColumnsLoading(false);
@@ -194,10 +186,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
     }
     if (!option.category.is_leaf) {
       message.info(
-        intl.formatMessage({
-          id: 'pages.product.detail.categoryPickLeafHint',
-          defaultMessage: '请点击「选择分类」选择到末级类目',
-        }),
+        '请点击「选择分类」选择到末级类目',
       );
       void openModal();
       return;
@@ -240,10 +229,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
       message.error(
         error instanceof Error
           ? error.message
-          : intl.formatMessage({
-              id: 'pages.product.category.loadChildrenFailed',
-              defaultMessage: '加载子分类失败',
-            }),
+          : '加载子分类失败',
       );
     } finally {
       setColumnsLoading(false);
@@ -283,10 +269,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
       message.error(
         error instanceof Error
           ? error.message
-          : intl.formatMessage({
-              id: 'pages.product.detail.categorySearchFailed',
-              defaultMessage: '搜索分类失败',
-            }),
+          : '搜索分类失败',
       );
     } finally {
       setSearching(false);
@@ -312,10 +295,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
           disabled={disabled}
           loading={siblingsLoading}
           value={category?.cate_pub_id}
-          placeholder={intl.formatMessage({
-            id: 'pages.product.detail.field.categoryPlaceholder',
-            defaultMessage: '请选择分类',
-          })}
+          placeholder={'请选择分类'}
           optionFilterProp="label"
           options={selectOptions}
           onChange={handleSelectChange}
@@ -335,10 +315,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
           }}
         />
         <Button type="primary" disabled={disabled} onClick={() => void openModal()}>
-          {intl.formatMessage({
-            id: 'pages.product.detail.categoryPickButton',
-            defaultMessage: '选择分类',
-          })}
+          {'选择分类'}
         </Button>
       </Space>
       {pathDisplay ? (
@@ -356,10 +333,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
       ) : null}
 
       <Modal
-        title={intl.formatMessage({
-          id: 'pages.product.detail.categoryModalTitle',
-          defaultMessage: '选择类目',
-        })}
+        title={'选择类目'}
         open={modalOpen}
         onCancel={closeModal}
         width={920}
@@ -367,10 +341,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
         footer={
           searchHits ? (
             <Button onClick={closeModal}>
-              {intl.formatMessage({
-                id: 'pages.product.detail.categoryModalClose',
-                defaultMessage: '关闭',
-              })}
+              {'关闭'}
             </Button>
           ) : (
             <Space>
@@ -379,16 +350,10 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
                 disabled={!pendingLeaf}
                 onClick={() => confirmPick(pendingLeaf)}
               >
-                {intl.formatMessage({
-                  id: 'pages.product.detail.categoryModalConfirm',
-                  defaultMessage: '选择',
-                })}
+                {'选择'}
               </Button>
               <Button onClick={closeModal}>
-                {intl.formatMessage({
-                  id: 'pages.product.detail.categoryModalClose',
-                  defaultMessage: '关闭',
-                })}
+                {'关闭'}
               </Button>
             </Space>
           )
@@ -398,18 +363,12 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
           <Input
             allowClear
             value={searchKeyword}
-            placeholder={intl.formatMessage({
-              id: 'pages.product.detail.categorySearchPlaceholder',
-              defaultMessage: '搜索分类名称',
-            })}
+            placeholder={'搜索分类名称'}
             onChange={(event) => setSearchKeyword(event.target.value)}
             onPressEnter={() => void handleSearch()}
           />
           <Button type="primary" loading={searching} onClick={() => void handleSearch()}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.categorySearchButton',
-              defaultMessage: '搜索',
-            })}
+            {'搜索'}
           </Button>
         </div>
 
@@ -422,10 +381,7 @@ const CategorySelectField: React.FC<CategorySelectFieldProps> = ({
             <div className="hm-category-search-list">
               {searchHits.length === 0 ? (
                 <div className="hm-category-empty">
-                  {intl.formatMessage({
-                    id: 'pages.product.detail.categorySearchEmpty',
-                    defaultMessage: '未找到相关分类',
-                  })}
+                  {'未找到相关分类'}
                 </div>
               ) : (
                 searchHits.map((hit) => (

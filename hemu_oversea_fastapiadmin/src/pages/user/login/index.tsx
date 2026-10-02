@@ -4,13 +4,7 @@ import {
   type ProFormInstance,
   ProFormText,
 } from '@ant-design/pro-components';
-import {
-  FormattedMessage,
-  Helmet,
-  SelectLang,
-  useIntl,
-  useModel,
-} from '@umijs/max';
+import { Helmet, useModel } from '@umijs/max';
 import { App } from 'antd';
 import { createStyles } from 'antd-style';
 import React, {
@@ -44,17 +38,6 @@ const getSafeRedirectUrl = (redirect: string | null): string => {
 
 const useStyles = createStyles(({ token }) => {
   return {
-    lang: {
-      width: 42,
-      height: 42,
-      lineHeight: '42px',
-      position: 'fixed',
-      right: 16,
-      borderRadius: token.borderRadius,
-      ':hover': {
-        backgroundColor: token.colorBgTextHover,
-      },
-    },
     container: {
       display: 'flex',
       flexDirection: 'column',
@@ -75,16 +58,6 @@ const useStyles = createStyles(({ token }) => {
   };
 });
 
-const Lang = () => {
-  const { styles } = useStyles();
-
-  return (
-    <div className={styles.lang} data-lang>
-      {SelectLang && <SelectLang />}
-    </div>
-  );
-};
-
 type LoginFormValues = {
   username: string;
   password: string;
@@ -99,8 +72,6 @@ const Login: React.FC = () => {
   const { setInitialState } = useModel('@@initialState');
   const { styles } = useStyles();
   const { message } = App.useApp();
-  const intl = useIntl();
-
   const fetchCaptcha = useCallback(async () => {
     setCaptchaLoading(true);
     try {
@@ -117,10 +88,7 @@ const Login: React.FC = () => {
         captcha_code: undefined,
       });
       message.error(
-        intl.formatMessage({
-          id: 'pages.login.captcha.fetchFailed',
-          defaultMessage: '获取验证码失败，请点击图片重试',
-        }),
+        '获取验证码失败，请点击图片重试',
       );
     } finally {
       setCaptchaLoading(false);
@@ -134,10 +102,7 @@ const Login: React.FC = () => {
   const handleSubmit = async (values: LoginFormValues) => {
     if (!values.captcha_id) {
       message.error(
-        intl.formatMessage({
-          id: 'pages.login.captcha.requiredFirst',
-          defaultMessage: '请先获取验证码',
-        }),
+        '请先获取验证码',
       );
       fetchCaptcha();
       return;
@@ -158,10 +123,7 @@ const Login: React.FC = () => {
         }));
       });
       message.success(
-        intl.formatMessage({
-          id: 'pages.login.success',
-          defaultMessage: '登录成功！',
-        }),
+        '登录成功！',
       );
       const urlParams = new URL(window.location.href).searchParams;
       window.location.href = getSafeRedirectUrl(urlParams.get('redirect'));
@@ -175,14 +137,10 @@ const Login: React.FC = () => {
     <div className={styles.container}>
       <Helmet>
         <title>
-          {intl.formatMessage({
-            id: 'menu.login',
-            defaultMessage: '登录页',
-          })}
+          {'登录页'}
           {Settings.title && ` - ${Settings.title}`}
         </title>
       </Helmet>
-      <Lang />
       <div
         style={{
           flex: '1',
@@ -214,19 +172,11 @@ const Login: React.FC = () => {
               size: 'large',
               prefix: <UserOutlined />,
             }}
-            placeholder={intl.formatMessage({
-              id: 'pages.login.username.placeholder',
-              defaultMessage: '请输入账号',
-            })}
+            placeholder={'请输入账号'}
             rules={[
               {
                 required: true,
-                message: (
-                  <FormattedMessage
-                    id="pages.login.username.required"
-                    defaultMessage="请输入账号"
-                  />
-                ),
+                message: '请输入账号',
               },
             ]}
           />
@@ -236,19 +186,11 @@ const Login: React.FC = () => {
               size: 'large',
               prefix: <LockOutlined />,
             }}
-            placeholder={intl.formatMessage({
-              id: 'pages.login.password.placeholder',
-              defaultMessage: '请输入密码',
-            })}
+            placeholder={'请输入密码'}
             rules={[
               {
                 required: true,
-                message: (
-                  <FormattedMessage
-                    id="pages.login.password.required"
-                    defaultMessage="请输入密码"
-                  />
-                ),
+                message: '请输入密码',
               },
             ]}
           />
@@ -262,19 +204,11 @@ const Login: React.FC = () => {
                   prefix: <SafetyOutlined />,
                   maxLength: 8,
                 }}
-                placeholder={intl.formatMessage({
-                  id: 'pages.login.captcha.placeholder',
-                  defaultMessage: '请输入验证码',
-                })}
+                placeholder={'请输入验证码'}
                 rules={[
                   {
                     required: true,
-                    message: (
-                      <FormattedMessage
-                        id="pages.login.captcha.required"
-                        defaultMessage="请输入验证码！"
-                      />
-                    ),
+                    message: '请输入验证码！',
                   },
                 ]}
               />

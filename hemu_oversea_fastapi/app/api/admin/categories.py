@@ -138,20 +138,29 @@ def get_dh_category_attrs(
     return success(product_service.get_dh_category_attrs(db, category_id=payload.id))
 
 
+# 暂定统一按「美容仪」二级类目计算佣金率（官方 cateId）
+DH_COMMISSION_RATE_FIXED_CATE_ID = "018003"
+
+
 @router.post(
     "/dh/commission-rate/get",
     response_model=ApiResponse[DhCommissionRatePublic],
-    summary="查询类目佣金率（须传二级类目 ID）",
+    summary="查询类目佣金率（暂定固定美容仪类目）",
 )
 def get_dh_commission_rate(
     payload: DhCommissionRateRequest,
     db: Session = Depends(get_db),
 ) -> ApiResponse[DhCommissionRatePublic]:
     """
-    按二级类目 ID（cateId）查询本地 commissions_rate_dh 佣金率。
+    查询本地 commissions_rate_dh 佣金率。
 
-    - cate_id 必须传二级类目的 catePubId / cateId，勿传一级、叶子或其他层级类目 ID
+    - 入参 cate_id 暂保留以兼容前端调用，实际查询固定为美容仪类目 ID 018003
     - 官方 dh.categorys.commissions 的佣金率按二级类目绑定入库
     - 数据由 testAPI 全量同步，本接口不请求敦煌
     """
-    return success(get_commission_rate_by_cate_id(db, cate_id=payload.cate_id))
+    _ = payload.cate_id  # 兼容前端仍传当前二级类目，暂不使用
+    return success(
+        get_commission_rate_by_cate_id(
+            db, cate_id=DH_COMMISSION_RATE_FIXED_CATE_ID
+        )
+    )

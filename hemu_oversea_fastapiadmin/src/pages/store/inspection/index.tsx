@@ -1,6 +1,6 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useIntl, useModel } from '@umijs/max';
+import { useModel } from '@umijs/max';
 import {
   Alert,
   App,
@@ -77,7 +77,6 @@ function buildPunishRows(data: StoreInspectionPunishPublic): PunishRow[] {
 }
 
 const StoreInspection: React.FC = () => {
-  const intl = useIntl();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const supplierId = initialState?.currentUser?.supplier_id;
@@ -126,15 +125,12 @@ const StoreInspection: React.FC = () => {
       message.error(
         error instanceof Error
           ? error.message
-          : intl.formatMessage({
-              id: 'pages.store.inspection.loadStoresFailed',
-              defaultMessage: '加载敦煌店铺失败',
-            }),
+          : '加载敦煌店铺失败',
       );
     } finally {
       setStoresLoading(false);
     }
-  }, [intl, message, supplierId]);
+  }, [message, supplierId]);
 
   const loadPunish = useCallback(async () => {
     if (!supplierId) {
@@ -142,10 +138,7 @@ const StoreInspection: React.FC = () => {
     }
     if (!queryDays) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.store.inspection.invalidDays',
-          defaultMessage: '请输入有效的查询天数（1–365）',
-        }),
+        '请输入有效的查询天数（1–365）',
       );
       return;
     }
@@ -169,15 +162,12 @@ const StoreInspection: React.FC = () => {
       message.error(
         error instanceof Error
           ? error.message
-          : intl.formatMessage({
-              id: 'pages.store.inspection.loadPunishFailed',
-              defaultMessage: '查询处罚信息失败',
-            }),
+          : '查询处罚信息失败',
       );
     } finally {
       setPunishLoading(false);
     }
-  }, [intl, message, queryDays, selectedStore, supplierId]);
+  }, [message, queryDays, selectedStore, supplierId]);
 
   useEffect(() => {
     void loadStores();
@@ -186,10 +176,7 @@ const StoreInspection: React.FC = () => {
   const storeOptions = useMemo(
     () => [
       {
-        label: intl.formatMessage({
-          id: 'pages.store.inspection.storeAll',
-          defaultMessage: '全部',
-        }),
+        label: '全部',
         value: ALL_STORE_VALUE,
       },
       ...stores.map((store) => ({
@@ -197,50 +184,35 @@ const StoreInspection: React.FC = () => {
         value: String(store.id),
       })),
     ],
-    [intl, stores],
+    [stores],
   );
 
   const dayOptions = useMemo(
     () => [
       {
-        label: intl.formatMessage({
-          id: 'pages.store.inspection.days3',
-          defaultMessage: '3 天内',
-        }),
+        label: '3 天内',
         value: '3',
       },
       {
-        label: intl.formatMessage({
-          id: 'pages.store.inspection.days7',
-          defaultMessage: '7 天内',
-        }),
+        label: '7 天内',
         value: '7',
       },
       {
-        label: intl.formatMessage({
-          id: 'pages.store.inspection.days10',
-          defaultMessage: '10 天内',
-        }),
+        label: '10 天内',
         value: '10',
       },
       {
-        label: intl.formatMessage({
-          id: 'pages.store.inspection.daysCustom',
-          defaultMessage: '自定义',
-        }),
+        label: '自定义',
         value: 'custom',
       },
     ],
-    [intl],
+    [],
   );
 
   const columns: ProColumns<PunishRow>[] = useMemo(
     () => [
       {
-        title: intl.formatMessage({
-          id: 'pages.store.inspection.field.storeIdentifier',
-          defaultMessage: '店铺标识',
-        }),
+        title: '店铺标识',
         width: 160,
         ellipsis: true,
         search: false,
@@ -250,10 +222,7 @@ const StoreInspection: React.FC = () => {
           ),
       },
       {
-        title: intl.formatMessage({
-          id: 'pages.store.inspection.field.punishId',
-          defaultMessage: '处罚编号',
-        }),
+        title: '处罚编号',
         width: 120,
         search: false,
         render: (_, record) => {
@@ -270,12 +239,7 @@ const StoreInspection: React.FC = () => {
               <span>{punishId}</span>
               {isActive || isReleased ? (
                 <Tag color={isActive ? 'error' : 'success'}>
-                  {intl.formatMessage({
-                    id: isActive
-                      ? 'pages.store.inspection.punishStatus.1'
-                      : 'pages.store.inspection.punishStatus.2',
-                    defaultMessage: isActive ? '处罚中' : '已解除',
-                  })}
+                  {isActive ? '处罚中' : '已解除'}
                 </Tag>
               ) : null}
             </Space>
@@ -283,10 +247,7 @@ const StoreInspection: React.FC = () => {
         },
       },
       {
-        title: intl.formatMessage({
-          id: 'pages.store.inspection.field.punishType',
-          defaultMessage: '处罚类型',
-        }),
+        title: '处罚类型',
         width: 200,
         ellipsis: true,
         search: false,
@@ -301,10 +262,7 @@ const StoreInspection: React.FC = () => {
           ),
       },
       {
-        title: intl.formatMessage({
-          id: 'pages.store.inspection.field.punishReason',
-          defaultMessage: '处罚原因',
-        }),
+        title: '处罚原因',
         width: 200,
         ellipsis: true,
         search: false,
@@ -319,43 +277,31 @@ const StoreInspection: React.FC = () => {
           ),
       },
       {
-        title: intl.formatMessage({
-          id: 'pages.store.inspection.field.punishDate',
-          defaultMessage: '处罚日期',
-        }),
+        title: '处罚日期',
         width: 140,
         search: false,
         render: (_, record) => formatCell(pickField(record, ['createDateStr'])),
       },
       {
-        title: intl.formatMessage({
-          id: 'pages.store.inspection.field.punishEndDate',
-          defaultMessage: '处罚到期日',
-        }),
+        title: '处罚到期日',
         width: 140,
         search: false,
         render: (_, record) =>
           formatCell(pickField(record, ['punishEndTimeStr'])),
       },
     ],
-    [intl],
+    [],
   );
 
   if (!supplierId) {
     return (
       <PageContainer
-        title={intl.formatMessage({
-          id: 'pages.store.inspection.title',
-          defaultMessage: '店铺巡检',
-        })}
+        title={'店铺巡检'}
       >
         <Alert
           type="warning"
           showIcon
-          title={intl.formatMessage({
-            id: 'pages.store.inspection.noSupplier',
-            defaultMessage: '当前账号未绑定供应商，无法查询店铺巡检信息',
-          })}
+          title={'当前账号未绑定供应商，无法查询店铺巡检信息'}
         />
       </PageContainer>
     );
@@ -363,19 +309,13 @@ const StoreInspection: React.FC = () => {
 
   return (
     <PageContainer
-      title={intl.formatMessage({
-        id: 'pages.store.inspection.title',
-        defaultMessage: '店铺巡检',
-      })}
+      title={'店铺巡检'}
     >
       <Card loading={storesLoading} style={{ marginBottom: 16 }}>
         <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <div>
             <Typography.Text type="secondary" style={{ marginRight: 12 }}>
-              {intl.formatMessage({
-                id: 'pages.store.inspection.storeFilter',
-                defaultMessage: '店铺',
-              })}
+              {'店铺'}
             </Typography.Text>
             <Radio.Group
               options={storeOptions}
@@ -394,10 +334,7 @@ const StoreInspection: React.FC = () => {
           <Space orientation="vertical" size="small" style={{ width: '100%' }}>
             <Space wrap align="center">
               <Typography.Text type="secondary">
-                {intl.formatMessage({
-                  id: 'pages.store.inspection.queryDays',
-                  defaultMessage: '查询天数',
-                })}
+                {'查询天数'}
               </Typography.Text>
               <Radio.Group
                 options={dayOptions}
@@ -424,25 +361,13 @@ const StoreInspection: React.FC = () => {
                     }}
                   />
                   <Typography.Text type="secondary">
-                    {intl.formatMessage({
-                      id: 'pages.store.inspection.daysUnit',
-                      defaultMessage: '天',
-                    })}
+                    {'天'}
                   </Typography.Text>
                 </Space>
               ) : null}
               {dateRange ? (
                 <Typography.Text type="secondary">
-                  {intl.formatMessage(
-                    {
-                      id: 'pages.store.inspection.dateRange',
-                      defaultMessage: '查询区间：{start} ~ {end}',
-                    },
-                    {
-                      start: dateRange.start,
-                      end: dateRange.end,
-                    },
-                  )}
+                  {`查询区间：${dateRange.start} ~ ${dateRange.end}`}
                 </Typography.Text>
               ) : null}
             </Space>
@@ -453,10 +378,7 @@ const StoreInspection: React.FC = () => {
                 void loadPunish();
               }}
             >
-              {intl.formatMessage({
-                id: 'pages.store.inspection.action.query',
-                defaultMessage: '查询',
-              })}
+              查询
             </Button>
           </Space>
         </Space>
@@ -475,10 +397,7 @@ const StoreInspection: React.FC = () => {
         }}
         toolBarRender={false}
         locale={{
-          emptyText: intl.formatMessage({
-            id: 'pages.store.inspection.empty',
-            defaultMessage: '暂无处罚信息',
-          }),
+          emptyText: '暂无处罚信息',
         }}
       />
     </PageContainer>

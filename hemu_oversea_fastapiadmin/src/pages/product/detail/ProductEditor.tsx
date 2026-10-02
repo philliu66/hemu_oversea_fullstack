@@ -5,7 +5,7 @@ import {
   ProFormSelect,
   ProFormText,
 } from '@ant-design/pro-components';
-import { history, useIntl, useModel } from '@umijs/max';
+import { history, useModel } from '@umijs/max';
 import {
   App,
   Button,
@@ -258,19 +258,13 @@ function normalizeCustomAttrDrafts(
   }));
 }
 
-function formatProductState(
-  state: string | null | undefined,
-  t: (id: string, defaultMessage: string) => string,
-): string {
+function formatProductState(state: string | null | undefined): string {
   const code = String(state || '').trim();
   if (!code) {
     return '-';
   }
   if ((DH_PRODUCT_STATES as readonly string[]).includes(code)) {
-    return t(
-      `pages.product.list.state.${code}`,
-      DH_PRODUCT_STATE_LABEL[code as DhProductStateCode],
-    );
+    return DH_PRODUCT_STATE_LABEL[code as DhProductStateCode];
   }
   return code;
 }
@@ -304,31 +298,16 @@ function withCurrentTemplateOption(
   return [{ label: current, value: current }, ...items];
 }
 
-function pageTitleId(mode: ProductPageMode): {
-  id: string;
-  defaultMessage: string;
-} {
+function pageTitle(mode: ProductPageMode): string {
   switch (mode) {
     case 'create':
-      return {
-        id: 'pages.product.create.title',
-        defaultMessage: '新建商品',
-      };
+      return '新建商品';
     case 'copy':
-      return {
-        id: 'pages.product.copy.title',
-        defaultMessage: '复制商品',
-      };
+      return '复制商品';
     case 'edit':
-      return {
-        id: 'pages.product.edit.title',
-        defaultMessage: '编辑商品',
-      };
+      return '编辑商品';
     default:
-      return {
-        id: 'pages.product.detail.title',
-        defaultMessage: '商品详情',
-      };
+      return '商品详情';
   }
 }
 
@@ -359,7 +338,6 @@ export function ProductEditor({
   changedAttrList = [],
   embedded = false,
 }: ProductEditorProps) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const supplierId = initialState?.currentUser?.supplier_id;
@@ -493,10 +471,7 @@ export function ProductEditor({
 
         if (!data) {
           throw new Error(
-            intl.formatMessage({
-              id: 'pages.product.detail.loadFailed',
-              defaultMessage: '加载商品详情失败',
-            }),
+            '加载商品详情失败',
           );
         }
         if (cancelled) {
@@ -549,10 +524,7 @@ export function ProductEditor({
               message.error(
                 pathError instanceof Error
                   ? pathError.message
-                  : intl.formatMessage({
-                      id: 'pages.product.detail.categoryPathFailed',
-                      defaultMessage: '获取分类全路径失败',
-                    }),
+                  : '获取分类全路径失败',
               );
             }
           })();
@@ -570,10 +542,7 @@ export function ProductEditor({
           message.error(
             error instanceof Error
               ? error.message
-              : intl.formatMessage({
-                  id: 'pages.product.detail.loadFailed',
-                  defaultMessage: '加载商品详情失败',
-                }),
+              : '加载商品详情失败',
           );
           setLoading(false);
         }
@@ -586,7 +555,6 @@ export function ProductEditor({
   }, [
     form,
     initialDetail,
-    intl,
     loadCategoryAttrs,
     message,
     mode,
@@ -859,15 +827,12 @@ export function ProductEditor({
           message.error(
             error instanceof Error
               ? error.message
-              : intl.formatMessage({
-                  id: 'pages.product.detail.categoryPathFailed',
-                  defaultMessage: '获取分类全路径失败',
-                }),
+              : '获取分类全路径失败',
           );
         }
       })();
     },
-    [form, intl, loadCategoryAttrs, message],
+    [form, loadCategoryAttrs, message],
   );
 
   const syncFormValues = (
@@ -936,10 +901,7 @@ export function ProductEditor({
   const normalSelectedAttrs = nonPriceProductAttrs(detail?.attr_list);
   const measureUnitLabel =
     resolveMeasureDisplayName(detail?.measure_id, measureOptions) ||
-    intl.formatMessage({
-      id: 'pages.product.detail.sale.measureFallback',
-      defaultMessage: '件',
-    });
+    '件';
 
   const handleNormalAttrsChange = useCallback(
     (nextSelected: DhProductSelectedAttrPublic[]) => {
@@ -1028,17 +990,13 @@ export function ProductEditor({
         onBack={() => history.push(PRODUCT_LIST_PATH)}
       >
         <Card>
-          {intl.formatMessage({
-            id: 'pages.product.detail.invalidId',
-            defaultMessage: '商品 ID 无效',
-          })}
+          {'商品 ID 无效'}
         </Card>
       </PageContainer>
     );
   }
 
   const showSyncMeta = mode === 'view' || mode === 'edit';
-  const titleMsg = pageTitleId(mode);
 
   const content = (
     <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
@@ -1065,19 +1023,13 @@ export function ProductEditor({
         }}
       >
         <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.basic',
-            defaultMessage: '基本信息',
-          })}
+          title={'基本信息'}
           loading={loading}
         >
           <ProFormSelect
             name="store_id"
             label={changedLabel(
-              intl.formatMessage({
-                id: 'pages.product.detail.field.storeName',
-                defaultMessage: '店铺名称',
-              }),
+              '店铺名称',
               isChanged('store_id'),
             )}
             showSearch
@@ -1103,10 +1055,7 @@ export function ProductEditor({
           />
           <Form.Item
             label={changedLabel(
-              intl.formatMessage({
-                id: 'pages.product.detail.field.productCategory',
-                defaultMessage: '产品分类',
-              }),
+              '产品分类',
               isChanged('cate_pub_id'),
             )}
             required
@@ -1123,10 +1072,7 @@ export function ProductEditor({
 
         <Card
           title={changedLabel(
-            intl.formatMessage({
-              id: 'pages.product.detail.section.attrs',
-              defaultMessage: '商品属性',
-            }),
+            '商品属性',
             isChanged('attr_list'),
           )}
           style={{ marginTop: 16 }}
@@ -1135,10 +1081,7 @@ export function ProductEditor({
             strong
             style={{ display: 'block', marginBottom: 12 }}
           >
-            {intl.formatMessage({
-              id: 'pages.product.detail.categoryAttrs.title',
-              defaultMessage: '类目属性',
-            })}
+            {'类目属性'}
           </Typography.Text>
           {categoryAttrsLoading ? (
             <Skeleton active paragraph={{ rows: 8 }} />
@@ -1155,10 +1098,7 @@ export function ProductEditor({
           ) : (
             !loading && (
               <Typography.Text type="secondary">
-                {intl.formatMessage({
-                  id: 'pages.product.detail.categoryAttrs.empty',
-                  defaultMessage: '暂无类目属性',
-                })}
+                {'暂无类目属性'}
               </Typography.Text>
             )
           )}
@@ -1171,10 +1111,7 @@ export function ProductEditor({
               color: changedCustomValues?.length ? CHANGED_COLOR : undefined,
             }}
           >
-            {intl.formatMessage({
-              id: 'pages.product.detail.customAttrs.title',
-              defaultMessage: '自定义属性',
-            })}
+            {'自定义属性'}
           </Typography.Text>
           <ProFormList
             name="customAttrs"
@@ -1183,20 +1120,14 @@ export function ProductEditor({
               readOnly
                 ? false
                 : {
-                    tooltipText: intl.formatMessage({
-                      id: 'pages.product.detail.customAttrs.delete',
-                      defaultMessage: '删除',
-                    }),
+                    tooltipText: '删除',
                   }
             }
             creatorButtonProps={
               readOnly
                 ? false
                 : {
-                    creatorButtonText: intl.formatMessage({
-                      id: 'pages.product.detail.customAttrs.add',
-                      defaultMessage: '新增属性',
-                    }),
+                    creatorButtonText: '新增属性',
                     type: 'dashed',
                     style: { width: '100%', maxWidth: 720 },
                   }
@@ -1237,10 +1168,7 @@ export function ProductEditor({
               <ProFormText name="attr_val_id" hidden />
               <ProFormText
                 name="attr_name"
-                placeholder={intl.formatMessage({
-                  id: 'pages.product.detail.attrsCustomNamePlaceholder',
-                  defaultMessage: '请输入属性名',
-                })}
+                placeholder={'请输入属性名'}
                 fieldProps={{
                   maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
                   allowClear: true,
@@ -1250,10 +1178,7 @@ export function ProductEditor({
               />
               <ProFormText
                 name="content"
-                placeholder={intl.formatMessage({
-                  id: 'pages.product.detail.attrsCustomValuePlaceholder',
-                  defaultMessage: '请输入属性值',
-                })}
+                placeholder={'请输入属性值'}
                 fieldProps={{
                   maxLength: DH_CUSTOM_ATTR_MAX_LENGTH,
                   allowClear: true,
@@ -1266,32 +1191,20 @@ export function ProductEditor({
         </Card>
 
         <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.productInfo',
-            defaultMessage: '产品信息',
-          })}
+          title={'产品信息'}
           loading={loading}
           style={{ marginTop: 16 }}
         >
           <Form.Item
             name="item_name"
             label={changedLabel(
-              intl.formatMessage({
-                id: 'pages.product.detail.field.itemName',
-                defaultMessage: '产品标题',
-              }),
+              '产品标题',
               isChanged('item_name'),
             )}
             rules={[
               {
                 max: ITEM_NAME_MAX_LENGTH,
-                message: intl.formatMessage(
-                  {
-                    id: 'pages.product.detail.field.itemNameMax',
-                    defaultMessage: '产品标题最多 {max} 个字符',
-                  },
-                  { max: ITEM_NAME_MAX_LENGTH },
-                ),
+                message: `产品标题最多 ${ITEM_NAME_MAX_LENGTH} 个字符`,
               },
             ]}
           >
@@ -1300,18 +1213,12 @@ export function ProductEditor({
               allowClear
               disabled={readOnly}
               style={changedControlStyle(isChanged('item_name'))}
-              placeholder={intl.formatMessage({
-                id: 'pages.product.detail.field.itemNamePlaceholder',
-                defaultMessage: '请输入产品标题',
-              })}
+              placeholder="请输入产品标题"
             />
           </Form.Item>
           <Form.Item
             label={changedLabel(
-              intl.formatMessage({
-                id: 'pages.product.detail.field.keywords',
-                defaultMessage: '关键词',
-              }),
+              '关键词',
               isChanged('key_word1') ||
                 isChanged('key_word2') ||
                 isChanged('key_word3'),
@@ -1344,10 +1251,7 @@ export function ProductEditor({
           <Form.Item
             name="item_group_path"
             label={changedLabel(
-              intl.formatMessage({
-                id: 'pages.product.detail.field.itemGroup',
-                defaultMessage: '产品分组',
-              }),
+              '产品分组',
               isChanged('item_group_id'),
             )}
           >
@@ -1363,17 +1267,11 @@ export function ProductEditor({
                 width: '100%',
                 ...changedControlStyle(isChanged('item_group_id')),
               }}
-              placeholder={intl.formatMessage({
-                id: 'pages.product.detail.field.itemGroupPlaceholder',
-                defaultMessage: '请选择产品分组',
-              })}
+              placeholder={'请选择产品分组'}
             />
           </Form.Item>
           <Form.Item
-            label={intl.formatMessage({
-              id: 'pages.product.detail.sale.issample',
-              defaultMessage: '商品分级管理',
-            })}
+            label={'商品分级管理'}
           >
             <Radio.Group
               disabled={readOnly}
@@ -1385,24 +1283,15 @@ export function ProductEditor({
               }}
             >
               <Radio value="3">
-                {intl.formatMessage({
-                  id: 'pages.product.detail.sale.issampleNonAdult',
-                  defaultMessage: '非成人属性',
-                })}
+                {'非成人属性'}
               </Radio>
               <Radio value="2">
-                {intl.formatMessage({
-                  id: 'pages.product.detail.sale.issampleAdult',
-                  defaultMessage: '成人属性',
-                })}
+                {'成人属性'}
               </Radio>
             </Radio.Group>
           </Form.Item>
           <Form.Item
-            label={intl.formatMessage({
-              id: 'pages.product.detail.sale.vaildDay',
-              defaultMessage: '产品有效期',
-            })}
+            label={'产品有效期'}
           >
             <Radio.Group
               disabled={readOnly}
@@ -1412,60 +1301,34 @@ export function ProductEditor({
               }}
             >
               <Radio value="90">
-                {intl.formatMessage({
-                  id: 'pages.product.detail.sale.vaildDay90',
-                  defaultMessage: '90天',
-                })}
+                {'90天'}
               </Radio>
               <Radio value="30">
-                {intl.formatMessage({
-                  id: 'pages.product.detail.sale.vaildDay30',
-                  defaultMessage: '30天',
-                })}
+                {'30天'}
               </Radio>
               <Radio value="14">
-                {intl.formatMessage({
-                  id: 'pages.product.detail.sale.vaildDay14',
-                  defaultMessage: '14天',
-                })}
+                {'14天'}
               </Radio>
             </Radio.Group>
           </Form.Item>
           {showSyncMeta ? (
             <>
               <Form.Item
-                label={intl.formatMessage({
-                  id: 'pages.product.detail.field.productState',
-                  defaultMessage: '商品状态',
-                })}
+                label={'商品状态'}
               >
-                {formatProductState(detail?.state, (id, defaultMessage) =>
-                  intl.formatMessage({ id, defaultMessage }),
-                )}
+                {formatProductState(detail?.state)}
               </Form.Item>
               <Form.Item
-                label={intl.formatMessage({
-                  id: 'pages.product.detail.field.syncState',
-                  defaultMessage: '同步状态',
-                })}
+                label={'同步状态'}
               >
                 {formatSyncState(
                   detail?.sync_state,
-                  intl.formatMessage({
-                    id: 'pages.product.detail.sync.success',
-                    defaultMessage: '成功',
-                  }),
-                  intl.formatMessage({
-                    id: 'pages.product.detail.sync.fail',
-                    defaultMessage: '失败',
-                  }),
+                  '成功',
+                  '失败',
                 )}
               </Form.Item>
               <Form.Item
-                label={intl.formatMessage({
-                  id: 'pages.product.list.field.lastSyncedAt',
-                  defaultMessage: '同步时间',
-                })}
+                label={'同步时间'}
               >
                 {formatDateTime(detail?.last_synced_at)}
               </Form.Item>
@@ -1474,10 +1337,7 @@ export function ProductEditor({
         </Card>
 
         <Card
-          title={intl.formatMessage({
-            id: 'pages.product.detail.section.saleInfo',
-            defaultMessage: '销售信息',
-          })}
+          title={'销售信息'}
           loading={loading}
           style={{ marginTop: 16 }}
         >
@@ -1515,10 +1375,7 @@ export function ProductEditor({
 
       <Card
         title={changedLabel(
-          intl.formatMessage({
-            id: 'pages.product.detail.section.images',
-            defaultMessage: '商品图片',
-          }),
+          '商品图片',
           isChanged('item_img_list'),
         )}
         loading={loading}
@@ -1545,10 +1402,7 @@ export function ProductEditor({
 
       <Card
         title={changedLabel(
-          intl.formatMessage({
-            id: 'pages.product.detail.section.specAttrs',
-            defaultMessage: '商品规格',
-          }),
+          '商品规格',
           isChanged('sku_list') ||
             isChanged('item_spec_self_def_list') ||
             changedCategoryAttrIds.some((id) => priceAttrIdSet.has(id)),
@@ -1584,10 +1438,7 @@ export function ProductEditor({
         )}
         <Divider plain style={{ margin: '28px 0' }}>
           <span style={{ fontSize: 15, fontWeight: 600 }}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.divider',
-              defaultMessage: '商品规格属性生成的规格sku',
-            })}
+            {'商品规格属性生成的规格sku'}
           </span>
         </Divider>
         <CommissionRateHint
@@ -1638,18 +1489,12 @@ export function ProductEditor({
       {detail?.html_content ? (
         <Card
           title={changedLabel(
-            intl.formatMessage({
-              id: 'pages.product.detail.section.html',
-              defaultMessage: '详情描述',
-            }),
+            '详情描述',
             isChanged('html_content'),
           )}
         >
           <iframe
-            title={intl.formatMessage({
-              id: 'pages.product.detail.section.html',
-              defaultMessage: '详情描述',
-            })}
+            title={'详情描述'}
             srcDoc={detail.html_content}
             sandbox=""
             style={{
@@ -1667,10 +1512,7 @@ export function ProductEditor({
 
       <Card
         title={changedLabel(
-          intl.formatMessage({
-            id: 'pages.product.detail.section.package',
-            defaultMessage: '包装信息',
-          }),
+          '包装信息',
           isChanged('gross_weight') ||
             isChanged('length') ||
             isChanged('width') ||
@@ -1705,10 +1547,7 @@ export function ProductEditor({
       </Card>
 
       <Card
-        title={intl.formatMessage({
-          id: 'pages.product.detail.section.templates',
-          defaultMessage: '模板信息',
-        })}
+        title={'模板信息'}
         loading={loading}
       >
         <div style={{ maxWidth: 720 }}>
@@ -1721,10 +1560,7 @@ export function ProductEditor({
                 ...changedControlStyle(isChanged('after_sale_template_id')),
               }}
             >
-              {intl.formatMessage({
-                id: 'pages.product.detail.field.afterSaleTemplate',
-                defaultMessage: '售后模板',
-              })}
+              {'售后模板'}
             </div>
             <Select
               disabled={readOnly}
@@ -1736,10 +1572,7 @@ export function ProductEditor({
                 width: '100%',
                 ...changedControlStyle(isChanged('after_sale_template_id')),
               }}
-              placeholder={intl.formatMessage({
-                id: 'pages.product.detail.field.afterSaleTemplatePlaceholder',
-                defaultMessage: '请选择售后模板',
-              })}
+              placeholder={'请选择售后模板'}
               options={withCurrentTemplateOption(
                 aftersaleOptions,
                 detail?.after_sale_template_id,
@@ -1759,10 +1592,7 @@ export function ProductEditor({
                 ...changedControlStyle(isChanged('shipping_model_id')),
               }}
             >
-              {intl.formatMessage({
-                id: 'pages.product.detail.field.shippingTemplate',
-                defaultMessage: '物流模板',
-              })}
+              {'物流模板'}
             </div>
             <Select
               disabled={readOnly}
@@ -1774,10 +1604,7 @@ export function ProductEditor({
                 width: '100%',
                 ...changedControlStyle(isChanged('shipping_model_id')),
               }}
-              placeholder={intl.formatMessage({
-                id: 'pages.product.detail.field.shippingTemplatePlaceholder',
-                defaultMessage: '请选择物流模板',
-              })}
+              placeholder={'请选择物流模板'}
               options={withCurrentTemplateOption(
                 shippingOptions,
                 detail?.shipping_model_id,
@@ -1799,7 +1626,7 @@ export function ProductEditor({
 
   return (
     <PageContainer
-      title={intl.formatMessage(titleMsg)}
+      title={pageTitle(mode)}
       onBack={() => history.push(PRODUCT_LIST_PATH)}
       extra={
         mode === 'view' && productId ? (
@@ -1808,20 +1635,14 @@ export function ProductEditor({
               type="primary"
               onClick={() => history.push(productEditPath(productId))}
             >
-              {intl.formatMessage({
-                id: 'pages.product.action.edit',
-                defaultMessage: '编辑',
-              })}
+              {'编辑'}
             </Button>
             <Button
               onClick={() =>
                 history.push(productCreatePath({ from: productId }))
               }
             >
-              {intl.formatMessage({
-                id: 'pages.product.action.copy',
-                defaultMessage: '复制',
-              })}
+              {'复制'}
             </Button>
           </Space>
         ) : undefined

@@ -1,20 +1,15 @@
-import { useIntl, useModel } from '@umijs/max';
+import { useModel } from '@umijs/max';
 import { Tag } from 'antd';
 import React from 'react';
+import { accountRoleLabel } from '@/utils/accountRoleLabel';
 
 /** 顶栏头像旁：用户名 + 角色标签 */
 const AvatarName: React.FC = () => {
-  const intl = useIntl();
   const { initialState } = useModel('@@initialState');
   const currentUser = initialState?.currentUser;
   const role = currentUser?.role || currentUser?.access;
 
-  const roleLabel = role
-    ? intl.formatMessage({
-        id: `pages.account.role.${role}`,
-        defaultMessage: role,
-      })
-    : '';
+  const roleLabel = role ? accountRoleLabel(String(role)) : '';
 
   return (
     <span

@@ -14,6 +14,7 @@ from app.models.permission import (
 )
 from app.models.product_category_dh import ProductCategoryDh
 from app.models.product_dh import ProductDh
+from app.models.product_dh_update_log import ProductDhUpdateLog
 from app.models.product_group_dh import ProductGroupDh
 from app.models.refresh_session import RefreshSession
 from app.models.shipping_template_dh import ShippingTemplateDh
@@ -35,6 +36,7 @@ __all__ = [
     "Permission",
     "ProductCategoryDh",
     "ProductDh",
+    "ProductDhUpdateLog",
     "ProductGroupDh",
     "RefreshSession",
     "RolePermission",

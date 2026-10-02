@@ -1,5 +1,4 @@
-import { PageContainer } from '@ant-design/pro-components';
-import { useIntl } from '@umijs/max';
+﻿import { PageContainer } from '@ant-design/pro-components';
 import { App, Card, Spin, Tree } from 'antd';
 import type { DataNode, EventDataNode } from 'antd/es/tree';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -56,7 +55,6 @@ function updateTreeData(
 }
 
 const ProductCategory: React.FC = () => {
-  const intl = useIntl();
   const { message } = App.useApp();
   const [treeData, setTreeData] = useState<CategoryTreeNode[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,15 +69,12 @@ const ProductCategory: React.FC = () => {
       message.error(
         error instanceof Error
           ? error.message
-          : intl.formatMessage({
-              id: 'pages.product.category.loadFailed',
-              defaultMessage: '加载商品分类失败',
-            }),
+          : '加载商品分类失败',
       );
     } finally {
       setLoading(false);
     }
-  }, [intl, message]);
+  }, [message]);
 
   useEffect(() => {
     void loadRoot();
@@ -99,22 +94,16 @@ const ProductCategory: React.FC = () => {
         message.error(
           error instanceof Error
             ? error.message
-            : intl.formatMessage({
-                id: 'pages.product.category.loadChildrenFailed',
-                defaultMessage: '加载子分类失败',
-              }),
+            : '加载子分类失败',
         );
       }
     },
-    [intl, message],
+    [message],
   );
 
   return (
     <PageContainer
-      title={intl.formatMessage({
-        id: 'pages.product.category.title',
-        defaultMessage: '商品分类',
-      })}
+      title={'商品分类'}
     >
       <Card>
         <Spin spinning={loading}>
@@ -126,10 +115,7 @@ const ProductCategory: React.FC = () => {
             />
           ) : (
             <div style={{ color: 'rgba(0,0,0,0.45)' }}>
-              {intl.formatMessage({
-                id: 'pages.product.category.empty',
-                defaultMessage: '暂无分类数据',
-              })}
+              {'暂无分类数据'}
             </div>
           )}
         </Spin>

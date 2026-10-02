@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useAccess, useIntl, useModel } from '@umijs/max';
+import { useAccess, useModel } from '@umijs/max';
 import { App, Button, Popconfirm } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
@@ -20,7 +20,6 @@ type TableParams = {
 };
 
 const RoleListPage: React.FC = () => {
-  const intl = useIntl();
   const access = useAccess();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
@@ -45,95 +44,62 @@ const RoleListPage: React.FC = () => {
 
   const columns: ProColumns<RolePublic>[] = [
     {
-      title: intl.formatMessage({
-        id: 'pages.role.field.name',
-        defaultMessage: '角色名称',
-      }),
+      title: '角色名称',
       dataIndex: 'name',
       hideInSearch: true,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.role.field.keyword',
-        defaultMessage: '关键词',
-      }),
+      title: '关键词',
       dataIndex: 'keyword',
       hideInTable: true,
       fieldProps: {
-        placeholder: intl.formatMessage({
-          id: 'pages.role.field.name',
-          defaultMessage: '角色名称',
-        }),
+        placeholder: '角色名称',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.role.field.remark',
-        defaultMessage: '备注',
-      }),
+      title: '备注',
       dataIndex: 'remark',
       hideInSearch: true,
       ellipsis: true,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.role.field.permCount',
-        defaultMessage: '权限数',
-      }),
+      title: '权限数',
       hideInSearch: true,
       width: 100,
       render: (_, r) => r.permission_codes?.length ?? 0,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.role.field.createdAt',
-        defaultMessage: '创建时间',
-      }),
+      title: '创建时间',
       dataIndex: 'created_at',
       hideInSearch: true,
       width: 180,
       render: (_, r) => formatDateTime(r.created_at),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.role.field.option',
-        defaultMessage: '操作',
-      }),
+      title: '操作',
       valueType: 'option',
       width: 160,
       hideInTable: !canUpdate && !canDelete,
       render: (_, record) => [
         canUpdate ? (
           <a key="edit" onClick={() => openEdit(record)}>
-            {intl.formatMessage({
-              id: 'pages.role.action.edit',
-              defaultMessage: '编辑',
-            })}
+            {'编辑'}
           </a>
         ) : null,
         canDelete ? (
           <Popconfirm
             key="delete"
-            title={intl.formatMessage({
-              id: 'pages.role.delete.confirm',
-              defaultMessage: '确认删除该角色？',
-            })}
+            title={'确认删除该角色？'}
             onConfirm={async () => {
               await deleteRole(portalRole, record.id);
               message.success(
-                intl.formatMessage({
-                  id: 'pages.role.delete.success',
-                  defaultMessage: '删除成功',
-                }),
+                '删除成功',
               );
               actionRef.current?.reload();
             }}
           >
             <a>
-              {intl.formatMessage({
-                id: 'pages.role.action.delete',
-                defaultMessage: '删除',
-              })}
+              {'删除'}
             </a>
           </Popconfirm>
         ) : null,
@@ -144,10 +110,7 @@ const RoleListPage: React.FC = () => {
   return (
     <PageContainer>
       <ProTable<RolePublic, TableParams>
-        headerTitle={intl.formatMessage({
-          id: 'pages.role.list.title',
-          defaultMessage: '角色管理',
-        })}
+        headerTitle={'角色管理'}
         actionRef={actionRef}
         rowKey="id"
         search={{ labelWidth: 'auto' }}
@@ -160,10 +123,7 @@ const RoleListPage: React.FC = () => {
                   icon={<PlusOutlined />}
                   onClick={openCreate}
                 >
-                  {intl.formatMessage({
-                    id: 'pages.role.action.create',
-                    defaultMessage: '新建角色',
-                  })}
+                  {'新建角色'}
                 </Button>,
               ]
             : []

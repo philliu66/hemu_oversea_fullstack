@@ -102,6 +102,30 @@ class ItemGetTestRequest(StoreIdBody):
     )
 
 
+class ItemShelfTestRequest(StoreIdBody):
+    """联调商品上架 / 下架。"""
+
+    item_codes: str = Field(
+        min_length=1,
+        max_length=8000,
+        description=(
+            "产品编码字符串；多个用英文半角逗号分隔，最多 200 个。"
+            "示例：211198221,211198222"
+        ),
+        examples=["211198221", "211198221,211198222"],
+    )
+    action: int = Field(
+        ...,
+        ge=0,
+        le=1,
+        description="操作标识：0=下架（dh.item.downshelf.list），1=上架（dh.item.upshelf.list）",
+    )
+    site_id: Literal["EN", "RU", "ES", "ID"] | None = Field(
+        default=None,
+        description="站点语言（可选）；不传则不带 siteId",
+    )
+
+
 class ItemFissionUpdateInfo(BaseModel):
     """裂变时覆盖种子商品的字段；后续按业务继续加字段。"""
 

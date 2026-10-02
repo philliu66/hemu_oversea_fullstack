@@ -3,7 +3,6 @@ import {
   ExperimentOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
-import { useIntl } from '@umijs/max';
 import { App, Image, Modal, Spin, Tooltip, Typography, Upload } from 'antd';
 import type { UploadFile, UploadProps } from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -46,7 +45,6 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
   disabled = false,
   compact = false,
 }) => {
-  const intl = useIntl();
   const { message } = App.useApp();
   const [uploading, setUploading] = useState(false);
   const [tweaking, setTweaking] = useState(false);
@@ -92,10 +90,7 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
       return true;
     }
     message.warning(
-      intl.formatMessage({
-        id: 'pages.product.detail.images.storeRequired',
-        defaultMessage: '请先选择店铺',
-      }),
+      '请先选择店铺',
     );
     return false;
   };
@@ -126,18 +121,12 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
       onChange?.(picUrl);
       onSuccess?.(data);
       message.success(
-        intl.formatMessage({
-          id: 'pages.product.detail.images.uploadSuccess',
-          defaultMessage: '图片上传成功',
-        }),
+        '图片上传成功',
       );
     } catch (error) {
       onError?.(error instanceof Error ? error : new Error('upload failed'));
       message.error(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.uploadFailed',
-          defaultMessage: '图片上传失败',
-        }),
+        '图片上传失败',
       );
     } finally {
       setUploading(false);
@@ -179,10 +168,7 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
       });
       onChange?.(nextUrl);
       message.success(
-        intl.formatMessage({
-          id: 'pages.product.detail.images.tweakSuccess',
-          defaultMessage: '图片已微调',
-        }),
+        '图片已微调',
       );
     } catch {
       // 全局 request errorHandler 已提示
@@ -236,10 +222,7 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
           showDownloadIcon: !disabled && Boolean(meta?.img_url || value),
           downloadIcon: (
             <Tooltip
-              title={intl.formatMessage({
-                id: 'pages.product.detail.images.tweak',
-                defaultMessage: '微调图片',
-              })}
+              title={'微调图片'}
             >
               <ExperimentOutlined
                 className="product-detail-upload-tweak"
@@ -260,10 +243,7 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
             ) : null}
             {hasOriginal && !tweaking ? (
               <Tooltip
-                title={intl.formatMessage({
-                  id: 'pages.product.detail.images.diff',
-                  defaultMessage: '查看不同',
-                })}
+                title={'查看不同'}
               >
                 <button
                   type="button"
@@ -284,14 +264,7 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
           <button type="button" className="product-detail-upload-trigger">
             {uploading ? <Spin size="small" /> : <PlusOutlined />}
             <div style={{ marginTop: compact ? 4 : 8 }}>
-              {intl.formatMessage({
-                id:
-                  !compact && fileList.length
-                    ? 'pages.product.detail.images.reupload'
-                    : 'pages.product.detail.images.upload',
-                defaultMessage:
-                  !compact && fileList.length ? '重新上传' : '上传',
-              })}
+              {!compact && fileList.length ? '重新上传' : '上传'}
             </div>
           </button>
         ) : null}
@@ -307,10 +280,7 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
       />
 
       <Modal
-        title={intl.formatMessage({
-          id: 'pages.product.detail.images.diffTitle',
-          defaultMessage: '图片对比',
-        })}
+        title={'图片对比'}
         open={diffOpen && hasOriginal}
         footer={null}
         width={680}
@@ -320,19 +290,13 @@ const DhgateAttrPicUpload: React.FC<DhgateAttrPicUploadProps> = ({
         <div className="product-detail-img-diff">
           <div className="product-detail-img-diff-item">
             <Typography.Text>
-              {intl.formatMessage({
-                id: 'pages.product.detail.images.current',
-                defaultMessage: '现图片',
-              })}
+              {'现图片'}
             </Typography.Text>
             {currentSrc ? <Image src={currentSrc} alt="attr" /> : null}
           </div>
           <div className="product-detail-img-diff-item">
             <Typography.Text>
-              {intl.formatMessage({
-                id: 'pages.product.detail.images.original',
-                defaultMessage: '原图片',
-              })}
+              {'原图片'}
             </Typography.Text>
             {originalSrc ? <Image src={originalSrc} alt="attr" /> : null}
           </div>

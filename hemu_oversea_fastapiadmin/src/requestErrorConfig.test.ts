@@ -28,9 +28,6 @@ vi.mock('@umijs/max', () => ({
   history: {
     replace: mockReplace,
   },
-  getIntl: vi.fn(() => ({
-    formatMessage: vi.fn(({ defaultMessage }) => defaultMessage),
-  })),
   request: (...args: unknown[]) => mockRequest(...args),
 }));
 

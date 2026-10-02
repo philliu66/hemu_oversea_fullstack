@@ -68,15 +68,6 @@ vi.mock('antd', async () => {
   };
 });
 
-vi.mock('@umijs/max', () => ({
-  useIntl: () => ({
-    formatMessage: vi.fn(({ defaultMessage }) => defaultMessage),
-  }),
-  FormattedMessage: ({ defaultMessage }: { defaultMessage: string }) => (
-    <span>{defaultMessage}</span>
-  ),
-}));
-
 vi.mock('@/services/ant-design-pro/api', () => ({
   rule: vi.fn(),
   removeRule: vi.fn(),

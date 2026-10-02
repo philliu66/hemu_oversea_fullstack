@@ -1,4 +1,3 @@
-import { getIntl } from '@umijs/max';
 import { Alert } from 'antd';
 import { useSyncExternalStore } from 'react';
 
@@ -36,11 +35,7 @@ const OfflineBanner: React.FC = () => {
         zIndex: 10,
         maxWidth: 480,
       }}
-      title={getIntl().formatMessage({
-        id: 'app.network.offline',
-        defaultMessage:
-          'You are currently offline. Some features may be unavailable.',
-      })}
+      title={'You are currently offline. Some features may be unavailable.'}
     />
   );
 };

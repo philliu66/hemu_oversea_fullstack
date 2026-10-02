@@ -3,7 +3,6 @@ import {
   ExperimentOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
-import { useIntl } from '@umijs/max';
 import {
   App,
   Image,
@@ -65,7 +64,6 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
   disabled = false,
   onChange,
 }) => {
-  const intl = useIntl();
   const { message } = App.useApp();
   const list = images || [];
   const [tweakingUid, setTweakingUid] = useState<string>();
@@ -108,10 +106,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
     }
     if (!storeId) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.images.storeRequired',
-          defaultMessage: '请先选择店铺',
-        }),
+        '请先选择店铺',
       );
       return;
     }
@@ -140,10 +135,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
       });
       onChange?.(next);
       message.success(
-        intl.formatMessage({
-          id: 'pages.product.detail.images.tweakSuccess',
-          defaultMessage: '图片已微调',
-        }),
+        '图片已微调',
       );
     } catch {
       // 全局 request errorHandler 已提示
@@ -168,10 +160,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
     const { file, onSuccess, onError } = options;
     if (!storeId) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.images.storeRequired',
-          defaultMessage: '请先选择店铺',
-        }),
+        '请先选择店铺',
       );
       onError?.(new Error('store required'));
       return;
@@ -197,10 +186,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
       ]);
       onSuccess?.(data);
       message.success(
-        intl.formatMessage({
-          id: 'pages.product.detail.images.uploadSuccess',
-          defaultMessage: '图片上传成功',
-        }),
+        '图片上传成功',
       );
     } catch (error) {
       onError?.(error instanceof Error ? error : new Error('upload failed'));
@@ -253,10 +239,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
           showDownloadIcon: !disabled,
           downloadIcon: (
             <Tooltip
-              title={intl.formatMessage({
-                id: 'pages.product.detail.images.tweak',
-                defaultMessage: '微调图片',
-              })}
+              title={'微调图片'}
             >
               <ExperimentOutlined
                 className="product-detail-upload-tweak"
@@ -283,10 +266,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
               ) : null}
               {tweaked && !busy ? (
                 <Tooltip
-                  title={intl.formatMessage({
-                    id: 'pages.product.detail.images.diff',
-                    defaultMessage: '查看不同',
-                  })}
+                  title={'查看不同'}
                 >
                   <button
                     type="button"
@@ -308,10 +288,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
           <button type="button" className="product-detail-upload-trigger">
             {uploading ? <Spin size="small" /> : <PlusOutlined />}
             <div style={{ marginTop: 8 }}>
-              {intl.formatMessage({
-                id: 'pages.product.detail.images.upload',
-                defaultMessage: '上传图片',
-              })}
+              {'上传图片'}
             </div>
           </button>
         ) : null}
@@ -327,10 +304,7 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
       />
 
       <Modal
-        title={intl.formatMessage({
-          id: 'pages.product.detail.images.diffTitle',
-          defaultMessage: '图片对比',
-        })}
+        title={'图片对比'}
         open={Boolean(diffUid) && diffIndex >= 0}
         footer={null}
         width={680}
@@ -340,19 +314,13 @@ const ProductImagesEditor: React.FC<ProductImagesEditorProps> = ({
         <div className="product-detail-img-diff">
           <div className="product-detail-img-diff-item">
             <Typography.Text>
-              {intl.formatMessage({
-                id: 'pages.product.detail.images.current',
-                defaultMessage: '现图片',
-              })}
+              {'现图片'}
             </Typography.Text>
             {currentSrc ? <Image src={currentSrc} alt={alt} /> : null}
           </div>
           <div className="product-detail-img-diff-item">
             <Typography.Text>
-              {intl.formatMessage({
-                id: 'pages.product.detail.images.original',
-                defaultMessage: '原图片',
-              })}
+              {'原图片'}
             </Typography.Text>
             {originalSrc ? <Image src={originalSrc} alt={alt} /> : null}
           </div>

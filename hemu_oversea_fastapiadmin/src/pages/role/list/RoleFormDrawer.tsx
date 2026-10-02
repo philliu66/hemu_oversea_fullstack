@@ -1,5 +1,4 @@
-import { useIntl } from '@umijs/max';
-import { App, Button, Drawer, Form, Input, Space, Tree } from 'antd';
+﻿import { App, Button, Drawer, Form, Input, Space, Tree } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -39,7 +38,6 @@ export function RoleFormDrawer({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
@@ -87,15 +85,9 @@ export function RoleFormDrawer({
   const title = useMemo(
     () =>
       isEdit
-        ? intl.formatMessage({
-            id: 'pages.role.drawer.edit',
-            defaultMessage: '编辑角色',
-          })
-        : intl.formatMessage({
-            id: 'pages.role.drawer.create',
-            defaultMessage: '新建角色',
-          }),
-    [intl, isEdit],
+        ? '编辑角色'
+        : '新建角色',
+    [isEdit],
   );
 
   const handleClose = () => {
@@ -115,10 +107,7 @@ export function RoleFormDrawer({
           permission_codes: values.permission_codes ?? [],
         });
         message.success(
-          intl.formatMessage({
-            id: 'pages.role.edit.success',
-            defaultMessage: '保存成功',
-          }),
+          '保存成功',
         );
       } else {
         await createRole(portalRole, {
@@ -127,10 +116,7 @@ export function RoleFormDrawer({
           permission_codes: values.permission_codes ?? [],
         });
         message.success(
-          intl.formatMessage({
-            id: 'pages.role.create.success',
-            defaultMessage: '创建成功',
-          }),
+          '创建成功',
         );
       }
       onSuccess();
@@ -155,16 +141,10 @@ export function RoleFormDrawer({
       footer={
         <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button onClick={handleClose}>
-            {intl.formatMessage({
-              id: 'pages.role.drawer.cancel',
-              defaultMessage: '取消',
-            })}
+            {'取消'}
           </Button>
           <Button type="primary" loading={submitting} onClick={handleSubmit}>
-            {intl.formatMessage({
-              id: 'pages.role.drawer.submit',
-              defaultMessage: '确定',
-            })}
+            {'确定'}
           </Button>
         </Space>
       }
@@ -172,17 +152,11 @@ export function RoleFormDrawer({
       <Form form={form} layout="vertical" preserve={false}>
         <Form.Item
           name="name"
-          label={intl.formatMessage({
-            id: 'pages.role.field.name',
-            defaultMessage: '角色名称',
-          })}
+          label={'角色名称'}
           rules={[
             {
               required: true,
-              message: intl.formatMessage({
-                id: 'pages.role.field.nameRequired',
-                defaultMessage: '请输入角色名称',
-              }),
+              message: '请输入角色名称',
             },
           ]}
         >
@@ -190,28 +164,19 @@ export function RoleFormDrawer({
         </Form.Item>
         <Form.Item
           name="remark"
-          label={intl.formatMessage({
-            id: 'pages.role.field.remark',
-            defaultMessage: '备注',
-          })}
+          label={'备注'}
         >
           <Input.TextArea maxLength={255} rows={2} />
         </Form.Item>
         <Form.Item
           name="permission_codes"
-          label={intl.formatMessage({
-            id: 'pages.role.field.permissions',
-            defaultMessage: '权限',
-          })}
+          label={'权限'}
           rules={[
             {
               required: true,
               type: 'array',
               min: 1,
-              message: intl.formatMessage({
-                id: 'pages.role.field.permissionsRequired',
-                defaultMessage: '请选择权限',
-              }),
+              message: '请选择权限',
             },
           ]}
           valuePropName="checkedKeys"

@@ -1,7 +1,6 @@
 import { UploadOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { useIntl } from '@umijs/max';
 import {
   App,
   Button,
@@ -36,6 +35,13 @@ const FISSION_COLOR: Record<FissionStatus, string> = {
   marked_finished: 'warning',
 };
 
+const FISSION_STATUS_LABEL: Record<FissionStatus, string> = {
+  pending: '待裂变',
+  success: '成功',
+  failed: '失败',
+  marked_finished: '标记结束',
+};
+
 export function FissionDataTable({
   missionId,
   editable = false,
@@ -43,7 +49,6 @@ export function FissionDataTable({
   missionId: number;
   editable?: boolean;
 }) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -51,22 +56,12 @@ export function FissionDataTable({
   const [viewOpen, setViewOpen] = useState(false);
   const [viewDataId, setViewDataId] = useState<number>();
 
-  const statusLabel = (status: FissionStatus) => {
-    const id = {
-      pending: 'pages.mission.fissionStatus.pending',
-      success: 'pages.mission.fissionStatus.success',
-      failed: 'pages.mission.fissionStatus.failed',
-      marked_finished: 'pages.mission.fissionStatus.markedFinished',
-    }[status];
-    return intl.formatMessage({ id, defaultMessage: status });
-  };
+  const statusLabel = (status: FissionStatus) =>
+    FISSION_STATUS_LABEL[status] ?? status;
 
   const columns: ProColumns<MissionFissionDataPublic>[] = [
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.product',
-        defaultMessage: '商品',
-      }),
+      title: '商品',
       dataIndex: 'product',
       search: false,
       width: 320,
@@ -110,10 +105,7 @@ export function FissionDataTable({
       ),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.store',
-        defaultMessage: '店铺',
-      }),
+      title: '店铺',
       dataIndex: 'store_name',
       search: false,
       width: 140,
@@ -121,10 +113,7 @@ export function FissionDataTable({
       render: (_, record) => record.store_name || String(record.store_id),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.mission.field.fissionStatus',
-        defaultMessage: '裂变状态',
-      }),
+      title: '裂变状态',
       dataIndex: 'fission_status',
       search: false,
       render: (_, record) => (
@@ -134,20 +123,14 @@ export function FissionDataTable({
       ),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.mission.field.fissionMsg',
-        defaultMessage: '裂变信息',
-      }),
+      title: '裂变信息',
       dataIndex: 'fission_msg',
       search: false,
       ellipsis: true,
       render: (_, record) => record.fission_msg || '-',
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.option',
-        defaultMessage: '操作',
-      }),
+      title: '操作',
       dataIndex: 'option',
       valueType: 'option' as const,
       search: false as const,
@@ -162,10 +145,7 @@ export function FissionDataTable({
               setViewOpen(true);
             }}
           >
-            {intl.formatMessage({
-              id: 'pages.mission.action.viewChanges',
-              defaultMessage: '查看变更',
-            })}
+            {'查看变更'}
           </Button>,
         ];
         if (!editable || record.fission_status === 'success') {
@@ -175,10 +155,7 @@ export function FissionDataTable({
           actions.push(
             <Popconfirm
               key="finish"
-              title={intl.formatMessage({
-                id: 'pages.mission.fissionData.markFinishedConfirm',
-                defaultMessage: '确认将这条任务数据标记结束？',
-              })}
+              title={'确认将这条任务数据标记结束？'}
               onConfirm={async () => {
                 try {
                   await markMissionFissionDataFinished({
@@ -186,10 +163,7 @@ export function FissionDataTable({
                     mission_id: missionId,
                   });
                   message.success(
-                    intl.formatMessage({
-                      id: 'pages.mission.fissionData.markFinishedSuccess',
-                      defaultMessage: '已标记结束',
-                    }),
+                    '已标记结束',
                   );
                   actionRef.current?.reload();
                 } catch {
@@ -198,10 +172,7 @@ export function FissionDataTable({
               }}
             >
               <Button type="link">
-                {intl.formatMessage({
-                  id: 'pages.mission.action.markFinished',
-                  defaultMessage: '标记结束',
-                })}
+                {'标记结束'}
               </Button>
             </Popconfirm>,
           );
@@ -209,10 +180,7 @@ export function FissionDataTable({
         actions.push(
           <Popconfirm
             key="delete"
-            title={intl.formatMessage({
-              id: 'pages.mission.fissionData.deleteConfirm',
-              defaultMessage: '确认删除这条任务数据？',
-            })}
+            title={'确认删除这条任务数据？'}
             onConfirm={async () => {
               try {
                 await deleteMissionFissionData({
@@ -220,10 +188,7 @@ export function FissionDataTable({
                   mission_id: missionId,
                 });
                 message.success(
-                  intl.formatMessage({
-                    id: 'pages.mission.fissionData.deleteSuccess',
-                    defaultMessage: '已删除',
-                  }),
+                  '已删除',
                 );
                 actionRef.current?.reload();
               } catch {
@@ -232,10 +197,7 @@ export function FissionDataTable({
             }}
           >
             <Button type="link" danger>
-              {intl.formatMessage({
-                id: 'pages.mission.fissionData.delete',
-                defaultMessage: '删除',
-              })}
+              {'删除'}
             </Button>
           </Popconfirm>,
         );
@@ -251,10 +213,7 @@ export function FissionDataTable({
         rowKey="id"
         search={false}
         scroll={{ x: 1280 }}
-        headerTitle={intl.formatMessage({
-          id: 'pages.mission.data.section',
-          defaultMessage: '任务数据',
-        })}
+        headerTitle={'任务数据'}
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,
           showSizeChanger: true,
@@ -263,16 +222,10 @@ export function FissionDataTable({
           editable
             ? () => [
                 <Button key="add" onClick={() => setAddOpen(true)}>
-                  {intl.formatMessage({
-                    id: 'pages.mission.action.add',
-                    defaultMessage: '手动添加',
-                  })}
+                  {'手动添加'}
                 </Button>,
                 <Button key="import" onClick={() => setImportOpen(true)}>
-                  {intl.formatMessage({
-                    id: 'pages.mission.action.import',
-                    defaultMessage: '批量导入',
-                  })}
+                  {'批量导入'}
                 </Button>,
               ]
             : false
@@ -307,20 +260,13 @@ export function FissionDataTable({
         }}
       />
       <Modal
-        title={intl.formatMessage({
-          id: 'pages.mission.action.import',
-          defaultMessage: '批量导入',
-        })}
+        title={'批量导入'}
         open={importOpen}
         onCancel={() => setImportOpen(false)}
         okButtonProps={{ disabled: true }}
       >
         <p>
-          {intl.formatMessage({
-            id: 'pages.mission.import.placeholder',
-            defaultMessage:
-              '后续将上传指定格式的 Excel，解析后批量加入任务数据。',
-          })}
+          {'后续将上传指定格式的 Excel，解析后批量加入任务数据。'}
         </p>
         <Upload disabled>
           <Button disabled icon={<UploadOutlined />}>

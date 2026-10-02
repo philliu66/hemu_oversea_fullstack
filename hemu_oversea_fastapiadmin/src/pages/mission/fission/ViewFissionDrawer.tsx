@@ -1,5 +1,4 @@
-import { useIntl } from '@umijs/max';
-import { App, Drawer, Spin } from 'antd';
+﻿import { App, Drawer, Spin } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { fetchMissionFissionDataDetail } from '@/services/admin/missions';
 import type {
@@ -40,7 +39,6 @@ export function ViewFissionDrawer({
   dataId?: number;
   onClose: () => void;
 }) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<DhProductDetailPublic>();
@@ -76,10 +74,7 @@ export function ViewFissionDrawer({
           message.error(
             error instanceof Error
               ? error.message
-              : intl.formatMessage({
-                  id: 'pages.product.detail.loadFailed',
-                  defaultMessage: '加载商品详情失败',
-                }),
+              : '加载商品详情失败',
           );
         }
       })
@@ -91,14 +86,11 @@ export function ViewFissionDrawer({
     return () => {
       cancelled = true;
     };
-  }, [dataId, intl, message, missionId, open]);
+  }, [dataId, message, missionId, open]);
 
   return (
     <Drawer
-      title={intl.formatMessage({
-        id: 'pages.mission.action.viewChanges',
-        defaultMessage: '查看变更',
-      })}
+      title={'查看变更'}
       open={open}
       width="80vw"
       destroyOnHidden

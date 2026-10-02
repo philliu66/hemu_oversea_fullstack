@@ -11,7 +11,11 @@ from app.schemas.product import DhMeasuresUnitPublic
 from app.schemas.utils import (
     DhgateImgInfoPublic,
     DhgateTweakImgPublic,
-    FileProductSyncExtractPublic,
+    DhgateUpdateProductFromFilePublic,
+    DhgateUpdateProductPublic,
+    DhgateUpdateProductRequest,
+    FileExtractPublic,
+    FileExtractSummaryPublic,
 )
 from app.services import utils_file as utils_file_service
 from app.services.dhgate import (
@@ -20,6 +24,7 @@ from app.services.dhgate import (
     upload_product_image,
 )
 from app.services.measures_units_dh import list_measures_units_dh
+from app.services.product_package_weight import execute_dhgate_product_updates
 
 router = APIRouter(
     prefix="/utils",
@@ -30,52 +35,189 @@ router = APIRouter(
 
 @router.post(
     "/getdatafromfile",
-    response_model=ApiResponse[FileProductSyncExtractPublic],
-    summary="从 Excel 文件提取店铺标识与商品编码",
+    response_model=ApiResponse[FileExtractPublic],
+    summary="从 Excel 文件中提取对应的信息",
 )
 async def get_data_from_file(
     file: UploadFile = File(..., description="Excel 文件（.xlsx / .xlsm）"),
-    store_col: str = Form(
+    extract_field_info: str = Form(
         ...,
-        min_length=1,
-        max_length=3,
-        description="店铺标识列字母索引，如 A",
-        examples=["A"],
+        description=(
+            "提取字段映射（JSON 对象）。键=输出字段名，值=列字母。"
+            "商品更新请使用官网字段名："
+            '{"itemCode":"B","grossWeight":"C","baseQt":"D","stepQt":"E","stepWeight":"F"}；'
+            "其他通用提取仍可自定义键名，如 "
+            '{"store_identifier":"A","item_code":"B"}'
+        ),
+        examples=[
+            '{"itemCode":"B","grossWeight":"C","baseQt":"D","stepQt":"E","stepWeight":"F"}'
+        ],
     ),
-    item_code_col: str = Form(
-        ...,
-        min_length=1,
-        max_length=3,
-        description="商品 item_code 列字母索引，如 B",
-        examples=["B"],
+    start_row: int = Form(
+        default=2,
+        ge=1,
+        description="开始提取的行号（1 起）。默认 2=跳过表头；无表头时设为 1",
     ),
-    has_header: bool = Form(
-        default=True,
-        description="是否含表头：true 跳过第一行（默认），false 从第一行起读",
+    row_count: int = Form(
+        default=0,
+        ge=0,
+        description="计划提取行数。默认 0=从 start_row 起全部；超出实际数据不报错，只返回有效行",
     ),
     sheet_index: int = Form(
         default=1,
         ge=0,
         description="工作表索引：0=读取全部 sheet；1 起为指定 sheet（1=第一个）",
     ),
-) -> ApiResponse[FileProductSyncExtractPublic]:
+) -> ApiResponse[FileExtractPublic]:
     """
-    上传 Excel，按列字母提取「店铺标识 + 商品编码」列表，
-    供后续批量同步敦煌商品使用。
+    通用 Excel 提取工具：按 extract_field_info 从指定 sheet 提取字段。
 
-    空行或任一字段为空的行会跳过。
-    sheet_index=0 合并读取全部工作表；>0 仅读取对应序号工作表。
+    - extract_field_info：键名为结果字段名，值为列字母（A/B/C…）
+    - 用于敦煌商品更新时，键名须与官网 API 字段一致
+      （itemCode / grossWeight / baseQt / stepQt / stepWeight 等）
+    - start_row：从该行开始读；默认 2（第 1 行视为表头）
+    - row_count：计划提取行数；0=全部；超过文件实际行数不报错
+    - 空行，或任一映射字段为空的行会跳过；返回 skipped_rows 汇总
+      sheet_index + row_index，便于定位不完整数据
+    - sheet_index=0 合并读取全部工作表；>0 仅读取对应序号工作表
+    - 响应 row_count=计划提取行数，valid_count=实际有效行数
     """
     content = await file.read()
-    data = utils_file_service.extract_product_sync_rows_from_file(
+    data = utils_file_service.extract_rows_from_file(
         file=file,
-        store_col=store_col,
-        item_code_col=item_code_col,
         content=content,
-        has_header=has_header,
+        extract_field_info=extract_field_info,
+        start_row=start_row,
+        row_count=row_count,
         sheet_index=sheet_index,
     )
     return success(data)
+
+
+@router.post(
+    "/dhgate/updateproduct",
+    response_model=ApiResponse[DhgateUpdateProductPublic],
+    summary="敦煌商品更新",
+)
+def update_dhgate_product(
+    payload: DhgateUpdateProductRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[DhgateUpdateProductPublic]:
+    """
+    批量更新敦煌商品；items 字段名与官网 API 一致。
+
+    流程：
+    1. 按 supplier_id 加载该供应商下全部已授权敦煌店铺
+    2. 每条 item 用 itemCode 查 product_dh 得到店铺，再取对应 token
+    3. dh.item.get → 按入参官网字段改详情 → dh.item.update 原样提交
+    4. dry_run=false 时同步写回 product_dh，并写入 product_dh_update_log
+       （失败时 error_message 记录官方错误）；dry_run=true 仅试跑不落库
+
+    官方 update 特殊错误：
+    - 含「该产品正在参加促销活动」：下架 → 再更新 → 上架
+    - 含「不可以做修改操作」：无法官方更新；只改本地库，日志保留官网错误并补充本地变更说明
+
+    当前已支持的包装重量字段：
+    itemCode / grossWeight / baseQt / stepQt / stepWeight
+    （对应 itemPackage.grossWeight 与 itemPackage.itemWeigthRange）
+    """
+    data = execute_dhgate_product_updates(
+        db,
+        supplier_id=payload.supplier_id,
+        items=payload.items,
+        dry_run=payload.dry_run,
+        operator_id=payload.operator_id,
+    )
+    return success(data)
+
+
+@router.post(
+    "/dhgate/updateproductfromfile",
+    response_model=ApiResponse[DhgateUpdateProductFromFilePublic],
+    summary="从本地文件中更新商品详情",
+)
+async def update_dhgate_product_from_file(
+    db: Session = Depends(get_db),
+    file: UploadFile = File(..., description="Excel 文件（.xlsx / .xlsm）"),
+    extract_field_info: str = Form(
+        ...,
+        description=(
+            "提取字段映射（JSON 对象）。键=官网 API 字段名，值=列字母。"
+            '示例：{"itemCode":"B","grossWeight":"C","baseQt":"D",'
+            '"stepQt":"E","stepWeight":"F"}'
+        ),
+        examples=[
+            '{"itemCode":"B","grossWeight":"C","baseQt":"D","stepQt":"E","stepWeight":"F"}'
+        ],
+    ),
+    start_row: int = Form(
+        default=2,
+        ge=1,
+        description="开始提取的行号（1 起）。默认 2=跳过表头；无表头时设为 1",
+    ),
+    row_count: int = Form(
+        default=0,
+        ge=0,
+        description="计划提取行数。默认 0=从 start_row 起全部；超出实际数据不报错，只返回有效行",
+    ),
+    sheet_index: int = Form(
+        default=1,
+        ge=0,
+        description="工作表索引：0=读取全部 sheet；1 起为指定 sheet（1=第一个）",
+    ),
+    supplier_id: int = Form(..., description="供应商 ID；将加载该供应商下全部敦煌店铺"),
+    dry_run: bool = Form(
+        default=False,
+        description="true=仅试跑不写敦煌/不落库/不记日志；false=真实更新并同步本地与日志",
+    ),
+    operator_id: int = Form(
+        default=0,
+        ge=0,
+        description="操作人用户 ID；0=系统操作者",
+    ),
+) -> ApiResponse[DhgateUpdateProductFromFilePublic]:
+    """
+    从 Excel 提取后直接更新商品（字段名与官网 API 一致）。
+
+    1. 按 extract_field_info 提取 items（键名=官网字段）
+    2. get 详情 → 改对应字段 → update 原样提交
+    3. 促销中：下架 → 再更新 → 上架；含「不可以做修改操作」：只改本地库并记失败日志
+
+    当前包装重量映射示例：
+    itemCode / grossWeight / baseQt / stepQt / stepWeight
+
+    响应含 extract（提取摘要与跳过明细，不含 items）与 update（成功数 / 失败明细）。
+    """
+    content = await file.read()
+    extract = utils_file_service.extract_rows_from_file(
+        file=file,
+        content=content,
+        extract_field_info=extract_field_info,
+        start_row=start_row,
+        row_count=row_count,
+        sheet_index=sheet_index,
+    )
+    if extract.valid_count <= 0:
+        raise bad_request("Excel 中未解析到有效数据行")
+
+    update = execute_dhgate_product_updates(
+        db,
+        supplier_id=supplier_id,
+        items=extract.items,
+        dry_run=dry_run,
+        operator_id=operator_id,
+    )
+    return success(
+        DhgateUpdateProductFromFilePublic(
+            extract=FileExtractSummaryPublic(
+                row_count=extract.row_count,
+                valid_count=extract.valid_count,
+                skipped_count=extract.skipped_count,
+                skipped_rows=extract.skipped_rows,
+            ),
+            update=update,
+        )
+    )
 
 
 @router.post(

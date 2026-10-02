@@ -1,6 +1,5 @@
-import type { ProColumns } from '@ant-design/pro-components';
+﻿import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { useIntl } from '@umijs/max';
 import {
   Button,
   Input,
@@ -128,16 +127,12 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
   disabled = false,
   onChange,
 }) => {
-  const intl = useIntl();
   const list = skuList || [];
   const priceAttrs = priceSelectedAttrs || [];
   const specs = specSelfDefs || [];
   const unitLabel =
     (measureUnitLabel || '').trim() ||
-    intl.formatMessage({
-      id: 'pages.product.detail.sale.measureFallback',
-      defaultMessage: '件',
-    });
+    '件';
   const priceUnitSuffix = `/${unitLabel}`;
 
   const [batchField, setBatchField] = useState<BatchField>();
@@ -165,14 +160,11 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
     if (hasCustom || cols.length === 0) {
       cols.push({
         key: CUSTOM_SPEC_COL,
-        title: intl.formatMessage({
-          id: 'pages.product.detail.specSku.customSpec',
-          defaultMessage: '自定义规格',
-        }),
+        title: '自定义规格',
       });
     }
     return cols;
-  }, [intl, list, priceAttrs, specs]);
+  }, [list, priceAttrs, specs]);
 
   const { sortedList, resolvedRows } = useMemo(() => {
     const withResolved = list.map((sku, index) => ({
@@ -300,17 +292,11 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
   const saleOptions = [
     {
       value: '1',
-      label: intl.formatMessage({
-        id: 'pages.product.detail.specSku.saleYes',
-        defaultMessage: '可销售',
-      }),
+      label: '可销售',
     },
     {
       value: '0',
-      label: intl.formatMessage({
-        id: 'pages.product.detail.specSku.saleNo',
-        defaultMessage: '不可销售',
-      }),
+      label: '不可销售',
     },
   ];
 
@@ -334,10 +320,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
         <Space size={4} wrap>
           <span>
             <span style={{ color: '#ff4d4f', marginRight: 2 }}>*</span>
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.saleStatus',
-              defaultMessage: '销售状态',
-            })}
+            {'销售状态'}
           </span>
           {!disabled ? (
             <Button
@@ -346,10 +329,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
               style={{ paddingInline: 4 }}
               onClick={() => openBatchModal('sale_status')}
             >
-              {intl.formatMessage({
-                id: 'pages.product.detail.specSku.batchSet',
-                defaultMessage: '批量设置',
-              })}
+              {'批量设置'}
             </Button>
           ) : null}
         </Space>
@@ -372,10 +352,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
         <Space size={4} wrap>
           <span>
             <span style={{ color: '#ff4d4f', marginRight: 2 }}>*</span>
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.retailPrice',
-              defaultMessage: '预计收入',
-            })}
+            {'预计收入'}
           </span>
           {!disabled ? (
             <Button
@@ -384,10 +361,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
               style={{ paddingInline: 4 }}
               onClick={() => openBatchModal('retail_price')}
             >
-              {intl.formatMessage({
-                id: 'pages.product.detail.specSku.batchSet',
-                defaultMessage: '批量设置',
-              })}
+              {'批量设置'}
             </Button>
           ) : null}
         </Space>
@@ -422,10 +396,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
       title: (
         <Space size={4} wrap>
           <span>
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.skuCode',
-              defaultMessage: '商品编码',
-            })}
+            {'商品编码'}
           </span>
           {!disabled ? (
             <Button
@@ -434,10 +405,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
               style={{ paddingInline: 4 }}
               onClick={generateSkuCodes}
             >
-              {intl.formatMessage({
-                id: 'pages.product.detail.specSku.generateCodes',
-                defaultMessage: '一键生成',
-              })}
+              {'一键生成'}
             </Button>
           ) : null}
         </Space>
@@ -462,10 +430,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
     ...attrProColumns,
     batchField === 'sale_status'
       ? {
-          title: intl.formatMessage({
-            id: 'pages.product.detail.specSku.saleStatus',
-            defaultMessage: '销售状态',
-          }),
+          title: '销售状态',
           dataIndex: 'sale_status',
           width: 160,
           search: false,
@@ -481,10 +446,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
           ),
         }
       : {
-          title: intl.formatMessage({
-            id: 'pages.product.detail.specSku.retailPrice',
-            defaultMessage: '预计收入',
-          }),
+          title: '预计收入',
           dataIndex: 'retail_price',
           width: 200,
           search: false,
@@ -529,10 +491,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
           x: Math.max(860, attrColumns.length * 120 + 500),
         }}
         locale={{
-          emptyText: intl.formatMessage({
-            id: 'pages.product.detail.specSku.empty',
-            defaultMessage: '暂无根据规格生成的 SKU',
-          }),
+          emptyText: '暂无根据规格生成的 SKU',
         }}
       />
 
@@ -540,43 +499,25 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
         open={Boolean(batchField)}
         title={
           batchField === 'sale_status'
-            ? intl.formatMessage({
-                id: 'pages.product.detail.specSku.batchSaleTitle',
-                defaultMessage: '批量设置销售状态',
-              })
-            : intl.formatMessage({
-                id: 'pages.product.detail.specSku.batchPriceTitle',
-                defaultMessage: '批量设置预计收入',
-              })
+            ? '批量设置销售状态'
+            : '批量设置预计收入'
         }
         width={880}
         destroyOnHidden
         onCancel={closeBatchModal}
         onOk={confirmBatchModal}
-        okText={intl.formatMessage({
-          id: 'pages.product.detail.specSku.batchConfirm',
-          defaultMessage: '确定',
-        })}
-        cancelText={intl.formatMessage({
-          id: 'pages.product.detail.specSku.batchCancel',
-          defaultMessage: '取消',
-        })}
+        okText={'确定'}
+        cancelText={'取消'}
       >
         <Space style={{ marginBottom: 12 }} wrap>
           <Typography.Text>
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.batchUniform',
-              defaultMessage: '统一设置',
-            })}
+            {'统一设置'}
             :
           </Typography.Text>
           {batchField === 'sale_status' ? (
             <Select
               allowClear
-              placeholder={intl.formatMessage({
-                id: 'pages.product.detail.specSku.saleStatus',
-                defaultMessage: '销售状态',
-              })}
+              placeholder={'销售状态'}
               style={{ width: 160 }}
               options={saleOptions}
               value={
@@ -602,10 +543,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
             />
           )}
           <Button type="primary" onClick={applyUniformToDrafts}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.specSku.batchApplyAll',
-              defaultMessage: '应用到全部',
-            })}
+            {'应用到全部'}
           </Button>
         </Space>
         <ProTable<DhProductSkuPublic>

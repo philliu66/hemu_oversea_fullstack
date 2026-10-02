@@ -1,6 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { useIntl, useModel } from '@umijs/max';
+import { useModel } from '@umijs/max';
 import { App, Button, Image, Space, Typography } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -89,7 +89,6 @@ export function SeedProductSelectTable({
 }: {
   onSelect: (product: DhProductPublic) => void;
 }) {
-  const intl = useIntl();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const supplierId = initialState?.currentUser?.supplier_id;
@@ -113,10 +112,7 @@ export function SeedProductSelectTable({
           message.error(
             error instanceof Error
               ? error.message
-              : intl.formatMessage({
-                  id: 'pages.product.list.loadCategoriesFailed',
-                  defaultMessage: '加载商品分类失败',
-                }),
+              : '加载商品分类失败',
           );
         }
       }
@@ -124,7 +120,7 @@ export function SeedProductSelectTable({
     return () => {
       cancelled = true;
     };
-  }, [intl, message]);
+  }, [message]);
 
   const loadCategoryData: CascaderProps<SeedCategoryOption>['loadData'] = (
     selectedOptions,
@@ -155,10 +151,7 @@ export function SeedProductSelectTable({
         message.error(
           error instanceof Error
             ? error.message
-            : intl.formatMessage({
-                id: 'pages.product.list.loadCategoriesFailed',
-                defaultMessage: '加载商品分类失败',
-              }),
+            : '加载商品分类失败',
         );
       }
     })();
@@ -186,10 +179,7 @@ export function SeedProductSelectTable({
           message.error(
             error instanceof Error
               ? error.message
-              : intl.formatMessage({
-                  id: 'pages.product.list.loadStoresFailed',
-                  defaultMessage: '加载店铺列表失败',
-                }),
+              : '加载店铺列表失败',
           );
         }
       }
@@ -197,7 +187,7 @@ export function SeedProductSelectTable({
     return () => {
       cancelled = true;
     };
-  }, [intl, message, supplierId]);
+  }, [message, supplierId]);
 
   const storeValueEnum = useMemo(
     () =>
@@ -218,50 +208,32 @@ export function SeedProductSelectTable({
         DH_PRODUCT_STATES.map((code) => [
           code,
           {
-            text: intl.formatMessage({
-              id: `pages.product.list.state.${code}`,
-              defaultMessage: DH_PRODUCT_STATE_LABEL[code],
-            }),
+            text: DH_PRODUCT_STATE_LABEL[code],
           },
         ]),
       ),
-    [intl],
+    [],
   );
 
   const columns: ProColumns<DhProductPublic>[] = [
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.itemCode',
-        defaultMessage: '商品编码',
-      }),
+      title: '商品编码',
       dataIndex: 'item_code',
       hideInTable: true,
       fieldProps: {
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.itemCodePlaceholder',
-          defaultMessage: '精确匹配',
-        }),
+        placeholder: '精确匹配',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.itemName',
-        defaultMessage: '商品标题',
-      }),
+      title: '商品标题',
       dataIndex: 'item_name',
       hideInTable: true,
       fieldProps: {
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.itemNamePlaceholder',
-          defaultMessage: '模糊匹配',
-        }),
+        placeholder: '模糊匹配',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.category',
-        defaultMessage: '商品分类',
-      }),
+      title: '商品分类',
       dataIndex: 'cate_pub_id',
       hideInTable: true,
       valueType: 'cascader',
@@ -270,18 +242,12 @@ export function SeedProductSelectTable({
         loadData: loadCategoryData,
         changeOnSelect: true,
         allowClear: true,
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.categoryPlaceholder',
-          defaultMessage: '全部',
-        }),
+        placeholder: '全部',
         styles: { popup: { listItem: { width: 180, maxWidth: 180 } } },
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.store',
-        defaultMessage: '店铺',
-      }),
+      title: '店铺',
       dataIndex: 'store_id',
       hideInTable: true,
       valueType: 'select',
@@ -290,34 +256,22 @@ export function SeedProductSelectTable({
         allowClear: true,
         showSearch: true,
         optionFilterProp: 'label',
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.storePlaceholder',
-          defaultMessage: '请选择店铺',
-        }),
+        placeholder: '请选择店铺',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.state',
-        defaultMessage: '状态',
-      }),
+      title: '状态',
       dataIndex: 'state',
       hideInTable: true,
       valueType: 'select',
       valueEnum: stateValueEnum,
       fieldProps: {
         allowClear: true,
-        placeholder: intl.formatMessage({
-          id: 'pages.product.list.field.statePlaceholder',
-          defaultMessage: '请选择状态',
-        }),
+        placeholder: '请选择状态',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.product',
-        defaultMessage: '商品',
-      }),
+      title: '商品',
       dataIndex: 'product',
       search: false,
       width: 320,
@@ -361,10 +315,7 @@ export function SeedProductSelectTable({
       ),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.store',
-        defaultMessage: '店铺',
-      }),
+      title: '店铺',
       dataIndex: 'store_name',
       search: false,
       width: 140,
@@ -372,10 +323,7 @@ export function SeedProductSelectTable({
       render: (_, record) => record.store_name || '-',
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.state',
-        defaultMessage: '状态',
-      }),
+      title: '状态',
       dataIndex: 'state',
       search: false,
       width: 140,
@@ -383,41 +331,26 @@ export function SeedProductSelectTable({
       render: (_, record) => record.state || '-',
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.detail.field.syncState',
-        defaultMessage: '同步状态',
-      }),
+      title: '同步状态',
       dataIndex: 'sync_state',
       search: false,
       width: 100,
       render: (_, record) =>
         formatSyncState(
           record.sync_state,
-          intl.formatMessage({
-            id: 'pages.product.detail.sync.success',
-            defaultMessage: '成功',
-          }),
-          intl.formatMessage({
-            id: 'pages.product.detail.sync.fail',
-            defaultMessage: '失败',
-          }),
+          '成功',
+          '失败',
         ),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.lastSyncedAt',
-        defaultMessage: '同步时间',
-      }),
+      title: '同步时间',
       dataIndex: 'last_synced_at',
       search: false,
       width: 168,
       render: (_, record) => formatDateTime(record.last_synced_at),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.product.list.field.option',
-        defaultMessage: '操作',
-      }),
+      title: '操作',
       dataIndex: 'option',
       valueType: 'option',
       search: false,
@@ -425,10 +358,7 @@ export function SeedProductSelectTable({
       fixed: 'right',
       render: (_, record) => [
         <Button type="link" key="select" onClick={() => onSelect(record)}>
-          {intl.formatMessage({
-            id: 'pages.mission.add.select',
-            defaultMessage: '选择',
-          })}
+          {'选择'}
         </Button>,
       ],
     },
@@ -437,10 +367,7 @@ export function SeedProductSelectTable({
   return (
     <div onSubmit={(event) => event.stopPropagation()}>
       <ProTable<DhProductPublic, ProductTableParams>
-        headerTitle={intl.formatMessage({
-          id: 'pages.product.list.title',
-          defaultMessage: '商品列表',
-        })}
+        headerTitle={'商品列表'}
         actionRef={actionRef}
         rowKey="id"
         size="middle"
@@ -455,14 +382,7 @@ export function SeedProductSelectTable({
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,
           showSizeChanger: true,
-          showTotal: (total) =>
-            intl.formatMessage(
-              {
-                id: 'pages.product.list.total',
-                defaultMessage: '共 {total} 条',
-              },
-              { total },
-            ),
+          showTotal: (total) => `共 ${total} 条`,
         }}
         columns={columns}
         request={async (params) => {

@@ -4,7 +4,6 @@ import {
   DeleteOutlined,
   EditOutlined,
 } from '@ant-design/icons';
-import { useIntl } from '@umijs/max';
 import { Checkbox, Input } from 'antd';
 import React from 'react';
 
@@ -39,8 +38,6 @@ const EditableOptionChip: React.FC<EditableOptionChipProps> = ({
   onCancelEdit,
   onDelete,
 }) => {
-  const intl = useIntl();
-
   return (
     <span
       style={{
@@ -86,18 +83,12 @@ const EditableOptionChip: React.FC<EditableOptionChipProps> = ({
         <>
           <EditOutlined
             style={{ color: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
-            title={intl.formatMessage({
-              id: 'pages.product.detail.specAttrs.edit',
-              defaultMessage: '编辑',
-            })}
+            title={'编辑'}
             onClick={() => onStartEdit?.()}
           />
           <DeleteOutlined
             style={{ color: 'rgba(0,0,0,0.45)', cursor: 'pointer' }}
-            title={intl.formatMessage({
-              id: 'pages.product.detail.specAttrs.delete',
-              defaultMessage: '删除',
-            })}
+            title={'删除'}
             onClick={() => onDelete?.()}
           />
         </>

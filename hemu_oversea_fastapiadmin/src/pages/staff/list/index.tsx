@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useAccess, useIntl, useModel } from '@umijs/max';
+import { useAccess, useModel } from '@umijs/max';
 import { App, Button, Popconfirm, Space, Tag } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
@@ -21,7 +21,6 @@ type StaffTableParams = {
 };
 
 const StaffListPage: React.FC = () => {
-  const intl = useIntl();
   const access = useAccess();
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
@@ -46,63 +45,42 @@ const StaffListPage: React.FC = () => {
 
   const columns: ProColumns<UserPublic>[] = [
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.keyword',
-        defaultMessage: '关键词',
-      }),
+      title: '关键词',
       dataIndex: 'keyword',
       hideInTable: true,
       fieldProps: {
-        placeholder: intl.formatMessage({
-          id: 'pages.staff.field.keywordPlaceholder',
-          defaultMessage: '账号 / 昵称 / 邮箱 / 手机号',
-        }),
+        placeholder: '账号 / 昵称 / 邮箱 / 手机号',
       },
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.username',
-        defaultMessage: '账号',
-      }),
+      title: '账号',
       dataIndex: 'username',
       search: false,
       width: 140,
       ellipsis: true,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.nickname',
-        defaultMessage: '昵称',
-      }),
+      title: '昵称',
       dataIndex: 'nickname',
       search: false,
       width: 120,
       ellipsis: true,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.email',
-        defaultMessage: '邮箱',
-      }),
+      title: '邮箱',
       dataIndex: 'email',
       search: false,
       ellipsis: true,
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.phone',
-        defaultMessage: '手机号',
-      }),
+      title: '手机号',
       dataIndex: 'phone',
       search: false,
       width: 140,
       render: (_, record) => record.phone || '-',
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.roles',
-        defaultMessage: '角色',
-      }),
+      title: '角色',
       dataIndex: 'roles',
       search: false,
       width: 160,
@@ -113,45 +91,30 @@ const StaffListPage: React.FC = () => {
           : '-',
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.status',
-        defaultMessage: '状态',
-      }),
+      title: '状态',
       dataIndex: 'is_active',
       search: false,
       width: 100,
       render: (_, record) =>
         record.is_active ? (
           <Tag color="success">
-            {intl.formatMessage({
-              id: 'pages.account.status.active',
-              defaultMessage: '启用',
-            })}
+            {'启用'}
           </Tag>
         ) : (
           <Tag>
-            {intl.formatMessage({
-              id: 'pages.account.status.inactive',
-              defaultMessage: '停用',
-            })}
+            {'停用'}
           </Tag>
         ),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.createdAt',
-        defaultMessage: '创建时间',
-      }),
+      title: '创建时间',
       dataIndex: 'created_at',
       search: false,
       width: 180,
       render: (_, record) => formatDateTime(record.created_at),
     },
     {
-      title: intl.formatMessage({
-        id: 'pages.staff.field.option',
-        defaultMessage: '操作',
-      }),
+      title: '操作',
       dataIndex: 'option',
       valueType: 'option',
       search: false,
@@ -161,22 +124,14 @@ const StaffListPage: React.FC = () => {
         <Space size={0} wrap>
           {canUpdate ? (
             <Button type="link" onClick={() => openEdit(record)}>
-              {intl.formatMessage({
-                id: 'pages.staff.action.edit',
-                defaultMessage: '编辑',
-              })}
+              {'编辑'}
             </Button>
           ) : null}
           {canUpdate ? (
             <Popconfirm
-              title={intl.formatMessage({
-                id: record.is_active
-                  ? 'pages.staff.disable.confirm'
-                  : 'pages.staff.enable.confirm',
-                defaultMessage: record.is_active
-                  ? '确认停用该员工？'
-                  : '确认启用该员工？',
-              })}
+              title={
+                record.is_active ? '确认停用该员工？' : '确认启用该员工？'
+              }
               onConfirm={async () => {
                 try {
                   await updateStaffStatus(portalRole, {
@@ -184,10 +139,7 @@ const StaffListPage: React.FC = () => {
                     is_active: !record.is_active,
                   });
                   message.success(
-                    intl.formatMessage({
-                      id: 'pages.staff.status.success',
-                      defaultMessage: '状态已更新',
-                    }),
+                    '状态已更新',
                   );
                   actionRef.current?.reload();
                 } catch {
@@ -196,29 +148,18 @@ const StaffListPage: React.FC = () => {
               }}
             >
               <Button type="link">
-                {intl.formatMessage({
-                  id: record.is_active
-                    ? 'pages.staff.action.disable'
-                    : 'pages.staff.action.enable',
-                  defaultMessage: record.is_active ? '停用' : '启用',
-                })}
+                {record.is_active ? '停用' : '启用'}
               </Button>
             </Popconfirm>
           ) : null}
           {canDelete ? (
             <Popconfirm
-              title={intl.formatMessage({
-                id: 'pages.staff.delete.confirm',
-                defaultMessage: '确认删除该员工？删除后不可登录。',
-              })}
+              title={'确认删除该员工？删除后不可登录。'}
               onConfirm={async () => {
                 try {
                   await deleteStaff(portalRole, record.id);
                   message.success(
-                    intl.formatMessage({
-                      id: 'pages.staff.delete.success',
-                      defaultMessage: '删除成功',
-                    }),
+                    '删除成功',
                   );
                   actionRef.current?.reload();
                 } catch {
@@ -227,10 +168,7 @@ const StaffListPage: React.FC = () => {
               }}
             >
               <Button type="link" danger>
-                {intl.formatMessage({
-                  id: 'pages.staff.action.delete',
-                  defaultMessage: '删除',
-                })}
+                {'删除'}
               </Button>
             </Popconfirm>
           ) : null}
@@ -242,10 +180,7 @@ const StaffListPage: React.FC = () => {
   return (
     <PageContainer>
       <ProTable<UserPublic, StaffTableParams>
-        headerTitle={intl.formatMessage({
-          id: 'pages.staff.list.title',
-          defaultMessage: '员工管理',
-        })}
+        headerTitle={'员工管理'}
         actionRef={actionRef}
         rowKey="id"
         search={{ labelWidth: 'auto' }}
@@ -263,10 +198,7 @@ const StaffListPage: React.FC = () => {
                   icon={<PlusOutlined />}
                   onClick={openCreate}
                 >
-                  {intl.formatMessage({
-                    id: 'pages.staff.action.create',
-                    defaultMessage: '新建员工',
-                  })}
+                  {'新建员工'}
                 </Button>,
               ]
             : []

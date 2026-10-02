@@ -106,7 +106,7 @@ class DhCommissionUnitPublic(BaseModel):
 class DhCommissionRatePublic(BaseModel):
     """类目佣金率（对应 LadderCommissionRateVO / commissions_rate_dh）。
 
-    官方按二级类目绑定，cate_id 为二级类目 ID。
+    官方按二级类目绑定；当前查询接口暂固定返回美容仪（018003）。
     """
 
     cate_id: str = Field(description="二级类目 ID cateId")
@@ -121,8 +121,8 @@ class DhCommissionRateRequest(BaseModel):
         min_length=1,
         max_length=64,
         description=(
-            "二级类目 ID（catePubId / cateId）；"
-            "必须传类目路径中的第二级，勿传一级或叶子类目"
+            "二级类目 ID（兼容前端传入）；"
+            "当前后端暂忽略该值，固定按美容仪类目 018003 查询"
         ),
     )
 

@@ -165,23 +165,23 @@ def test_product_sync(
 async def test_product_sync_from_file(
     db: Session = Depends(get_db),
     file: UploadFile = File(..., description="Excel 文件（.xlsx / .xlsm）"),
-    store_col: str = Form(
-        ...,
-        min_length=1,
-        max_length=3,
-        description="店铺标识列字母索引，如 A",
-        examples=["A"],
+    extract_field_info: str = Form(
+        default='{"store_identifier":"A","item_code":"B"}',
+        description=(
+            "提取字段映射（JSON）。默认同步场景："
+            '{"store_identifier":"A","item_code":"B"}'
+        ),
+        examples=['{"store_identifier":"A","item_code":"B"}'],
     ),
-    item_code_col: str = Form(
-        ...,
-        min_length=1,
-        max_length=3,
-        description="商品 item_code 列字母索引，如 B",
-        examples=["B"],
+    start_row: int = Form(
+        default=2,
+        ge=1,
+        description="开始提取的行号（1 起）。默认 2=跳过表头；无表头时设为 1",
     ),
-    has_header: bool = Form(
-        default=True,
-        description="是否含表头：true 跳过第一行（默认），false 从第一行起读",
+    row_count: int = Form(
+        default=0,
+        ge=0,
+        description="计划提取行数。默认 0=全部；超出实际数据不报错",
     ),
     sheet_index: int = Form(
         default=1,
@@ -197,26 +197,33 @@ async def test_product_sync_from_file(
 ) -> ApiResponse[dict[str, Any]]:
     """
     合并流程：
-    1. 按 getdatafromfile 相同参数从 Excel 提取 items
+    1. 按 getdatafromfile 相同方式从 Excel 提取 items
+       （须包含 store_identifier / item_code）
     2. is_autocheck=0：对全部提取行执行同步入库
     3. is_autocheck=1：先检查 item_code（按店铺）是否已在 product_dh，
        仅对遗漏项自动落库，并返回遗漏明细
 
     响应仅返回简要统计：成功数、失败数、遗漏补充数及遗漏列表。
     """
+    field_map = utils_file_service.parse_extract_field_info(extract_field_info)
+    if "store_identifier" not in field_map or "item_code" not in field_map:
+        raise bad_request(
+            "extract_field_info 须包含 store_identifier 与 item_code 两列映射"
+        )
+
     content = await file.read()
-    extract = utils_file_service.extract_product_sync_rows_from_file(
+    extract = utils_file_service.extract_rows_from_file(
         file=file,
-        store_col=store_col,
-        item_code_col=item_code_col,
         content=content,
-        has_header=has_header,
+        extract_field_info=field_map,
+        start_row=start_row,
+        row_count=row_count,
         sheet_index=sheet_index,
     )
-    if extract.row_count <= 0:
+    if extract.valid_count <= 0:
         raise bad_request("Excel 中未解析到有效的店铺标识与商品编码")
 
-    all_items = [row.model_dump() for row in extract.items]
+    all_items = list(extract.items)
     missing_items: list[dict[str, str]] = []
     if is_autocheck == 1:
         missing_items = find_missing_product_sync_items(db, items=all_items)

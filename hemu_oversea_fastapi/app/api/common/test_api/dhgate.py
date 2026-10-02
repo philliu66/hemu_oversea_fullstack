@@ -31,6 +31,7 @@ from app.schemas.test_api.dhgate import (
     ItemFissionAddTestRequest,
     ItemGetTestRequest,
     ItemGroupListTestRequest,
+    ItemShelfTestRequest,
     MeasuresListTestRequest,
     PunishBrandListTestRequest,
     PunishListTestRequest,
@@ -39,6 +40,7 @@ from app.schemas.test_api.dhgate import (
 from app.services.commission_rates_dh import sync_commission_rates_dh
 from app.services.dhgate import (
     DhgateClient,
+    downshelf_items,
     fission_add_item,
     get_category,
     get_category_path,
@@ -51,6 +53,7 @@ from app.services.dhgate import (
     list_punish_brand,
     list_shipping_templates,
     tweak_and_upload_main_image,
+    upshelf_items,
 )
 from app.services.measures_units_dh import sync_measures_units_dh
 from app.services.product_categories_dh import sync_product_categories_dh
@@ -262,6 +265,49 @@ def test_get_item(
         site_id=payload.site_id,
     )
     return success_with_dhgate_raw(client, data)
+
+
+@router.post(
+    "/item/shelf",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调] 商品上架/下架（dh.item.upshelf.list / downshelf.list）",
+)
+def test_item_shelf(
+    payload: ItemShelfTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    按 action 调用敦煌批量上架或下架。
+
+    - action=0：dh.item.downshelf.list$2.0 下架
+    - action=1：dh.item.upshelf.list$2.0 上架
+    - item_codes：多个产品编码用英文半角逗号分隔，最多 200 个
+    """
+    client = _test_client(db, payload.store_id)
+    if payload.action == 0:
+        data = downshelf_items(
+            client,
+            item_codes=payload.item_codes,
+            site_id=payload.site_id,
+        )
+        action_name = "downshelf"
+    else:
+        data = upshelf_items(
+            client,
+            item_codes=payload.item_codes,
+            site_id=payload.site_id,
+        )
+        action_name = "upshelf"
+    return success_with_dhgate_raw(
+        client,
+        {
+            "action": payload.action,
+            "action_name": action_name,
+            "item_codes": payload.item_codes,
+            "site_id": payload.site_id,
+            "dhgate": data,
+        },
+    )
 
 
 @router.post(

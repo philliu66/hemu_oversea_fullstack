@@ -1,4 +1,3 @@
-import { useIntl } from '@umijs/max';
 import { App, Button, Checkbox, Input, InputNumber, Select, Space } from 'antd';
 import React, { useEffect, useState } from 'react';
 import type {
@@ -508,7 +507,6 @@ function draftsToSelectedAttrs(
 }
 
 function renderCustomEditor(
-  intl: ReturnType<typeof useIntl>,
   customLabel: string,
   value: string,
   onChange: (value: string) => void,
@@ -525,16 +523,10 @@ function renderCustomEditor(
   const hasNamedRows = (rows?.length || 0) > 0;
   const namePlaceholder =
     options?.namePlaceholder ||
-    intl.formatMessage({
-      id: 'pages.product.detail.attrsCustomNamePlaceholder',
-      defaultMessage: '请输入属性名',
-    });
+    '请输入属性名';
   const valuePlaceholder =
     options?.valuePlaceholder ||
-    intl.formatMessage({
-      id: 'pages.product.detail.attrsCustomValuePlaceholder',
-      defaultMessage: '请输入属性值',
-    });
+    '请输入属性值';
   const editorDisabled = Boolean(options?.disabled);
 
   if (options?.singleMode && !hasNamedRows) {
@@ -572,16 +564,10 @@ function renderCustomEditor(
       <thead>
         <tr>
           <th style={{ ...headPad, width: 200 }}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.attrsCustomParam',
-              defaultMessage: '默认参数',
-            })}
+            {'默认参数'}
           </th>
           <th style={headPad}>
-            {intl.formatMessage({
-              id: 'pages.product.detail.attrsCustomContent',
-              defaultMessage: '自定义内容',
-            })}
+            {'自定义内容'}
           </th>
         </tr>
       </thead>
@@ -668,7 +654,6 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
   onValuePicChange,
 }) => {
   const changedAttrIdSet = new Set((changedAttrIds || []).map(String));
-  const intl = useIntl();
   const { message } = App.useApp();
   const [drafts, setDrafts] = useState<Record<string, AttrDraft>>({});
   /** 规格「添加」输入框草稿（按 attr_id） */
@@ -747,34 +732,13 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
       return next;
     });
   };
-  const selectAllText = intl.formatMessage({
-    id: 'pages.product.detail.attrsSelectAll',
-    defaultMessage: '全选',
-  });
-  const customLabel = intl.formatMessage({
-    id: 'pages.product.detail.attrsCustom',
-    defaultMessage: '自定义',
-  });
-  const placeholder = intl.formatMessage({
-    id: 'pages.product.detail.attrsPlaceholder',
-    defaultMessage: '请选择',
-  });
-  const brandCustomPlaceholder = intl.formatMessage({
-    id: 'pages.product.detail.attrsBrandCustomPlaceholder',
-    defaultMessage: '请输入自定义品牌',
-  });
-  const customValuePlaceholder = intl.formatMessage({
-    id: 'pages.product.detail.attrsCustomValuePlaceholder',
-    defaultMessage: '请输入属性值',
-  });
-  const addButtonText = intl.formatMessage({
-    id: 'pages.product.detail.specAttrs.add',
-    defaultMessage: '添加',
-  });
-  const addValuePlaceholder = intl.formatMessage({
-    id: 'pages.product.detail.attrsCustomAddPlaceholder',
-    defaultMessage: '请输入自定义属性值',
-  });
+  const selectAllText = '全选';
+  const customLabel = '自定义';
+  const placeholder = '请选择';
+  const brandCustomPlaceholder = '请输入自定义品牌';
+  const customValuePlaceholder = '请输入属性值';
+  const addButtonText = '添加';
+  const addValuePlaceholder = '请输入自定义属性值';
 
   const handleAddCustomValue = (attr: DhCategoryAttrPublic) => {
     if (disabled) {
@@ -783,10 +747,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
     const label = (addInputs[attr.attr_id] || '').trim();
     if (!label) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.nameRequired',
-          defaultMessage: '请输入规格名称',
-        }),
+        '请输入规格名称',
       );
       return;
     }
@@ -800,10 +761,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
       ) || builtinLabels.has(label.toLowerCase());
     if (exists) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.nameDuplicate',
-          defaultMessage: '规格名称已存在',
-        }),
+        '规格名称已存在',
       );
       return;
     }
@@ -849,10 +807,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
     const name = editingCustomName.trim();
     if (!name) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.nameRequired',
-          defaultMessage: '请输入规格名称',
-        }),
+        '请输入规格名称',
       );
       return;
     }
@@ -869,10 +824,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
       );
     if (duplicate) {
       message.warning(
-        intl.formatMessage({
-          id: 'pages.product.detail.specAttrs.nameDuplicate',
-          defaultMessage: '规格名称已存在',
-        }),
+        '规格名称已存在',
       );
       return;
     }
@@ -889,7 +841,6 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
   ) => {
     const isBrand = attr.is_brand === '1';
     return renderCustomEditor(
-      intl,
       customLabel,
       draft.customText,
       (value) => patchDraft(attr.attr_id, { customText: value }),
@@ -1287,10 +1238,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                                 width: 120,
                               }}
                             >
-                              {intl.formatMessage({
-                                id: 'pages.product.detail.specAttrs.customPic',
-                                defaultMessage: '自定义图片（无图可忽略）',
-                              })}
+                              {'自定义图片（无图可忽略）'}
                             </th>
                           </tr>
                         </thead>
@@ -1335,10 +1283,7 @@ const CategoryAttrsFields: React.FC<CategoryAttrsCardProps> = ({
                                           });
                                         }}
                                       >
-                                        {intl.formatMessage({
-                                          id: 'pages.product.detail.specAttrs.delete',
-                                          defaultMessage: '删除',
-                                        })}
+                                        {'删除'}
                                       </Button>
                                     ) : null}
                                   </Space>
