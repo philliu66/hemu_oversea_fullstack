@@ -131,7 +131,7 @@ export async function fetchDhCategorySearch(
 }
 
 /** POST /api/v1/admin/categories/dh/commission-rate/get
- * 按二级类目 ID 查询佣金率；cateId 必须传类目路径第二级，勿传一级或叶子类目。
+ * 查询类目佣金率；当前业务暂固定传参考定价类目 ID（000000）。
  */
 export async function fetchDhCommissionRate(
   cateId: string,

@@ -18,6 +18,7 @@ from app.models.product_dh_update_log import ProductDhUpdateLog
 from app.models.product_group_dh import ProductGroupDh
 from app.models.refresh_session import RefreshSession
 from app.models.shipping_template_dh import ShippingTemplateDh
+from app.models.sku_base_price_dh import SkuBasePriceDh
 from app.models.store import Store
 from app.models.supplier import Supplier
 from app.models.user import User
@@ -41,6 +42,7 @@ __all__ = [
     "RefreshSession",
     "RolePermission",
     "ShippingTemplateDh",
+    "SkuBasePriceDh",
     "Store",
     "Supplier",
     "SupplierPermission",

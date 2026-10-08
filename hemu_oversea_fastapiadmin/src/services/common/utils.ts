@@ -3,6 +3,7 @@ import { CommonUtilsApi } from '@/constants/api';
 import type {
   ApiResponse,
   DhMeasuresUnitPublic,
+  DhSkuBasePricePublic,
   DhgateImgInfoPublic,
   DhgateTweakImgParams,
   DhgateTweakImgPublic,
@@ -98,5 +99,27 @@ export async function fetchDhMeasuresUnitList(options?: RequestOptions) {
   return requireData(
     unwrapApiData<DhMeasuresUnitPublic[]>(res),
     '获取计件单位列表失败',
+  );
+}
+
+/** GET /api/v1/common/utils/dhgate/getskubaseprice */
+export async function fetchDhSkuBasePrice(
+  params: { supplier_id: number; sku_code: string },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<DhSkuBasePricePublic>>(
+    CommonUtilsApi.DHGATE_GET_SKU_BASE_PRICE,
+    {
+      method: 'GET',
+      params: {
+        supplier_id: params.supplier_id,
+        sku_code: params.sku_code,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhSkuBasePricePublic>(res),
+    '获取 SKU 基础价格失败',
   );
 }

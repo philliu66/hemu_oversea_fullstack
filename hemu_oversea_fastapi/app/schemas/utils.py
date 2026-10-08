@@ -1,5 +1,7 @@
 """全局工具类接口相关请求 / 响应。"""
 
+from decimal import Decimal
+
 from pydantic import BaseModel, Field
 
 
@@ -125,3 +127,41 @@ class DhgateUpdateProductFromFilePublic(BaseModel):
         description="文件提取摘要（不含 items）"
     )
     update: DhgateUpdateProductPublic = Field(description="商品更新结果")
+
+
+class DhgateUpdateSkuBasePriceFailedItem(BaseModel):
+    sku_code: str = Field(default="", description="SKU 编码型号")
+    error_message: str = Field(description="失败原因")
+
+
+class DhgateUpdateSkuBasePricePublic(BaseModel):
+    """批量写入 sku_base_price_dh 的结果。"""
+
+    supplier_id: int = Field(description="供应商 ID")
+    updated_by: int = Field(description="更新用户 ID；0=系统")
+    success_count: int = Field(description="成功写入条数（新建 + 更新）")
+    created_count: int = Field(description="新建条数")
+    updated_count: int = Field(description="更新条数")
+    failed_count: int = Field(description="失败条数")
+    failed_items: list[DhgateUpdateSkuBasePriceFailedItem] = Field(
+        default_factory=list,
+        description="失败明细",
+    )
+
+
+class DhgateUpdateSkuBasePriceFromFilePublic(BaseModel):
+    """从 Excel 提取后批量更新 SKU 基础价格的合并结果。"""
+
+    extract: FileExtractSummaryPublic = Field(
+        description="文件提取摘要（不含 items）"
+    )
+    update: DhgateUpdateSkuBasePricePublic = Field(description="基础价格写入结果")
+
+
+class DhSkuBasePricePublic(BaseModel):
+    """sku_base_price_dh 单条基础价格。"""
+
+    supplier_id: int = Field(description="供应商 ID")
+    sku_code: str = Field(description="SKU 编码型号")
+    sku_series: str = Field(description="SKU 产品系列")
+    unit_price: Decimal = Field(description="单元价格（美元）")

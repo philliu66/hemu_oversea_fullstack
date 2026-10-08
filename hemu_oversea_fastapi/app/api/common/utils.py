@@ -1,6 +1,6 @@
 """全局工具类接口（common:utils）。"""
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
 
 # from app.core.deps import get_current_account
@@ -9,11 +9,13 @@ from app.core.errors import bad_request
 from app.schemas.common import ApiResponse, success
 from app.schemas.product import DhMeasuresUnitPublic
 from app.schemas.utils import (
+    DhSkuBasePricePublic,
     DhgateImgInfoPublic,
     DhgateTweakImgPublic,
     DhgateUpdateProductFromFilePublic,
     DhgateUpdateProductPublic,
     DhgateUpdateProductRequest,
+    DhgateUpdateSkuBasePriceFromFilePublic,
     FileExtractPublic,
     FileExtractSummaryPublic,
 )
@@ -25,6 +27,12 @@ from app.services.dhgate import (
 )
 from app.services.measures_units_dh import list_measures_units_dh
 from app.services.product_package_weight import execute_dhgate_product_updates
+from app.services.sku_base_prices_dh import (
+    DEFAULT_SUPPLIER_ID,
+    DEFAULT_UPDATED_BY,
+    get_sku_base_price,
+    upsert_sku_base_prices_from_items,
+)
 
 router = APIRouter(
     prefix="/utils",
@@ -221,6 +229,79 @@ async def update_dhgate_product_from_file(
 
 
 @router.post(
+    "/dhgate/updateskubasepricefromfile",
+    response_model=ApiResponse[DhgateUpdateSkuBasePriceFromFilePublic],
+    summary="从本地文件中更新 SKU 基础价格表",
+)
+async def update_dhgate_sku_base_price_from_file(
+    db: Session = Depends(get_db),
+    file: UploadFile = File(..., description="Excel 文件（.xlsx / .xlsm）"),
+    extract_field_info: str = Form(
+        ...,
+        description=(
+            "提取字段映射（JSON 对象）。键=表字段名，值=列字母。"
+            '示例：{"sku_code":"A","sku_series":"B","unit_price":"C"}'
+        ),
+        examples=['{"sku_code":"A","sku_series":"B","unit_price":"C"}'],
+    ),
+    start_row: int = Form(
+        default=2,
+        ge=1,
+        description="开始提取的行号（1 起）。默认 2=跳过表头；无表头时设为 1",
+    ),
+    row_count: int = Form(
+        default=0,
+        ge=0,
+        description="计划提取行数。默认 0=从 start_row 起全部；超出实际数据不报错，只返回有效行",
+    ),
+    sheet_index: int = Form(
+        default=1,
+        ge=0,
+        description="工作表索引：0=读取全部 sheet；1 起为指定 sheet（1=第一个）",
+    ),
+) -> ApiResponse[DhgateUpdateSkuBasePriceFromFilePublic]:
+    """
+    从 Excel 提取后批量 upsert sku_base_price_dh。
+
+    1. 按 extract_field_info 提取行（键名：sku_code / sku_series / unit_price）
+    2. 自动去掉售价前缀 `$` 等货币符号后写入 unit_price
+    3. 按 supplier_id + sku_code 新建或更新；本接口写死 supplier_id=4、updated_by=0（系统）
+
+    截图价格表映射示例：
+    {"sku_code":"A","sku_series":"B","unit_price":"C"}
+    """
+    content = await file.read()
+    extract = utils_file_service.extract_rows_from_file(
+        file=file,
+        content=content,
+        extract_field_info=extract_field_info,
+        start_row=start_row,
+        row_count=row_count,
+        sheet_index=sheet_index,
+    )
+    if extract.valid_count <= 0:
+        raise bad_request("Excel 中未解析到有效数据行")
+
+    update = upsert_sku_base_prices_from_items(
+        db,
+        items=extract.items,
+        supplier_id=DEFAULT_SUPPLIER_ID,
+        updated_by=DEFAULT_UPDATED_BY,
+    )
+    return success(
+        DhgateUpdateSkuBasePriceFromFilePublic(
+            extract=FileExtractSummaryPublic(
+                row_count=extract.row_count,
+                valid_count=extract.valid_count,
+                skipped_count=extract.skipped_count,
+                skipped_rows=extract.skipped_rows,
+            ),
+            update=update,
+        )
+    )
+
+
+@router.post(
     "/dhgate/uploadimg",
     response_model=ApiResponse[DhgateImgInfoPublic],
     summary="上传图片到敦煌相册（dh.album.img.upload$2.1）",
@@ -317,3 +398,25 @@ def get_dhgate_measures_unit_list(
     数据由 testAPI dh.base.measures.get 同步入库，本接口不请求敦煌。
     """
     return success(list_measures_units_dh(db, valid_only=True))
+
+
+@router.get(
+    "/dhgate/getskubaseprice",
+    response_model=ApiResponse[DhSkuBasePricePublic],
+    summary="查询供应商下指定 SKU 型号的基础价格",
+)
+def get_dhgate_sku_base_price(
+    db: Session = Depends(get_db),
+    supplier_id: int = Query(..., ge=1, description="供应商 ID"),
+    sku_code: str = Query(..., min_length=1, description="SKU 规格编码型号"),
+) -> ApiResponse[DhSkuBasePricePublic]:
+    """
+    按 supplier_id + sku_code 查询 sku_base_price_dh，返回 unit_price 等字段。
+    """
+    return success(
+        get_sku_base_price(
+            db,
+            supplier_id=supplier_id,
+            sku_code=sku_code,
+        )
+    )

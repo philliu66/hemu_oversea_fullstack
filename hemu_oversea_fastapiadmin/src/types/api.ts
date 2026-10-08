@@ -443,6 +443,14 @@ export type DhMeasuresUnitPublic = {
   plural?: string | null;
 };
 
+/** 敦煌 SKU 基础价格（sku_base_price_dh） */
+export type DhSkuBasePricePublic = {
+  supplier_id: number;
+  sku_code: string;
+  sku_series: string;
+  unit_price: string | number;
+};
+
 export type DhItemWeightRangePublic = {
   base_qt?: number | null;
   step_qt?: number | null;

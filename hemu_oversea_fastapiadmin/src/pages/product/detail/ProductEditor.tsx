@@ -75,7 +75,9 @@ import CategorySelectField, {
   formatCategoryPathDisplay,
 } from './CategorySelectField';
 import './changedHighlight.css';
-import CommissionRateHint from './CommissionRateHint';
+import CommissionRateHint, {
+  REF_PRICING_CATE_ID,
+} from './CommissionRateHint';
 import ProductImagesEditor from './ProductImagesEditor';
 import SpecAttrsFields from './SpecAttrsFields';
 import SpecSkuTable from './SpecSkuTable';
@@ -398,10 +400,6 @@ export function ProductEditor({
     useState<StoreBaseDiscountPublic | null>(null);
   const [storeBaseDiscountLoading, setStoreBaseDiscountLoading] =
     useState(false);
-  /** 二级类目 catePubId；佣金率接口必须用二级类目 ID */
-  const [secondLevelCatePubId, setSecondLevelCatePubId] = useState<
-    string | undefined
-  >();
   const itemGroupLoadedRef = useRef(false);
   const categoryAttrsReqRef = useRef(0);
   const commissionRateReqRef = useRef(0);
@@ -451,7 +449,6 @@ export function ProductEditor({
     setLoading(true);
     setDetail(undefined);
     setCategoryPath(undefined);
-    setSecondLevelCatePubId(undefined);
     setCategoryAttrs([]);
     setCategoryAttrsLoading(false);
     categoryAttrsReqRef.current += 1;
@@ -506,8 +503,6 @@ export function ProductEditor({
                   (item) => item.cate_pub_id,
                 ),
               });
-              // 佣金率按二级类目绑定：取路径第二级节点
-              setSecondLevelCatePubId(pathData.path_items[1]?.cate_pub_id);
             } catch (pathError) {
               if (cancelled) {
                 return;
@@ -520,7 +515,6 @@ export function ProductEditor({
               form.setFieldsValue({
                 category_path: fallbackId ? [fallbackId] : undefined,
               });
-              setSecondLevelCatePubId(undefined);
               message.error(
                 pathError instanceof Error
                   ? pathError.message
@@ -530,7 +524,6 @@ export function ProductEditor({
           })();
         } else {
           setCategoryPath(undefined);
-          setSecondLevelCatePubId(undefined);
           setCategoryAttrs([]);
           setCategoryAttrsLoading(false);
         }
@@ -627,19 +620,12 @@ export function ProductEditor({
   }, []);
 
   useEffect(() => {
-    const cateId = (secondLevelCatePubId || '').trim();
-    if (!cateId) {
-      commissionRateReqRef.current += 1;
-      setCommissionRate(null);
-      setCommissionRateLoading(false);
-      return;
-    }
+    // 参考定价类目暂固定查询 cate_id=000000
     const reqId = commissionRateReqRef.current + 1;
     commissionRateReqRef.current = reqId;
     setCommissionRateLoading(true);
     setCommissionRate(null);
-    // 必须传二级类目 ID
-    void fetchDhCommissionRate(cateId, { skipErrorHandler: true })
+    void fetchDhCommissionRate(REF_PRICING_CATE_ID, { skipErrorHandler: true })
       .then((data) => {
         if (commissionRateReqRef.current !== reqId) {
           return;
@@ -657,7 +643,7 @@ export function ProductEditor({
           setCommissionRateLoading(false);
         }
       });
-  }, [secondLevelCatePubId]);
+  }, []);
 
   useEffect(() => {
     const storeId = detail?.store_id;
@@ -808,8 +794,6 @@ export function ProductEditor({
           form.setFieldsValue({
             category_path: pathData.path_items.map((item) => item.cate_pub_id),
           });
-          // 佣金率按二级类目绑定：取路径第二级节点
-          setSecondLevelCatePubId(pathData.path_items[1]?.cate_pub_id);
           setDetail((prev) => {
             if (!prev) {
               return prev;
@@ -1444,7 +1428,11 @@ export function ProductEditor({
         <CommissionRateHint
           categoryPath={categoryPath}
           hasStore={Boolean(detail?.store_id)}
-          hasCategory={Boolean(secondLevelCatePubId)}
+          supplierId={supplierId}
+          skuList={detail?.sku_list}
+          minWholesaleQty={detail?.min_wholesale_qty}
+          packingQuantity={detail?.packing_quantity}
+          measureUnitLabel={measureUnitLabel}
           commissionLoading={commissionRateLoading}
           commissionData={commissionRate}
           storeDiscountLoading={storeBaseDiscountLoading}
