@@ -1,6 +1,7 @@
 import { StepsForm } from '@ant-design/pro-components';
 import { App, Button, Drawer, Space } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
+import type { ProductEditorHandle } from '@/pages/product/detail/ProductEditor';
 import { addMissionFissionData } from '@/services/admin/missions';
 import type { DhProductDetailPublic, DhProductPublic } from '@/types/api';
 import { diffAttrList } from './attrDiff';
@@ -64,19 +65,12 @@ export function AddFissionDrawer({
   const [submitting, setSubmitting] = useState(false);
   /** 每次点选种子商品递增，强制第二步编辑器重新挂载并拉取初始详情 */
   const [editorNonce, setEditorNonce] = useState(0);
-  const baselineRef = useRef<DhProductDetailPublic | null>(null);
-  const currentRef = useRef<DhProductDetailPublic | null>(null);
-
-  const resetEditor = () => {
-    baselineRef.current = null;
-    currentRef.current = null;
-  };
+  const editorRef = useRef<ProductEditorHandle>(null);
 
   const resetDrawer = () => {
     setSelected(undefined);
     setStep(0);
     setEditorNonce(0);
-    resetEditor();
   };
 
   useEffect(() => {
@@ -87,17 +81,9 @@ export function AddFissionDrawer({
 
   const handleSelect = (product: DhProductPublic) => {
     // 退回第一步后再点选（含同一商品）都应重新加载初始数据，不保留上次编辑
-    resetEditor();
     setSelected(product);
     setEditorNonce((prev) => prev + 1);
     setStep(1);
-  };
-
-  const handleDetailChange = (detail: DhProductDetailPublic) => {
-    if (baselineRef.current == null || detail.id !== selected?.id) {
-      baselineRef.current = structuredClone(detail);
-    }
-    currentRef.current = detail;
   };
 
   const handleConfirm = async () => {
@@ -107,8 +93,14 @@ export function AddFissionDrawer({
       );
       return false;
     }
-    const baseline = baselineRef.current;
-    const current = currentRef.current;
+    if (!editorRef.current?.isReady()) {
+      message.warning(
+        '商品信息还在加载，请稍后再确认',
+      );
+      return false;
+    }
+    const baseline = editorRef.current.getBaseline();
+    const current = editorRef.current.getSnapshot();
     if (!baseline || !current || current.id !== selected.id) {
       message.warning(
         '商品信息还在加载，请稍后再确认',
@@ -295,8 +287,8 @@ export function AddFissionDrawer({
             {selected ? (
               <FissionProductStep
                 key={`${selected.id}-${editorNonce}`}
+                ref={editorRef}
                 productId={selected.id}
-                onDetailChange={handleDetailChange}
               />
             ) : null}
           </StepsForm.StepForm>

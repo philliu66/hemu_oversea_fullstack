@@ -11,12 +11,12 @@ import {
   Typography,
 } from 'antd';
 import React, { useMemo, useState } from 'react';
-import { fetchDhSkuBasePrice } from '@/services/common/utils';
+import { fetchDhSkuBaseInfo } from '@/services/common/utils';
 import type {
   DhCommissionRatePublic,
   DhCommissionUnitPublic,
   DhProductSkuPublic,
-  DhSkuBasePricePublic,
+  DhSkuBaseInfoPublic,
   StoreBaseDiscountPublic,
 } from '@/types/api';
 
@@ -24,8 +24,9 @@ import type {
 export const REF_PRICING_CATE_ID = '000000';
 
 /**
- * SKU 规格型号：字母+数字，可选紧跟 -数字；其后特殊字符/HTML 实体等均视为无效。
- * 例：MK241&#039; → MK241；TN101-1 → TN101-1；XQ446. → XQ446
+ * SKU 规格型号：字母+数字，可选紧跟 -数字；其后特殊字符/HTML 实体等截断。
+ * 仅用于前端展示去重（定价参考 SKU 型号标签）；查表清洗仍由后端统一处理。
+ * 例：MK241&#039; → MK241；TN101-1 → TN101-1；XQ992^ → XQ992
  */
 const SKU_SPEC_MODEL_RE = /^[A-Za-z]+[0-9]+(?:-[0-9]+)?/;
 
@@ -34,7 +35,7 @@ type CommissionRateHintProps = {
   categoryPath?: string;
   /** 是否已选店铺 */
   hasStore?: boolean;
-  /** 当前登录用户所属供应商 ID（查基础价格） */
+  /** 当前登录用户所属供应商 ID（查 SKU 基础信息） */
   supplierId?: number | null;
   /** 当前商品 SKU 列表（用于提取规格型号） */
   skuList?: DhProductSkuPublic[];
@@ -62,19 +63,30 @@ export function extractSkuSpecModel(
   return matched?.[0] || null;
 }
 
-/** 商品全部 SKU 清洗后去重的规格型号（保持首次出现顺序） */
+export type SkuSpecModelSample = {
+  /** 正则清洗后的型号（用于展示与去重） */
+  model: string;
+  /** 首次出现的原始 sku_code（查询接口原样上送） */
+  sampleSkuCode: string;
+};
+
+/**
+ * 商品全部 SKU 按正则清洗后的型号去重（保持首次出现顺序）。
+ * 标签展示 model；调 getskubaseinfo 时上送 sampleSkuCode 原样。
+ */
 export function collectDistinctSkuSpecModels(
   skuList: DhProductSkuPublic[] | null | undefined,
-): string[] {
+): SkuSpecModelSample[] {
   const seen = new Set<string>();
-  const models: string[] = [];
+  const models: SkuSpecModelSample[] = [];
   for (const sku of skuList || []) {
-    const model = extractSkuSpecModel(sku.sku_code);
+    const raw = String(sku.sku_code ?? '').trim();
+    const model = extractSkuSpecModel(raw);
     if (!model || seen.has(model)) {
       continue;
     }
     seen.add(model);
-    models.push(model);
+    models.push({ model, sampleSkuCode: raw });
   }
   return models;
 }
@@ -239,67 +251,118 @@ function formatUsdPrice(value: string | number | null | undefined): string {
   return `$${num.toFixed(2)}`;
 }
 
+function formatWeightKg(value: string | number | null | undefined): string {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return '-';
+  }
+  const num = Number(text);
+  if (!Number.isFinite(num)) {
+    return text;
+  }
+  const fixed = Number.isInteger(num)
+    ? String(num)
+    : num.toFixed(3).replace(/\.?0+$/, '');
+  return `${fixed} kg`;
+}
+
+function formatPositiveInt(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return '-';
+  }
+  return String(value);
+}
+
 function SkuSpecModelTag({
   model,
+  sampleSkuCode,
   supplierId,
 }: {
+  /** 正则清洗后的型号（展示） */
   model: string;
+  /** 原始 sku_code（查询原样上送） */
+  sampleSkuCode: string;
   supplierId?: number | null;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [price, setPrice] = useState<DhSkuBasePricePublic | null>(null);
+  const [info, setInfo] = useState<DhSkuBaseInfoPublic | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const canQuery = typeof supplierId === 'number' && supplierId > 0;
 
-  const loadPrice = async () => {
+  const loadInfo = async () => {
     if (!canQuery) {
-      setPrice(null);
-      setError('当前账号未绑定供应商，无法查询基础价格');
+      setInfo(null);
+      setError('当前账号未绑定供应商，无法查询基础信息');
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchDhSkuBasePrice(
-        { supplier_id: supplierId, sku_code: model },
+      // 原样上送首次出现的 sku_code，清洗由后端统一处理
+      const data = await fetchDhSkuBaseInfo(
+        { supplier_id: supplierId, sku_code: sampleSkuCode },
         { skipErrorHandler: true },
       );
-      setPrice(data);
+      setInfo(data);
     } catch {
-      setPrice(null);
-      setError('暂无该 SKU 型号的基础价格');
+      setInfo(null);
+      setError('暂无该 SKU 型号的基础信息');
     } finally {
       setLoading(false);
     }
   };
 
   const content = (
-    <div style={{ minWidth: 160 }}>
+    <div style={{ minWidth: 200 }}>
       {loading ? (
         <Spin size="small" />
       ) : error ? (
         <Typography.Text type="secondary">{error}</Typography.Text>
-      ) : price ? (
+      ) : info ? (
         <Space direction="vertical" size={2}>
           <Typography.Text>
             {'型号 '}
-            <Typography.Text strong>{price.sku_code}</Typography.Text>
+            <Typography.Text strong>{info.sku_code}</Typography.Text>
           </Typography.Text>
           <Typography.Text type="secondary">
             {'系列 '}
-            {price.sku_series || '-'}
+            {info.sku_series || '-'}
           </Typography.Text>
           <Typography.Text>
             {'基础价格 '}
             <Typography.Text strong>
-              {formatUsdPrice(price.unit_price)}
+              {formatUsdPrice(info.unit_price)}
+            </Typography.Text>
+          </Typography.Text>
+          <Typography.Text>
+            {'物流模板 '}
+            <Typography.Text strong>
+              {info.shipping_template_name || '-'}
+            </Typography.Text>
+          </Typography.Text>
+          <Typography.Text>
+            {'重量 '}
+            <Typography.Text strong>
+              {formatWeightKg(info.weight_kg)}
+            </Typography.Text>
+          </Typography.Text>
+          <Typography.Text>
+            {'打包数 '}
+            <Typography.Text strong>
+              {formatPositiveInt(info.packing_quantity)}
+            </Typography.Text>
+          </Typography.Text>
+          <Typography.Text>
+            {'起订量 '}
+            <Typography.Text strong>
+              {formatPositiveInt(info.min_wholesale_qty)}
             </Typography.Text>
           </Typography.Text>
         </Space>
       ) : (
-        <Typography.Text type="secondary">{'点击图标查看基础价格'}</Typography.Text>
+        <Typography.Text type="secondary">{'点击图标查看基础信息'}</Typography.Text>
       )}
     </div>
   );
@@ -314,11 +377,11 @@ function SkuSpecModelTag({
           onOpenChange={(next) => {
             setOpen(next);
             if (next) {
-              void loadPrice();
+              void loadInfo();
             }
           }}
           content={content}
-          title={'SKU 基础价格'}
+          title={'SKU 基础信息'}
         >
           <InfoCircleOutlined
             style={{ cursor: 'pointer' }}
@@ -407,7 +470,8 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
     [skuList],
   );
 
-  const showPanel = hasStore || Boolean(categoryPath) || skuSpecModels.length > 0;
+  const showPanel =
+    hasStore || Boolean(categoryPath) || skuSpecModels.length > 0;
 
   if (!showPanel) {
     return null;
@@ -430,19 +494,14 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
     </Typography.Text>
   );
 
-  const categoryValue = categoryPath?.trim() ? (
-    <Typography.Text>{categoryPath}</Typography.Text>
-  ) : (
-    <Typography.Text type="secondary">{'未选择类目'}</Typography.Text>
-  );
-
   const skuModelValue =
     skuSpecModels.length > 0 ? (
       <Space size={[4, 4]} wrap>
-        {skuSpecModels.map((model) => (
+        {skuSpecModels.map((item) => (
           <SkuSpecModelTag
-            key={model}
-            model={model}
+            key={item.model}
+            model={item.model}
+            sampleSkuCode={item.sampleSkuCode}
             supplierId={supplierId}
           />
         ))}
@@ -494,14 +553,13 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
         contentStyle={{ minWidth: 0 }}
       >
         <Descriptions.Item label={'当前店铺'}>{storeValue}</Descriptions.Item>
-        <Descriptions.Item label={'当前类目'}>{categoryValue}</Descriptions.Item>
         <Descriptions.Item label={'SKU 型号'}>
           {skuModelValue}
         </Descriptions.Item>
         <Descriptions.Item label={'销售单元'}>
           {salesUnitValue}
         </Descriptions.Item>
-        <Descriptions.Item label={'参考定价类目'}>
+        <Descriptions.Item label={'佣金参考类目'}>
           {refPricingValue}
         </Descriptions.Item>
       </Descriptions>

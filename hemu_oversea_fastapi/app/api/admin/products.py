@@ -13,8 +13,11 @@ from app.schemas.product import (
     DhProductDetailRequest,
     DhProductListRequest,
     DhProductPublic,
+    DhSkuListPricePublic,
+    DhSkuListPriceRequest,
 )
 from app.services import products as product_service
+from app.services.sku_list_prices import calc_sku_list_price
 
 router = APIRouter(
     prefix="/product",
@@ -79,3 +82,32 @@ def get_dh_product_detail(
     类目全路径请另调 /api/v1/admin/categories/dh/path。
     """
     return success(product_service.get_dh_product_detail(db, payload.id))
+
+
+@router.post(
+    "/dh/skulistprice/get",
+    response_model=ApiResponse[DhSkuListPricePublic],
+    summary="计算指定 SKU 的标价",
+)
+def get_dh_sku_list_price(
+    payload: DhSkuListPriceRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[DhSkuListPricePublic]:
+    """
+    按供应商 + SKU 编码查询 sku_base_info_dh，并结合店铺折扣与类目佣金计算标价。
+
+    标价 = 基础价格 × 打包数 ×（1 − 佣金率）/ 店铺折扣
+
+    - sku_code 可原样传入，服务端统一清洗后再查表
+    - store_id：取该店铺 base_discount
+    - cate_id：定价参考类目，默认 000000；按订单金额（基础价×打包数×起订量）匹配佣金区间
+    """
+    return success(
+        calc_sku_list_price(
+            db,
+            supplier_id=payload.supplier_id,
+            sku_code=payload.sku_code,
+            store_id=payload.store_id,
+            cate_id=payload.cate_id,
+        )
+    )

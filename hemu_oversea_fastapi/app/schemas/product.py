@@ -269,6 +269,45 @@ class DhProductDetailRequest(BaseModel):
     id: int = Field(description="商品 ID（product_dh.id）", ge=1)
 
 
+# 定价参考类目默认 cate_id（与前端 / 佣金查询一致）
+DH_REF_PRICING_CATE_ID = "000000"
+
+
+class DhSkuListPriceRequest(BaseModel):
+    """计算 SKU 标价的入参。"""
+
+    supplier_id: int = Field(ge=1, description="供应商 ID")
+    sku_code: str = Field(min_length=1, description="SKU 编码（可含后缀，后端会清洗）")
+    store_id: int = Field(ge=1, description="当前店铺 ID（取店铺折扣率）")
+    cate_id: str = Field(
+        default=DH_REF_PRICING_CATE_ID,
+        min_length=1,
+        max_length=64,
+        description=f"定价参考类目 ID，默认 {DH_REF_PRICING_CATE_ID}",
+    )
+
+
+class DhSkuListPricePublic(BaseModel):
+    """SKU 标价计算结果。
+
+    标价 = 基础价格 × 打包数 ×（1 − 佣金率）/ 店铺折扣
+    订单金额 = 基础价格 × 打包数 × 起订量，用于匹配类目佣金区间。
+    """
+
+    supplier_id: int = Field(description="供应商 ID")
+    sku_code: str = Field(description="清洗后的 SKU 编码")
+    store_id: int = Field(description="店铺 ID")
+    cate_id: str = Field(description="定价参考类目 ID")
+    unit_price: Decimal = Field(description="基础价格（美元）")
+    packing_quantity: int = Field(description="打包数")
+    min_wholesale_qty: int = Field(description="起订量")
+    sales_unit: int = Field(description="销售单元 = 打包数 × 起订量")
+    order_amount: Decimal = Field(description="订单金额 = 基础价格 × 销售单元")
+    commission_rate: Decimal = Field(description="命中区间的佣金率（小数，如 0.08）")
+    base_discount: Decimal = Field(description="店铺折扣率（小数，如 0.85）")
+    list_price: Decimal = Field(description="标价（美元，保留两位小数）")
+
+
 class DhMeasuresUnitPublic(BaseModel):
     """计件单位（对应 dh.base.measures.get MeasureVO / measures_unit_dh）。"""
 

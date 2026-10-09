@@ -1,6 +1,8 @@
 import {
   PageContainer,
   ProForm,
+  ProFormCascader,
+  ProFormDependency,
   ProFormList,
   ProFormSelect,
   ProFormText,
@@ -10,18 +12,23 @@ import {
   App,
   Button,
   Card,
-  Cascader,
   Divider,
   Form,
   Input,
   Radio,
-  Select,
   Skeleton,
   Space,
   Typography,
 } from 'antd';
 import type { DefaultOptionType } from 'antd/es/cascader';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import {
   DH_PRODUCT_STATE_LABEL,
   DH_PRODUCT_STATES,
@@ -30,10 +37,8 @@ import {
 import { customAttrValueChanged } from '@/pages/mission/fission/attrDiff';
 import {
   findItemGroupPath,
-  resolveItemGroupLabels,
   toItemGroupCascaderOptions,
   withFallbackGroupOption,
-  type ItemGroupCascaderOption,
 } from '@/pages/product/itemGroupCascader';
 import {
   createEmptyProductDetail,
@@ -53,20 +58,16 @@ import {
 import { fetchDhProductDetail } from '@/services/admin/products';
 import {
   fetchStoreAftersaleTemplates,
-  fetchStoreBaseDiscount,
   fetchStoreList,
   fetchStoreProductGroups,
   fetchStoreShippingTemplates,
 } from '@/services/admin/stores';
-import { fetchDhMeasuresUnitList } from '@/services/common/utils';
 import type {
   DhCategoryAttrPublic,
   DhCategoryPublic,
   DhCommissionRatePublic,
-  DhMeasuresUnitPublic,
   DhProductDetailPublic,
   DhProductSelectedAttrPublic,
-  StoreBaseDiscountPublic,
 } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
 import CategoryAttrsFields from './CategoryAttrsFields';
@@ -75,190 +76,26 @@ import CategorySelectField, {
   formatCategoryPathDisplay,
 } from './CategorySelectField';
 import './changedHighlight.css';
-import CommissionRateHint, {
-  REF_PRICING_CATE_ID,
-} from './CommissionRateHint';
-import ProductImagesEditor from './ProductImagesEditor';
-import SpecAttrsFields from './SpecAttrsFields';
-import SpecSkuTable from './SpecSkuTable';
-import PriceRangeFields from './PriceRangeFields';
+import { REF_PRICING_CATE_ID } from './CommissionRateHint';
 import PackageInfoFields from './PackageInfoFields';
-import SaleInfoFields, {
-  resolveMeasureDisplayName,
-} from './SaleInfoFields';
+import ProductImagesEditor from './ProductImagesEditor';
+import ProductSpecSkuBlock from './ProductSpecSkuBlock';
+import SaleInfoFields from './SaleInfoFields';
+import {
+  DH_CUSTOM_PRODUCT_ATTR_ID,
+  buildDetailFromForm,
+  mergeManagedAttrsIntoList,
+  nonPriceProductAttrs,
+  priceProductAttrs,
+  toProductFormValues,
+  type CustomAttrDraft,
+  type ProductFormValues,
+} from './productFormMapping';
 
 const ITEM_NAME_MAX_LENGTH = 140;
 const CHANGED_COLOR = '#cf1322';
-const DH_CUSTOM_PRODUCT_ATTR_ID = '11';
 const DH_CUSTOM_ATTR_MAX_COUNT = 20;
 const DH_CUSTOM_ATTR_MAX_LENGTH = 40;
-
-type ProductFormValues = {
-  store_id?: number;
-  category_path?: string[];
-  item_name?: string;
-  key_word1?: string;
-  key_word2?: string;
-  key_word3?: string;
-  item_group_path?: string[];
-  customAttrs?: CustomAttrDraft[];
-};
-
-type CustomAttrDraft = {
-  key: string;
-  attr_val_id: string | null;
-  attr_name: string;
-  content: string;
-};
-
-function isCustomProductAttr(attr: DhProductSelectedAttrPublic) {
-  return String(attr.attr_id) === DH_CUSTOM_PRODUCT_ATTR_ID;
-}
-
-function isPriceProductAttr(attr: DhProductSelectedAttrPublic) {
-  return String(attr.is_price_attr) === '1';
-}
-
-function categoryProductAttrs(list?: DhProductSelectedAttrPublic[]) {
-  return (list || []).filter((item) => !isCustomProductAttr(item));
-}
-
-function priceProductAttrs(list?: DhProductSelectedAttrPublic[]) {
-  return categoryProductAttrs(list).filter(isPriceProductAttr);
-}
-
-function nonPriceProductAttrs(list?: DhProductSelectedAttrPublic[]) {
-  return categoryProductAttrs(list).filter((item) => !isPriceProductAttr(item));
-}
-
-/** 用本组件管理的属性子集替换 attr_list 中对应项，其它属性保留 */
-function mergeManagedAttrsIntoList(
-  list: DhProductSelectedAttrPublic[] | undefined,
-  managedAttrIds: Iterable<string>,
-  nextManaged: DhProductSelectedAttrPublic[],
-): DhProductSelectedAttrPublic[] {
-  const managedIdSet = new Set(
-    [...managedAttrIds].map((id) => String(id).trim()).filter(Boolean),
-  );
-  const others = (list || []).filter(
-    (item) => !managedIdSet.has(String(item.attr_id)),
-  );
-  return [...others, ...nextManaged];
-}
-
-/** 写入 / 覆盖指定属性值的 pic_url */
-function patchAttrValuePic(
-  list: DhProductSelectedAttrPublic[] | undefined,
-  attrId: string,
-  attrValId: string,
-  picUrl: string | null,
-): DhProductSelectedAttrPublic[] {
-  const source = list || [];
-  let foundAttr = false;
-  const next = source.map((attr) => {
-    if (String(attr.attr_id) !== String(attrId)) {
-      return attr;
-    }
-    foundAttr = true;
-    let foundVal = false;
-    const values = (attr.values || []).map((item) => {
-      if (String(item.attr_val_id) !== String(attrValId)) {
-        return item;
-      }
-      foundVal = true;
-      return { ...item, pic_url: picUrl };
-    });
-    if (!foundVal) {
-      values.push({
-        attr_val_id: attrValId,
-        attr_name: attr.attr_name,
-        attr_name_cn: attr.attr_name_cn,
-        line_attrval_name: null,
-        line_attrval_name_cn: null,
-        pic_url: picUrl,
-      });
-    }
-    return { ...attr, values };
-  });
-  if (!foundAttr) {
-    next.push({
-      attr_id: attrId,
-      attr_name: null,
-      attr_name_cn: null,
-      is_price_attr: '1',
-      values: [
-        {
-          attr_val_id: attrValId,
-          attr_name: null,
-          attr_name_cn: null,
-          line_attrval_name: null,
-          line_attrval_name_cn: null,
-          pic_url: picUrl,
-        },
-      ],
-    });
-  }
-  return next;
-}
-
-function toCustomAttrDrafts(
-  list?: DhProductSelectedAttrPublic[],
-): CustomAttrDraft[] {
-  return (list || [])
-    .filter(isCustomProductAttr)
-    .flatMap((item) => item.values || [])
-    .map((item, index) => ({
-      key: item.attr_val_id || `custom-${index}`,
-      attr_val_id: item.attr_val_id ?? null,
-      attr_name: (item.attr_name_cn || item.attr_name || '').trim(),
-      content: (
-        item.line_attrval_name_cn ||
-        item.line_attrval_name ||
-        ''
-      ).trim(),
-    }));
-}
-
-function applyCustomAttrDraftsToAttrList(
-  list: DhProductSelectedAttrPublic[] | undefined,
-  drafts: CustomAttrDraft[],
-): DhProductSelectedAttrPublic[] {
-  const others = (list || []).filter((item) => !isCustomProductAttr(item));
-  const values = drafts
-    .map((item, index) => ({
-      attr_id: DH_CUSTOM_PRODUCT_ATTR_ID,
-      attr_val_id: item.attr_val_id || String(index + 1),
-      attr_name: (item.attr_name || '').trim() || null,
-      attr_name_cn: null,
-      line_attrval_name: (item.content || '').trim() || null,
-      line_attrval_name_cn: null,
-      pic_url: null,
-    }))
-    .filter((item) => item.attr_name || item.line_attrval_name);
-  if (!values.length) {
-    return others;
-  }
-  return [
-    ...others,
-    {
-      attr_id: DH_CUSTOM_PRODUCT_ATTR_ID,
-      attr_name: null,
-      attr_name_cn: null,
-      values,
-    },
-  ];
-}
-
-function normalizeCustomAttrDrafts(
-  drafts: CustomAttrDraft[] | undefined,
-): CustomAttrDraft[] {
-  return (drafts || []).map((item, index) => ({
-    key: item?.key || `custom-${index}-${Date.now()}`,
-    attr_val_id: item?.attr_val_id ?? null,
-    attr_name: item?.attr_name ?? '',
-    content: item?.content ?? '',
-  }));
-}
 
 function formatProductState(state: string | null | undefined): string {
   const code = String(state || '').trim();
@@ -282,17 +119,10 @@ function changedControlStyle(changed: boolean): React.CSSProperties {
   return changed ? { color: CHANGED_COLOR } : {};
 }
 
-function textOrNull(value: string | null | undefined): string | null {
-  const text = value?.trim() ?? '';
-  return text || null;
-}
-
-type TemplateOption = { label: string; value: string };
-
 function withCurrentTemplateOption(
-  items: TemplateOption[],
+  items: { label: string; value: string }[],
   currentId?: string | null,
-): TemplateOption[] {
+) {
   const current = currentId?.trim();
   if (!current || items.some((item) => item.value === current)) {
     return items;
@@ -313,33 +143,51 @@ function pageTitle(mode: ProductPageMode): string {
   }
 }
 
+function filterItemGroupOption(inputValue: string, path: DefaultOptionType[]) {
+  const keyword = inputValue.trim().toLowerCase();
+  if (!keyword) {
+    return true;
+  }
+  return path.some((option) => {
+    const label = String(option.label ?? '').toLowerCase();
+    const value = String(option.value ?? '').toLowerCase();
+    return label.includes(keyword) || value.includes(keyword);
+  });
+}
+
+export type ProductEditorHandle = {
+  getBaseline: () => DhProductDetailPublic | null;
+  getSnapshot: () => DhProductDetailPublic | null;
+  isReady: () => boolean;
+};
+
 export type ProductEditorProps = {
-  /** 路由页模式；嵌入时默认 edit，readOnly 时视为 view */
   mode?: ProductPageMode;
   productId?: number;
-  /** 复制模式的源商品 id */
   fromId?: number;
-  /** 直接喂入详情（如裂变查看变更用 raw_json），不再请求接口 */
   initialDetail?: DhProductDetailPublic;
   readOnly?: boolean;
   changedKeys?: string[];
   changedAttrList?: DhProductSelectedAttrPublic[];
-  onDetailChange?: (detail: DhProductDetailPublic) => void;
-  /** 抽屉嵌入：不包 PageContainer */
   embedded?: boolean;
 };
 
-export function ProductEditor({
-  mode: modeProp,
-  productId,
-  fromId,
-  onDetailChange,
-  readOnly: readOnlyProp,
-  initialDetail,
-  changedKeys = [],
-  changedAttrList = [],
-  embedded = false,
-}: ProductEditorProps) {
+export const ProductEditor = forwardRef<
+  ProductEditorHandle,
+  ProductEditorProps
+>(function ProductEditor(
+  {
+    mode: modeProp,
+    productId,
+    fromId,
+    readOnly: readOnlyProp,
+    initialDetail,
+    changedKeys = [],
+    changedAttrList = [],
+    embedded = false,
+  },
+  ref,
+) {
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const supplierId = initialState?.currentUser?.supplier_id;
@@ -370,56 +218,45 @@ export function ProductEditor({
   const changedCustomValues = changedAttrList.find(
     (item) => String(item.attr_id) === DH_CUSTOM_PRODUCT_ATTR_ID,
   )?.values;
-  const onDetailChangeRef = useRef(onDetailChange);
-  onDetailChangeRef.current = onDetailChange;
 
-  const [detail, setDetail] = useState<DhProductDetailPublic>();
+  const [baseDetail, setBaseDetail] = useState<DhProductDetailPublic>();
+  const baselineRef = useRef<DhProductDetailPublic | null>(null);
+  const [pickedCategory, setPickedCategory] = useState<DhCategoryPublic | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [categoryPath, setCategoryPath] = useState<string>();
   const [categoryAttrs, setCategoryAttrs] = useState<DhCategoryAttrPublic[]>(
     [],
   );
-  /** 类目属性走敦煌三方接口，单独加载，不阻塞页面其它区块 */
   const [categoryAttrsLoading, setCategoryAttrsLoading] = useState(false);
-  const [itemGroupOptions, setItemGroupOptions] = useState<
-    ItemGroupCascaderOption[]
-  >([]);
-  const [itemGroupsReady, setItemGroupsReady] = useState(false);
-  const [aftersaleOptions, setAftersaleOptions] = useState<TemplateOption[]>(
-    [],
-  );
-  const [shippingOptions, setShippingOptions] = useState<TemplateOption[]>([]);
-  const [measureOptions, setMeasureOptions] = useState<DhMeasuresUnitPublic[]>(
-    [],
-  );
-  const [measuresLoading, setMeasuresLoading] = useState(false);
   const [commissionRate, setCommissionRate] =
     useState<DhCommissionRatePublic | null>(null);
   const [commissionRateLoading, setCommissionRateLoading] = useState(false);
-  const [storeBaseDiscount, setStoreBaseDiscount] =
-    useState<StoreBaseDiscountPublic | null>(null);
-  const [storeBaseDiscountLoading, setStoreBaseDiscountLoading] =
-    useState(false);
-  const itemGroupLoadedRef = useRef(false);
   const categoryAttrsReqRef = useRef(0);
   const commissionRateReqRef = useRef(0);
-  const storeBaseDiscountReqRef = useRef(0);
+  const baselineItemGroupIdRef = useRef<string | null | undefined>(undefined);
 
-  const publishDetail = useCallback((next: DhProductDetailPublic) => {
-    setDetail(next);
-    onDetailChangeRef.current?.(next);
-  }, []);
+  const displayCategory = pickedCategory ?? baseDetail?.category ?? null;
 
-  const patchDetail = useCallback((patch: Partial<DhProductDetailPublic>) => {
-    setDetail((prev) => {
-      if (!prev) {
-        return prev;
-      }
-      const next = { ...prev, ...patch };
-      onDetailChangeRef.current?.(next);
-      return next;
-    });
-  }, []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      getBaseline: () => baselineRef.current,
+      getSnapshot: () => {
+        if (!baselineRef.current) {
+          return null;
+        }
+        return buildDetailFromForm(
+          baselineRef.current,
+          form.getFieldsValue(true),
+          pickedCategory ?? baselineRef.current.category,
+        );
+      },
+      isReady: () => Boolean(baselineRef.current) && !loading,
+    }),
+    [form, loading, pickedCategory],
+  );
 
   const loadCategoryAttrs = useCallback(async (categoryId: number) => {
     const reqId = categoryAttrsReqRef.current + 1;
@@ -447,12 +284,14 @@ export function ProductEditor({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setDetail(undefined);
+    setBaseDetail(undefined);
+    baselineRef.current = null;
+    setPickedCategory(null);
+    baselineItemGroupIdRef.current = undefined;
     setCategoryPath(undefined);
     setCategoryAttrs([]);
     setCategoryAttrsLoading(false);
     categoryAttrsReqRef.current += 1;
-    itemGroupLoadedRef.current = false;
     void (async () => {
       try {
         let data: DhProductDetailPublic | undefined;
@@ -462,30 +301,22 @@ export function ProductEditor({
           data = createEmptyProductDetail();
         } else if (sourceProductId) {
           const fetched = await fetchDhProductDetail(sourceProductId);
-          data =
-            mode === 'copy' ? toCopyProductDetail(fetched) : fetched;
+          data = mode === 'copy' ? toCopyProductDetail(fetched) : fetched;
         }
 
         if (!data) {
-          throw new Error(
-            '加载商品详情失败',
-          );
+          throw new Error('加载商品详情失败');
         }
         if (cancelled) {
           return;
         }
 
-        // 先渲染详情主体，类目属性（敦煌三方）异步加载
-        publishDetail(data);
-        form.setFieldsValue({
-          store_id: data.store_id || undefined,
-          category_path: data.cate_pub_id ? [data.cate_pub_id] : undefined,
-          item_name: data.item_name || '',
-          key_word1: data.key_word1 || '',
-          key_word2: data.key_word2 || '',
-          key_word3: data.key_word3 || '',
-          customAttrs: toCustomAttrDrafts(data.attr_list),
-        });
+        const baseline = structuredClone(data);
+        baselineRef.current = baseline;
+        baselineItemGroupIdRef.current = data.item_group_id;
+        setBaseDetail(data);
+        setPickedCategory(data.category);
+        form.setFieldsValue(toProductFormValues(data));
         setLoading(false);
 
         if (data.category?.id) {
@@ -529,13 +360,13 @@ export function ProductEditor({
         }
       } catch (error) {
         if (!cancelled) {
-          setDetail(undefined);
+          setBaseDetail(undefined);
+          baselineRef.current = null;
+          setPickedCategory(null);
           setCategoryAttrs([]);
           setCategoryAttrsLoading(false);
           message.error(
-            error instanceof Error
-              ? error.message
-              : '加载商品详情失败',
+            error instanceof Error ? error.message : '加载商品详情失败',
           );
           setLoading(false);
         }
@@ -545,98 +376,23 @@ export function ProductEditor({
       cancelled = true;
       categoryAttrsReqRef.current += 1;
     };
-  }, [
-    form,
-    initialDetail,
-    loadCategoryAttrs,
-    message,
-    mode,
-    publishDetail,
-    sourceProductId,
-  ]);
+  }, [form, initialDetail, loadCategoryAttrs, message, mode, sourceProductId]);
 
   useEffect(() => {
-    const storeId = detail?.store_id;
-    if (!storeId) {
-      setAftersaleOptions([]);
-      setShippingOptions([]);
-      return;
-    }
-    let cancelled = false;
-    void Promise.all([
-      fetchStoreAftersaleTemplates(storeId),
-      fetchStoreShippingTemplates(storeId),
-    ])
-      .then(([aftersale, shipping]) => {
-        if (cancelled) {
-          return;
-        }
-        setAftersaleOptions(
-          aftersale.map((item) => ({
-            label: item.name?.trim() || item.after_sale_template_id,
-            value: item.after_sale_template_id,
-          })),
-        );
-        setShippingOptions(
-          shipping.map((item) => ({
-            label: item.name?.trim() || item.shipping_model_id,
-            value: item.shipping_model_id,
-          })),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAftersaleOptions([]);
-          setShippingOptions([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [detail?.store_id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setMeasuresLoading(true);
-    void fetchDhMeasuresUnitList()
-      .then((list) => {
-        if (!cancelled) {
-          setMeasureOptions(list || []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMeasureOptions([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setMeasuresLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    // 参考定价类目暂固定查询 cate_id=000000
     const reqId = commissionRateReqRef.current + 1;
     commissionRateReqRef.current = reqId;
     setCommissionRateLoading(true);
     setCommissionRate(null);
     void fetchDhCommissionRate(REF_PRICING_CATE_ID, { skipErrorHandler: true })
       .then((data) => {
-        if (commissionRateReqRef.current !== reqId) {
-          return;
+        if (commissionRateReqRef.current === reqId) {
+          setCommissionRate(data);
         }
-        setCommissionRate(data);
       })
       .catch(() => {
-        if (commissionRateReqRef.current !== reqId) {
-          return;
+        if (commissionRateReqRef.current === reqId) {
+          setCommissionRate(null);
         }
-        setCommissionRate(null);
       })
       .finally(() => {
         if (commissionRateReqRef.current === reqId) {
@@ -644,144 +400,6 @@ export function ProductEditor({
         }
       });
   }, []);
-
-  useEffect(() => {
-    const storeId = detail?.store_id;
-    if (!storeId) {
-      storeBaseDiscountReqRef.current += 1;
-      setStoreBaseDiscount(null);
-      setStoreBaseDiscountLoading(false);
-      return;
-    }
-    const reqId = storeBaseDiscountReqRef.current + 1;
-    storeBaseDiscountReqRef.current = reqId;
-    setStoreBaseDiscountLoading(true);
-    setStoreBaseDiscount(null);
-    void fetchStoreBaseDiscount(storeId, { skipErrorHandler: true })
-      .then((data) => {
-        if (storeBaseDiscountReqRef.current !== reqId) {
-          return;
-        }
-        setStoreBaseDiscount(data);
-      })
-      .catch(() => {
-        if (storeBaseDiscountReqRef.current !== reqId) {
-          return;
-        }
-        setStoreBaseDiscount(null);
-      })
-      .finally(() => {
-        if (storeBaseDiscountReqRef.current === reqId) {
-          setStoreBaseDiscountLoading(false);
-        }
-      });
-  }, [detail?.store_id]);
-
-  useEffect(() => {
-    if (!detail?.store_id) {
-      setItemGroupOptions([]);
-      setItemGroupsReady(true);
-      itemGroupLoadedRef.current = true;
-      return;
-    }
-    const storeId = detail.store_id;
-    let cancelled = false;
-    itemGroupLoadedRef.current = false;
-    setItemGroupsReady(false);
-    void (async () => {
-      try {
-        const data = await fetchStoreProductGroups({
-          store_id: storeId,
-        });
-        if (cancelled) {
-          return;
-        }
-        const options = toItemGroupCascaderOptions(data.items);
-        itemGroupLoadedRef.current = true;
-        setItemGroupOptions(options);
-        setItemGroupsReady(true);
-      } catch {
-        if (!cancelled) {
-          itemGroupLoadedRef.current = true;
-          setItemGroupOptions([]);
-          setItemGroupsReady(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [detail?.store_id]);
-
-  const cascaderGroupOptions = useMemo(
-    () => withFallbackGroupOption(itemGroupOptions, detail?.item_group_id),
-    [detail?.item_group_id, itemGroupOptions],
-  );
-
-  const itemGroupPath = useMemo(() => {
-    if (!detail?.item_group_id || !itemGroupsReady) {
-      return undefined;
-    }
-    return findItemGroupPath(cascaderGroupOptions, detail.item_group_id);
-  }, [cascaderGroupOptions, detail?.item_group_id, itemGroupsReady]);
-
-  // 分组树就绪后再写入表单路径；rAF 确保 ProForm 已挂载
-  useEffect(() => {
-    if (!itemGroupsReady) {
-      return;
-    }
-    let cancelled = false;
-    const frame = requestAnimationFrame(() => {
-      if (cancelled) {
-        return;
-      }
-      form.setFieldsValue({
-        item_group_path: itemGroupPath,
-      });
-    });
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frame);
-    };
-  }, [form, itemGroupPath, itemGroupsReady]);
-
-  const renderItemGroupDisplay = useCallback(
-    (labels: string[], selectedOptions?: DefaultOptionType[]) => {
-      const fromForm = form.getFieldValue('item_group_path') as
-        | string[]
-        | undefined;
-      const fromSelected = selectedOptions
-        ?.map((item) => String(item?.value ?? '').trim())
-        .filter(Boolean);
-      const path =
-        (Array.isArray(fromForm) && fromForm.length
-          ? fromForm.map(String)
-          : undefined) ||
-        itemGroupPath ||
-        fromSelected;
-      const resolved = resolveItemGroupLabels(cascaderGroupOptions, path);
-      if (resolved) {
-        return resolved;
-      }
-      return labels.filter(Boolean).join(' / ');
-    },
-    [cascaderGroupOptions, form, itemGroupPath],
-  );
-
-  const filterItemGroupOption = useCallback(
-    (inputValue: string, path: DefaultOptionType[]) => {
-      const keyword = inputValue.trim().toLowerCase();
-      if (!keyword) {
-        return true;
-      }
-      return path.some((option) => {
-        const label = String(option.label ?? '').toLowerCase();
-        const value = String(option.value ?? '').toLowerCase();
-        return label.includes(keyword) || value.includes(keyword);
-      });
-    },
-    [],
-  );
 
   const handleCategoryPick = useCallback(
     (picked: DhCategoryPublic) => {
@@ -791,174 +409,20 @@ export function ProductEditor({
           setCategoryPath(formatCategoryPathDisplay(pathData));
           const selectedCategory =
             pathData.path_items[pathData.path_items.length - 1] ?? picked;
+          setPickedCategory(selectedCategory);
           form.setFieldsValue({
             category_path: pathData.path_items.map((item) => item.cate_pub_id),
-          });
-          setDetail((prev) => {
-            if (!prev) {
-              return prev;
-            }
-            const next = {
-              ...prev,
-              cate_pub_id: selectedCategory.cate_pub_id,
-              category: selectedCategory,
-            };
-            onDetailChangeRef.current?.(next);
-            return next;
+            cate_pub_id: selectedCategory.cate_pub_id,
           });
           void loadCategoryAttrs(picked.id);
         } catch (error) {
           message.error(
-            error instanceof Error
-              ? error.message
-              : '获取分类全路径失败',
+            error instanceof Error ? error.message : '获取分类全路径失败',
           );
         }
       })();
     },
     [form, loadCategoryAttrs, message],
-  );
-
-  const syncFormValues = (
-    values: ProductFormValues,
-    changedFields: string[] = [],
-  ) => {
-    setDetail((prev) => {
-      if (!prev) {
-        return prev;
-      }
-      const path = values.item_group_path;
-      const nextGroupId = Array.isArray(path)
-        ? path.filter(Boolean).at(-1)
-        : undefined;
-      const storeChanged =
-        values.store_id !== undefined &&
-        (prev.store_id || undefined) !== values.store_id;
-      const next: DhProductDetailPublic = {
-        ...prev,
-        store_id: values.store_id || prev.store_id,
-        ...(storeChanged
-          ? {
-              item_group_id: null,
-              after_sale_template_id: null,
-              shipping_model_id: null,
-            }
-          : {}),
-        item_name:
-          values.item_name === undefined
-            ? prev.item_name
-            : textOrNull(values.item_name),
-        key_word1: textOrNull(values.key_word1),
-        key_word2: textOrNull(values.key_word2),
-        key_word3: textOrNull(values.key_word3),
-        item_group_id: storeChanged
-          ? null
-          : nextGroupId !== undefined
-            ? String(nextGroupId)
-            : prev.item_group_id,
-        attr_list: changedFields.includes('customAttrs')
-          ? applyCustomAttrDraftsToAttrList(
-              prev.attr_list,
-              normalizeCustomAttrDrafts(values.customAttrs),
-            )
-          : prev.attr_list,
-      };
-      onDetailChangeRef.current?.(next);
-      return next;
-    });
-  };
-
-  const priceSelectedAttrs = priceProductAttrs(detail?.attr_list);
-  const priceAttrIdSet = new Set(
-    priceSelectedAttrs.map((item) => String(item.attr_id)),
-  );
-  const priceCategoryAttrs = priceSelectedAttrs
-    .map((item) =>
-      categoryAttrs.find(
-        (attr) => String(attr.attr_id) === String(item.attr_id),
-      ),
-    )
-    .filter((item): item is DhCategoryAttrPublic => Boolean(item));
-  const normalCategoryAttrs = categoryAttrs.filter(
-    (attr) => !priceAttrIdSet.has(String(attr.attr_id)),
-  );
-  const normalSelectedAttrs = nonPriceProductAttrs(detail?.attr_list);
-  const measureUnitLabel =
-    resolveMeasureDisplayName(detail?.measure_id, measureOptions) ||
-    '件';
-
-  const handleNormalAttrsChange = useCallback(
-    (nextSelected: DhProductSelectedAttrPublic[]) => {
-      setDetail((prev) => {
-        if (!prev) {
-          return prev;
-        }
-        const managedIds = normalCategoryAttrs.map((item) =>
-          String(item.attr_id),
-        );
-        const updated = {
-          ...prev,
-          attr_list: mergeManagedAttrsIntoList(
-            prev.attr_list,
-            managedIds,
-            nextSelected,
-          ),
-        };
-        onDetailChangeRef.current?.(updated);
-        return updated;
-      });
-    },
-    [normalCategoryAttrs],
-  );
-
-  const handlePriceAttrsChange = useCallback(
-    (nextSelected: DhProductSelectedAttrPublic[]) => {
-      setDetail((prev) => {
-        if (!prev) {
-          return prev;
-        }
-        const managedIds = priceCategoryAttrs.map((item) =>
-          String(item.attr_id),
-        );
-        const priced = nextSelected.map((item) => ({
-          ...item,
-          is_price_attr: '1',
-        }));
-        const updated = {
-          ...prev,
-          attr_list: mergeManagedAttrsIntoList(
-            prev.attr_list,
-            managedIds,
-            priced,
-          ),
-        };
-        onDetailChangeRef.current?.(updated);
-        return updated;
-      });
-    },
-    [priceCategoryAttrs],
-  );
-
-  const handleAttrValuePicChange = useCallback(
-    (attrId: string, attrValId: string, picUrl: string | null) => {
-      setDetail((prev) => {
-        if (!prev) {
-          return prev;
-        }
-        const updated = {
-          ...prev,
-          attr_list: patchAttrValuePic(
-            prev.attr_list,
-            attrId,
-            attrValId,
-            picUrl,
-          ),
-        };
-        onDetailChangeRef.current?.(updated);
-        return updated;
-      });
-    },
-    [],
   );
 
   const routeInvalid =
@@ -973,9 +437,7 @@ export function ProductEditor({
         title={false}
         onBack={() => history.push(PRODUCT_LIST_PATH)}
       >
-        <Card>
-          {'商品 ID 无效'}
-        </Card>
+        <Card>{'商品 ID 无效'}</Card>
       </PageContainer>
     );
   }
@@ -993,29 +455,24 @@ export function ProductEditor({
         labelAlign="left"
         labelCol={{ flex: '110px' }}
         wrapperCol={{ flex: 1 }}
-        onValuesChange={(changedValues, values) => {
+        onValuesChange={(changedValues) => {
           if (readOnly) {
             return;
           }
           if ('store_id' in changedValues) {
-            itemGroupLoadedRef.current = false;
-            setItemGroupOptions([]);
-            setItemGroupsReady(false);
-            form.setFieldsValue({ item_group_path: undefined });
+            baselineItemGroupIdRef.current = null;
+            form.setFieldsValue({
+              item_group_path: undefined,
+              after_sale_template_id: null,
+              shipping_model_id: null,
+            });
           }
-          syncFormValues(values, Object.keys(changedValues));
         }}
       >
-        <Card
-          title={'基本信息'}
-          loading={loading}
-        >
+        <Card title={'基本信息'} loading={loading}>
           <ProFormSelect
             name="store_id"
-            label={changedLabel(
-              '店铺名称',
-              isChanged('store_id'),
-            )}
+            label={changedLabel('店铺名称', isChanged('store_id'))}
             showSearch
             debounceTime={300}
             params={{ supplierId }}
@@ -1034,18 +491,18 @@ export function ProductEditor({
               }));
             }}
             fieldProps={{
-              style: { maxWidth: 360, ...changedControlStyle(isChanged('store_id')) },
+              style: {
+                maxWidth: 360,
+                ...changedControlStyle(isChanged('store_id')),
+              },
             }}
           />
           <Form.Item
-            label={changedLabel(
-              '产品分类',
-              isChanged('cate_pub_id'),
-            )}
+            label={changedLabel('产品分类', isChanged('cate_pub_id'))}
             required
           >
             <CategorySelectField
-              category={detail?.category}
+              category={displayCategory}
               pathDisplay={categoryPath}
               disabled={readOnly}
               changed={isChanged('cate_pub_id')}
@@ -1055,36 +512,61 @@ export function ProductEditor({
         </Card>
 
         <Card
-          title={changedLabel(
-            '商品属性',
-            isChanged('attr_list'),
-          )}
+          title={changedLabel('商品属性', isChanged('attr_list'))}
           style={{ marginTop: 16 }}
         >
-          <Typography.Text
-            strong
-            style={{ display: 'block', marginBottom: 12 }}
-          >
+          <Typography.Text strong style={{ display: 'block', marginBottom: 12 }}>
             {'类目属性'}
           </Typography.Text>
           {categoryAttrsLoading ? (
             <Skeleton active paragraph={{ rows: 8 }} />
-          ) : normalCategoryAttrs.length > 0 ? (
-            <CategoryAttrsFields
-              attrs={normalCategoryAttrs}
-              selectedAttrs={normalSelectedAttrs}
-              disabled={readOnly}
-              changedAttrIds={changedCategoryAttrIds}
-              onSelectedAttrsChange={
-                readOnly ? undefined : handleNormalAttrsChange
-              }
-            />
           ) : (
-            !loading && (
-              <Typography.Text type="secondary">
-                {'暂无类目属性'}
-              </Typography.Text>
-            )
+            <ProFormDependency name={['attr_list']}>
+              {({ attr_list }) => {
+                const priceSelectedAttrs = priceProductAttrs(attr_list);
+                const priceAttrIdSet = new Set(
+                  priceSelectedAttrs.map((item) => String(item.attr_id)),
+                );
+                const normalCategoryAttrs = categoryAttrs.filter(
+                  (attr) => !priceAttrIdSet.has(String(attr.attr_id)),
+                );
+                const normalSelectedAttrs = nonPriceProductAttrs(attr_list);
+                if (normalCategoryAttrs.length === 0) {
+                  return !loading ? (
+                    <Typography.Text type="secondary">
+                      {'暂无类目属性'}
+                    </Typography.Text>
+                  ) : null;
+                }
+                return (
+                  <CategoryAttrsFields
+                    attrs={normalCategoryAttrs}
+                    selectedAttrs={normalSelectedAttrs}
+                    disabled={readOnly}
+                    changedAttrIds={changedCategoryAttrIds}
+                    onSelectedAttrsChange={
+                      readOnly
+                        ? undefined
+                        : (nextSelected) => {
+                            const managedIds = normalCategoryAttrs.map((item) =>
+                              String(item.attr_id),
+                            );
+                            const prev = form.getFieldValue('attr_list') as
+                              | DhProductSelectedAttrPublic[]
+                              | undefined;
+                            form.setFieldsValue({
+                              attr_list: mergeManagedAttrsIntoList(
+                                prev,
+                                managedIds,
+                                nextSelected,
+                              ),
+                            });
+                          }
+                    }
+                  />
+                );
+              }}
+            </ProFormDependency>
           )}
           <Divider />
           <Typography.Text
@@ -1174,17 +656,10 @@ export function ProductEditor({
           </ProFormList>
         </Card>
 
-        <Card
-          title={'产品信息'}
-          loading={loading}
-          style={{ marginTop: 16 }}
-        >
+        <Card title={'产品信息'} loading={loading} style={{ marginTop: 16 }}>
           <Form.Item
             name="item_name"
-            label={changedLabel(
-              '产品标题',
-              isChanged('item_name'),
-            )}
+            label={changedLabel('产品标题', isChanged('item_name'))}
             rules={[
               {
                 max: ITEM_NAME_MAX_LENGTH,
@@ -1213,398 +688,274 @@ export function ProductEditor({
                 <Input
                   allowClear
                   disabled={readOnly}
-                  style={{ width: 240, ...changedControlStyle(isChanged('key_word1')) }}
+                  style={{
+                    width: 240,
+                    ...changedControlStyle(isChanged('key_word1')),
+                  }}
                 />
               </Form.Item>
               <Form.Item name="key_word2" noStyle>
                 <Input
                   allowClear
                   disabled={readOnly}
-                  style={{ width: 240, ...changedControlStyle(isChanged('key_word2')) }}
+                  style={{
+                    width: 240,
+                    ...changedControlStyle(isChanged('key_word2')),
+                  }}
                 />
               </Form.Item>
               <Form.Item name="key_word3" noStyle>
                 <Input
                   allowClear
                   disabled={readOnly}
-                  style={{ width: 240, ...changedControlStyle(isChanged('key_word3')) }}
+                  style={{
+                    width: 240,
+                    ...changedControlStyle(isChanged('key_word3')),
+                  }}
                 />
               </Form.Item>
             </Space>
           </Form.Item>
-          <Form.Item
+
+          <ProFormCascader
             name="item_group_path"
-            label={changedLabel(
-              '产品分组',
-              isChanged('item_group_id'),
-            )}
-          >
-            <Cascader
-              disabled={readOnly || !itemGroupsReady}
-              options={cascaderGroupOptions}
-              changeOnSelect
-              allowClear
-              showSearch={{ filter: filterItemGroupOption }}
-              displayRender={renderItemGroupDisplay}
-              style={{
+            label={changedLabel('产品分组', isChanged('item_group_id'))}
+            disabled={readOnly}
+            placeholder={'请选择产品分组'}
+            dependencies={['store_id']}
+            fieldProps={{
+              changeOnSelect: true,
+              allowClear: true,
+              showSearch: { filter: filterItemGroupOption },
+              style: {
                 maxWidth: 480,
                 width: '100%',
                 ...changedControlStyle(isChanged('item_group_id')),
-              }}
-              placeholder={'请选择产品分组'}
-            />
-          </Form.Item>
-          <Form.Item
-            label={'商品分级管理'}
-          >
-            <Radio.Group
-              disabled={readOnly}
-              value={
-                String(detail?.issample) === '2' ? '2' : '3'
+              },
+            }}
+            request={async (params) => {
+              const storeId = params.store_id as number | undefined;
+              if (!storeId) {
+                return [];
               }
-              onChange={(event) => {
-                patchDetail({ issample: event.target.value });
-              }}
-            >
-              <Radio value="3">
-                {'非成人属性'}
-              </Radio>
-              <Radio value="2">
-                {'成人属性'}
-              </Radio>
+              try {
+                const data = await fetchStoreProductGroups({
+                  store_id: storeId,
+                });
+                const options = toItemGroupCascaderOptions(data.items || []);
+                const groupId = baselineItemGroupIdRef.current;
+                const withFallback = withFallbackGroupOption(options, groupId);
+                const current = form.getFieldValue('item_group_path') as
+                  | string[]
+                  | undefined;
+                if (
+                  groupId &&
+                  (!Array.isArray(current) || current.length === 0)
+                ) {
+                  const path = findItemGroupPath(withFallback, groupId);
+                  if (path?.length) {
+                    form.setFieldsValue({ item_group_path: path });
+                  }
+                }
+                return withFallback;
+              } catch {
+                return [];
+              }
+            }}
+          />
+
+          <Form.Item name="issample" label={'商品分级管理'}>
+            <Radio.Group disabled={readOnly}>
+              <Radio value="3">{'非成人属性'}</Radio>
+              <Radio value="2">{'成人属性'}</Radio>
             </Radio.Group>
           </Form.Item>
-          <Form.Item
-            label={'产品有效期'}
-          >
-            <Radio.Group
-              disabled={readOnly}
-              value={detail?.vaild_day || undefined}
-              onChange={(event) => {
-                patchDetail({ vaild_day: event.target.value });
-              }}
-            >
-              <Radio value="90">
-                {'90天'}
-              </Radio>
-              <Radio value="30">
-                {'30天'}
-              </Radio>
-              <Radio value="14">
-                {'14天'}
-              </Radio>
+          <Form.Item name="vaild_day" label={'产品有效期'}>
+            <Radio.Group disabled={readOnly}>
+              <Radio value="90">{'90天'}</Radio>
+              <Radio value="30">{'30天'}</Radio>
+              <Radio value="14">{'14天'}</Radio>
             </Radio.Group>
           </Form.Item>
           {showSyncMeta ? (
             <>
-              <Form.Item
-                label={'商品状态'}
-              >
-                {formatProductState(detail?.state)}
+              <Form.Item label={'商品状态'}>
+                {formatProductState(baseDetail?.state)}
               </Form.Item>
-              <Form.Item
-                label={'同步状态'}
-              >
-                {formatSyncState(
-                  detail?.sync_state,
-                  '成功',
-                  '失败',
-                )}
+              <Form.Item label={'同步状态'}>
+                {formatSyncState(baseDetail?.sync_state, '成功', '失败')}
               </Form.Item>
-              <Form.Item
-                label={'同步时间'}
-              >
-                {formatDateTime(detail?.last_synced_at)}
+              <Form.Item label={'同步时间'}>
+                {formatDateTime(baseDetail?.last_synced_at)}
               </Form.Item>
             </>
           ) : null}
         </Card>
 
+        <Card title={'销售信息'} loading={loading} style={{ marginTop: 16 }}>
+          <SaleInfoFields disabled={readOnly} />
+        </Card>
+
         <Card
-          title={'销售信息'}
+          title={changedLabel('商品图片', isChanged('item_img_list'))}
           loading={loading}
           style={{ marginTop: 16 }}
         >
-          <SaleInfoFields
+          {loading ? null : (
+            <ProFormDependency name={['store_id']}>
+              {({ store_id }) => (
+                <Form.Item
+                  name="item_img_list"
+                  noStyle
+                  valuePropName="images"
+                  trigger="onChange"
+                >
+                  <ProductImagesEditor
+                    disabled={readOnly}
+                    storeId={store_id || undefined}
+                    alt={baseDetail?.item_code}
+                  />
+                </Form.Item>
+              )}
+            </ProFormDependency>
+          )}
+        </Card>
+
+        <Card
+          title={changedLabel(
+            '商品规格',
+            isChanged('sku_list') ||
+              isChanged('item_spec_self_def_list') ||
+              changedCategoryAttrIds.length > 0,
+          )}
+          style={{ marginTop: 16 }}
+        >
+          <ProductSpecSkuBlock
+            readOnly={readOnly}
+            categoryAttrsLoading={categoryAttrsLoading}
+            categoryAttrs={categoryAttrs}
+            changedCategoryAttrIds={changedCategoryAttrIds}
+            categoryPath={categoryPath}
+            supplierId={supplierId}
+            itemCode={baseDetail?.item_code}
+            commissionLoading={commissionRateLoading}
+            commissionData={commissionRate}
+          />
+        </Card>
+
+        {baseDetail?.html_content ? (
+          <Card
+            title={changedLabel('详情描述', isChanged('html_content'))}
+            style={{ marginTop: 16 }}
+          >
+            <iframe
+              title={'详情描述'}
+              srcDoc={baseDetail.html_content}
+              sandbox=""
+              style={{
+                width: '100%',
+                minHeight: 360,
+                maxHeight: 480,
+                border: isChanged('html_content')
+                  ? `1px solid ${CHANGED_COLOR}`
+                  : 'none',
+                background: '#fff',
+              }}
+            />
+          </Card>
+        ) : null}
+
+        <Card
+          title={changedLabel(
+            '包装信息',
+            isChanged('gross_weight') ||
+              isChanged('length') ||
+              isChanged('width') ||
+              isChanged('height') ||
+              isChanged('item_weight_range'),
+          )}
+          loading={loading}
+          style={{ marginTop: 16 }}
+        >
+          <PackageInfoFields disabled={readOnly} />
+        </Card>
+
+        <Card title={'模板信息'} loading={loading} style={{ marginTop: 16 }}>
+          <ProFormSelect
+            name="after_sale_template_id"
+            label={changedLabel(
+              '售后模板',
+              isChanged('after_sale_template_id'),
+            )}
             disabled={readOnly}
-            measureId={detail?.measure_id}
-            measureOptions={measureOptions}
-            measuresLoading={measuresLoading}
-            packingQuantity={detail?.packing_quantity}
-            minWholesaleQty={detail?.min_wholesale_qty}
-            itemInventory={detail?.item_inventory}
-            maxSaleQty={detail?.max_sale_qty}
-            leadingTime={detail?.leading_time}
-            onMeasureIdChange={(value) => {
-              patchDetail({ measure_id: value });
+            showSearch
+            allowClear
+            placeholder={'请选择售后模板'}
+            dependencies={['store_id']}
+            fieldProps={{
+              optionFilterProp: 'label',
+              style: {
+                maxWidth: 360,
+                ...changedControlStyle(isChanged('after_sale_template_id')),
+              },
             }}
-            onPackingQuantityChange={(value) => {
-              patchDetail({ packing_quantity: value });
+            request={async (params) => {
+              const storeId = params.store_id as number | undefined;
+              if (!storeId) {
+                return [];
+              }
+              try {
+                const aftersale = await fetchStoreAftersaleTemplates(storeId);
+                const options = aftersale.map((item) => ({
+                  label: item.name?.trim() || item.after_sale_template_id,
+                  value: item.after_sale_template_id,
+                }));
+                return withCurrentTemplateOption(
+                  options,
+                  form.getFieldValue('after_sale_template_id'),
+                );
+              } catch {
+                return [];
+              }
             }}
-            onMinWholesaleQtyChange={(value) => {
-              patchDetail({ min_wholesale_qty: value });
+          />
+          <ProFormSelect
+            name="shipping_model_id"
+            label={changedLabel('物流模板', isChanged('shipping_model_id'))}
+            disabled={readOnly}
+            showSearch
+            allowClear
+            placeholder={'请选择物流模板'}
+            dependencies={['store_id']}
+            fieldProps={{
+              optionFilterProp: 'label',
+              style: {
+                maxWidth: 360,
+                ...changedControlStyle(isChanged('shipping_model_id')),
+              },
             }}
-            onItemInventoryChange={(value) => {
-              patchDetail({ item_inventory: value });
-            }}
-            onMaxSaleQtyChange={(value) => {
-              patchDetail({ max_sale_qty: value });
-            }}
-            onLeadingTimeChange={(value) => {
-              patchDetail({ leading_time: value });
+            request={async (params) => {
+              const storeId = params.store_id as number | undefined;
+              if (!storeId) {
+                return [];
+              }
+              try {
+                const shipping = await fetchStoreShippingTemplates(storeId);
+                const options = shipping.map((item) => ({
+                  label: item.name?.trim() || item.shipping_model_id,
+                  value: item.shipping_model_id,
+                }));
+                return withCurrentTemplateOption(
+                  options,
+                  form.getFieldValue('shipping_model_id'),
+                );
+              } catch {
+                return [];
+              }
             }}
           />
         </Card>
       </ProForm>
-
-      <Card
-        title={changedLabel(
-          '商品图片',
-          isChanged('item_img_list'),
-        )}
-        loading={loading}
-      >
-        {loading ? null : (
-          <ProductImagesEditor
-            images={detail?.item_img_list}
-            disabled={readOnly}
-            storeId={detail?.store_id || undefined}
-            alt={detail?.item_name || detail?.item_code}
-            onChange={(next) => {
-              setDetail((prev) => {
-                if (!prev) {
-                  return prev;
-                }
-                const updated = { ...prev, item_img_list: next };
-                onDetailChangeRef.current?.(updated);
-                return updated;
-              });
-            }}
-          />
-        )}
-      </Card>
-
-      <Card
-        title={changedLabel(
-          '商品规格',
-          isChanged('sku_list') ||
-            isChanged('item_spec_self_def_list') ||
-            changedCategoryAttrIds.some((id) => priceAttrIdSet.has(id)),
-        )}
-      >
-        {categoryAttrsLoading ? (
-          <Skeleton active paragraph={{ rows: 6 }} style={{ marginBottom: 24 }} />
-        ) : (
-          <SpecAttrsFields
-            disabled={readOnly}
-            changedAttrIds={changedCategoryAttrIds}
-            priceCategoryAttrs={priceCategoryAttrs}
-            priceSelectedAttrs={priceSelectedAttrs}
-            specSelfDefs={detail?.item_spec_self_def_list}
-            storeId={detail?.store_id || undefined}
-            onSelectedAttrsChange={
-              readOnly ? undefined : handlePriceAttrsChange
-            }
-            onValuePicChange={
-              readOnly ? undefined : handleAttrValuePicChange
-            }
-            onSpecSelfDefsChange={(next) => {
-              setDetail((prev) => {
-                if (!prev) {
-                  return prev;
-                }
-                const updated = { ...prev, item_spec_self_def_list: next };
-                onDetailChangeRef.current?.(updated);
-                return updated;
-              });
-            }}
-          />
-        )}
-        <Divider plain style={{ margin: '28px 0' }}>
-          <span style={{ fontSize: 15, fontWeight: 600 }}>
-            {'商品规格属性生成的规格sku'}
-          </span>
-        </Divider>
-        <CommissionRateHint
-          categoryPath={categoryPath}
-          hasStore={Boolean(detail?.store_id)}
-          supplierId={supplierId}
-          skuList={detail?.sku_list}
-          minWholesaleQty={detail?.min_wholesale_qty}
-          packingQuantity={detail?.packing_quantity}
-          measureUnitLabel={measureUnitLabel}
-          commissionLoading={commissionRateLoading}
-          commissionData={commissionRate}
-          storeDiscountLoading={storeBaseDiscountLoading}
-          storeDiscount={storeBaseDiscount}
-        />
-        <SpecSkuTable
-          disabled={readOnly || categoryAttrsLoading}
-          skuList={detail?.sku_list}
-          priceSelectedAttrs={priceSelectedAttrs}
-          specSelfDefs={detail?.item_spec_self_def_list}
-          itemCode={detail?.item_code}
-          measureUnitLabel={measureUnitLabel}
-          onChange={(next) => {
-            setDetail((prev) => {
-              if (!prev) {
-                return prev;
-              }
-              const updated = { ...prev, sku_list: next };
-              onDetailChangeRef.current?.(updated);
-              return updated;
-            });
-          }}
-        />
-        <PriceRangeFields
-          disabled={readOnly}
-          priceConfigType={detail?.price_config_type}
-          minWholesaleQty={detail?.min_wholesale_qty}
-          ranges={detail?.item_wholesale_range_list}
-          measureUnitLabel={measureUnitLabel}
-          onPriceConfigTypeChange={(value) => {
-            patchDetail({ price_config_type: value });
-          }}
-          onMinWholesaleQtyChange={(value) => {
-            patchDetail({ min_wholesale_qty: value });
-          }}
-          onRangesChange={(next) => {
-            patchDetail({ item_wholesale_range_list: next });
-          }}
-        />
-      </Card>
-
-      {detail?.html_content ? (
-        <Card
-          title={changedLabel(
-            '详情描述',
-            isChanged('html_content'),
-          )}
-        >
-          <iframe
-            title={'详情描述'}
-            srcDoc={detail.html_content}
-            sandbox=""
-            style={{
-              width: '100%',
-              minHeight: 360,
-              maxHeight: 480,
-              border: isChanged('html_content')
-                ? `1px solid ${CHANGED_COLOR}`
-                : 'none',
-              background: '#fff',
-            }}
-          />
-        </Card>
-      ) : null}
-
-      <Card
-        title={changedLabel(
-          '包装信息',
-          isChanged('gross_weight') ||
-            isChanged('length') ||
-            isChanged('width') ||
-            isChanged('height') ||
-            isChanged('item_weight_range'),
-        )}
-        loading={loading}
-      >
-        <PackageInfoFields
-          disabled={readOnly}
-          grossWeight={detail?.gross_weight}
-          length={detail?.length}
-          width={detail?.width}
-          height={detail?.height}
-          weightRange={detail?.item_weight_range}
-          onGrossWeightChange={(value) => {
-            patchDetail({ gross_weight: value });
-          }}
-          onLengthChange={(value) => {
-            patchDetail({ length: value });
-          }}
-          onWidthChange={(value) => {
-            patchDetail({ width: value });
-          }}
-          onHeightChange={(value) => {
-            patchDetail({ height: value });
-          }}
-          onWeightRangeChange={(value) => {
-            patchDetail({ item_weight_range: value });
-          }}
-        />
-      </Card>
-
-      <Card
-        title={'模板信息'}
-        loading={loading}
-      >
-        <div style={{ maxWidth: 720 }}>
-          <div style={{ display: 'flex', marginBottom: 24 }}>
-            <div
-              style={{
-                width: 110,
-                flex: '0 0 110px',
-                lineHeight: '32px',
-                ...changedControlStyle(isChanged('after_sale_template_id')),
-              }}
-            >
-              {'售后模板'}
-            </div>
-            <Select
-              disabled={readOnly}
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              style={{
-                maxWidth: 360,
-                width: '100%',
-                ...changedControlStyle(isChanged('after_sale_template_id')),
-              }}
-              placeholder={'请选择售后模板'}
-              options={withCurrentTemplateOption(
-                aftersaleOptions,
-                detail?.after_sale_template_id,
-              )}
-              value={detail?.after_sale_template_id || undefined}
-              onChange={(value) => {
-                patchDetail({ after_sale_template_id: value || null });
-              }}
-            />
-          </div>
-          <div style={{ display: 'flex' }}>
-            <div
-              style={{
-                width: 110,
-                flex: '0 0 110px',
-                lineHeight: '32px',
-                ...changedControlStyle(isChanged('shipping_model_id')),
-              }}
-            >
-              {'物流模板'}
-            </div>
-            <Select
-              disabled={readOnly}
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              style={{
-                maxWidth: 360,
-                width: '100%',
-                ...changedControlStyle(isChanged('shipping_model_id')),
-              }}
-              placeholder={'请选择物流模板'}
-              options={withCurrentTemplateOption(
-                shippingOptions,
-                detail?.shipping_model_id,
-              )}
-              value={detail?.shipping_model_id || undefined}
-              onChange={(value) => {
-                patchDetail({ shipping_model_id: value || null });
-              }}
-            />
-          </div>
-        </div>
-      </Card>
     </Space>
   );
 
@@ -1639,6 +990,6 @@ export function ProductEditor({
       {content}
     </PageContainer>
   );
-}
+});
 
 export default ProductEditor;

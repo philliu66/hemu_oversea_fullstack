@@ -62,6 +62,7 @@ export const AdminStoreApi = {
 export const AdminProductApi = {
   DH_PRODUCT_LIST: '/api/v1/admin/product/dh/list',
   DH_PRODUCT_DETAIL: '/api/v1/admin/product/dh/detail',
+  DH_SKU_LIST_PRICE: '/api/v1/admin/product/dh/skulistprice/get',
 } as const;
 
 /** 管理端任务相关路径 */
@@ -97,7 +98,7 @@ export const CommonUtilsApi = {
   DHGATE_TWEAK_IMG: '/api/v1/common/utils/dhgate/tweakimg',
   DHGATE_GET_MEASURES_UNIT_LIST:
     '/api/v1/common/utils/dhgate/getmeasuresunitlist',
-  DHGATE_GET_SKU_BASE_PRICE: '/api/v1/common/utils/dhgate/getskubaseprice',
+  DHGATE_GET_SKU_BASE_INFO: '/api/v1/common/utils/dhgate/getskubaseinfo',
 } as const;
 
 /** 列表默认分页大小 */

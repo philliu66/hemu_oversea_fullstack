@@ -1,6 +1,6 @@
 """全局工具类接口（common:utils）。"""
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 # from app.core.deps import get_current_account
@@ -9,13 +9,14 @@ from app.core.errors import bad_request
 from app.schemas.common import ApiResponse, success
 from app.schemas.product import DhMeasuresUnitPublic
 from app.schemas.utils import (
-    DhSkuBasePricePublic,
+    DhSkuBaseInfoPublic,
+    DhSkuBaseInfoRequest,
     DhgateImgInfoPublic,
     DhgateTweakImgPublic,
     DhgateUpdateProductFromFilePublic,
     DhgateUpdateProductPublic,
     DhgateUpdateProductRequest,
-    DhgateUpdateSkuBasePriceFromFilePublic,
+    DhgateUpdateSkuBaseInfoFromFilePublic,
     FileExtractPublic,
     FileExtractSummaryPublic,
 )
@@ -27,11 +28,12 @@ from app.services.dhgate import (
 )
 from app.services.measures_units_dh import list_measures_units_dh
 from app.services.product_package_weight import execute_dhgate_product_updates
-from app.services.sku_base_prices_dh import (
+from app.services.sku_base_infos_dh import (
     DEFAULT_SUPPLIER_ID,
     DEFAULT_UPDATED_BY,
-    get_sku_base_price,
-    upsert_sku_base_prices_from_items,
+    SKU_BASE_INFO_REQUIRED_FIELDS,
+    get_sku_base_info,
+    upsert_sku_base_infos_from_items,
 )
 
 router = APIRouter(
@@ -229,20 +231,28 @@ async def update_dhgate_product_from_file(
 
 
 @router.post(
-    "/dhgate/updateskubasepricefromfile",
-    response_model=ApiResponse[DhgateUpdateSkuBasePriceFromFilePublic],
-    summary="从本地文件中更新 SKU 基础价格表",
+    "/dhgate/updateskubaseinfofromfile",
+    response_model=ApiResponse[DhgateUpdateSkuBaseInfoFromFilePublic],
+    summary="从本地文件更新 SKU 基础信息",
 )
-async def update_dhgate_sku_base_price_from_file(
+async def update_dhgate_sku_base_info_from_file(
     db: Session = Depends(get_db),
     file: UploadFile = File(..., description="Excel 文件（.xlsx / .xlsm）"),
     extract_field_info: str = Form(
         ...,
         description=(
             "提取字段映射（JSON 对象）。键=表字段名，值=列字母。"
-            '示例：{"sku_code":"A","sku_series":"B","unit_price":"C"}'
+            "必填：sku_code / sku_series / unit_price；"
+            "可选：shipping_template_name / weight_kg / packing_quantity / min_wholesale_qty。"
+            '示例：{"sku_code":"B","sku_series":"C","unit_price":"D",'
+            '"shipping_template_name":"F","weight_kg":"G",'
+            '"packing_quantity":"H","min_wholesale_qty":"I"}'
         ),
-        examples=['{"sku_code":"A","sku_series":"B","unit_price":"C"}'],
+        examples=[
+            '{"sku_code":"B","sku_series":"C","unit_price":"D",'
+            '"shipping_template_name":"F","weight_kg":"G",'
+            '"packing_quantity":"H","min_wholesale_qty":"I"}'
+        ],
     ),
     start_row: int = Form(
         default=2,
@@ -259,16 +269,19 @@ async def update_dhgate_sku_base_price_from_file(
         ge=0,
         description="工作表索引：0=读取全部 sheet；1 起为指定 sheet（1=第一个）",
     ),
-) -> ApiResponse[DhgateUpdateSkuBasePriceFromFilePublic]:
+) -> ApiResponse[DhgateUpdateSkuBaseInfoFromFilePublic]:
     """
-    从 Excel 提取后批量 upsert sku_base_price_dh。
+    从本地 Excel 提取后批量 upsert sku_base_info_dh（SKU 基础信息）。
 
-    1. 按 extract_field_info 提取行（键名：sku_code / sku_series / unit_price）
+    1. 按 extract_field_info 提取行
     2. 自动去掉售价前缀 `$` 等货币符号后写入 unit_price
     3. 按 supplier_id + sku_code 新建或更新；本接口写死 supplier_id=4、updated_by=0（系统）
+    4. 物流模板 / 重量 / 打包数 / 起订量可为空（Excel 空单元格写入 null，不跳过该行）
 
-    截图价格表映射示例：
-    {"sku_code":"A","sku_series":"B","unit_price":"C"}
+    价格表映射示例（对应截图表头）：
+    序号 | 产品型号 | 产品系列 | 售价(DH) | 售价(SMT) | 物流模板 | 重量(kg) | 打包(DH) | 起批量(DH)
+    A    | B        | C        | D        | E         | F        | G        | H        | I
+    {"sku_code":"B","sku_series":"C","unit_price":"D","shipping_template_name":"F","weight_kg":"G","packing_quantity":"H","min_wholesale_qty":"I"}
     """
     content = await file.read()
     extract = utils_file_service.extract_rows_from_file(
@@ -278,18 +291,19 @@ async def update_dhgate_sku_base_price_from_file(
         start_row=start_row,
         row_count=row_count,
         sheet_index=sheet_index,
+        required_fields=SKU_BASE_INFO_REQUIRED_FIELDS,
     )
     if extract.valid_count <= 0:
         raise bad_request("Excel 中未解析到有效数据行")
 
-    update = upsert_sku_base_prices_from_items(
+    update = upsert_sku_base_infos_from_items(
         db,
         items=extract.items,
         supplier_id=DEFAULT_SUPPLIER_ID,
         updated_by=DEFAULT_UPDATED_BY,
     )
     return success(
-        DhgateUpdateSkuBasePriceFromFilePublic(
+        DhgateUpdateSkuBaseInfoFromFilePublic(
             extract=FileExtractSummaryPublic(
                 row_count=extract.row_count,
                 valid_count=extract.valid_count,
@@ -400,23 +414,26 @@ def get_dhgate_measures_unit_list(
     return success(list_measures_units_dh(db, valid_only=True))
 
 
-@router.get(
-    "/dhgate/getskubaseprice",
-    response_model=ApiResponse[DhSkuBasePricePublic],
-    summary="查询供应商下指定 SKU 型号的基础价格",
+@router.post(
+    "/dhgate/getskubaseinfo",
+    response_model=ApiResponse[DhSkuBaseInfoPublic],
+    summary="获取 SKU 基础信息",
 )
-def get_dhgate_sku_base_price(
+def get_dhgate_sku_base_info(
+    payload: DhSkuBaseInfoRequest,
     db: Session = Depends(get_db),
-    supplier_id: int = Query(..., ge=1, description="供应商 ID"),
-    sku_code: str = Query(..., min_length=1, description="SKU 规格编码型号"),
-) -> ApiResponse[DhSkuBasePricePublic]:
+) -> ApiResponse[DhSkuBaseInfoPublic]:
     """
-    按 supplier_id + sku_code 查询 sku_base_price_dh，返回 unit_price 等字段。
+    按 supplier_id + sku_code 查询 sku_base_info_dh。
+
+    sku_code 可原样传入（如 XQ992^）；服务端统一清洗后再查表。
+    返回 unit_price、shipping_template_name、weight_kg、packing_quantity、
+    min_wholesale_qty 等基础信息字段。
     """
     return success(
-        get_sku_base_price(
+        get_sku_base_info(
             db,
-            supplier_id=supplier_id,
-            sku_code=sku_code,
+            supplier_id=payload.supplier_id,
+            sku_code=payload.sku_code,
         )
     )

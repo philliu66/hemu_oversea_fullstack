@@ -5,6 +5,8 @@ import type {
   DhProductDetailPublic,
   DhProductListParams,
   DhProductPublic,
+  DhSkuListPriceParams,
+  DhSkuListPricePublic,
   PageData,
 } from '@/types/api';
 import { unwrapApiData } from '@/utils/http';
@@ -66,5 +68,29 @@ export async function fetchDhProductDetail(
   return requireData(
     unwrapApiData<DhProductDetailPublic>(res),
     '获取商品详情失败',
+  );
+}
+
+/** POST /api/v1/admin/product/dh/skulistprice/get */
+export async function fetchDhSkuListPrice(
+  params: DhSkuListPriceParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<DhSkuListPricePublic>>(
+    AdminProductApi.DH_SKU_LIST_PRICE,
+    {
+      method: 'POST',
+      data: {
+        supplier_id: params.supplier_id,
+        sku_code: params.sku_code,
+        store_id: params.store_id,
+        cate_id: params.cate_id,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhSkuListPricePublic>(res),
+    '计算 SKU 标价失败',
   );
 }

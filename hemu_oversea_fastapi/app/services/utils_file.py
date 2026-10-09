@@ -100,9 +100,11 @@ def _extract_rows_from_sheet(
     field_cols: dict[str, int],
     start_row: int,
     end_row: int | None,
+    required_fields: set[str] | None = None,
 ) -> tuple[list[dict[str, str]], list[FileExtractSkippedRow]]:
     max_col = max(field_cols.values()) if field_cols else 1
     field_names = list(field_cols.keys())
+    required = required_fields if required_fields is not None else set(field_names)
     items: list[dict[str, str]] = []
     skipped: list[FileExtractSkippedRow] = []
     last_content_row: int | None = None
@@ -125,11 +127,14 @@ def _extract_rows_from_sheet(
             cell = values[col_idx - 1] if len(values) >= col_idx else None
             text = _cell_to_str(cell)
             if not text:
-                missing.append(field)
+                if field in required:
+                    missing.append(field)
             else:
                 record[field] = text
 
         if not missing:
+            for field in field_cols:
+                record.setdefault(field, "")
             items.append(record)
             last_content_row = row_no
             continue
@@ -187,6 +192,7 @@ def extract_rows_from_file(
     start_row: int = 2,
     row_count: int = 0,
     sheet_index: int = 1,
+    required_fields: set[str] | None = None,
 ) -> FileExtractPublic:
     """
     从 Excel 按字段→列字母映射提取数据。
@@ -250,6 +256,7 @@ def extract_rows_from_file(
                 field_cols=field_cols,
                 start_row=start_row,
                 end_row=end_row,
+                required_fields=required_fields,
             )
             items.extend(sheet_items)
             skipped.extend(sheet_skipped)

@@ -443,12 +443,39 @@ export type DhMeasuresUnitPublic = {
   plural?: string | null;
 };
 
-/** 敦煌 SKU 基础价格（sku_base_price_dh） */
-export type DhSkuBasePricePublic = {
+/** 敦煌 SKU 基础信息（sku_base_info_dh） */
+export type DhSkuBaseInfoPublic = {
   supplier_id: number;
   sku_code: string;
   sku_series: string;
   unit_price: string | number;
+  shipping_template_name?: string | null;
+  weight_kg?: string | number | null;
+  packing_quantity?: number | null;
+  min_wholesale_qty?: number | null;
+};
+
+/** POST /api/v1/admin/product/dh/skulistprice/get */
+export type DhSkuListPriceParams = {
+  supplier_id: number;
+  sku_code: string;
+  store_id: number;
+  cate_id?: string;
+};
+
+export type DhSkuListPricePublic = {
+  supplier_id: number;
+  sku_code: string;
+  store_id: number;
+  cate_id: string;
+  unit_price: string | number;
+  packing_quantity: number;
+  min_wholesale_qty: number;
+  sales_unit: number;
+  order_amount: string | number;
+  commission_rate: string | number;
+  base_discount: string | number;
+  list_price: string | number;
 };
 
 export type DhItemWeightRangePublic = {

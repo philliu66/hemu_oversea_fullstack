@@ -1,5 +1,8 @@
-import React from 'react';
-import { ProductEditor } from '@/pages/product/detail/ProductEditor';
+import React, { forwardRef } from 'react';
+import {
+  ProductEditor,
+  type ProductEditorHandle,
+} from '@/pages/product/detail/ProductEditor';
 import type {
   DhProductDetailPublic,
   DhProductSelectedAttrPublic,
@@ -9,30 +12,34 @@ import type {
  * 裂变第二步 / 查看变更：嵌入共用 ProductEditor。
  * 保留原 props 形状，避免抽屉调用方改动。
  */
-export function FissionProductStep({
-  productId,
-  onDetailChange,
-  readOnly = false,
-  initialDetail,
-  changedKeys = [],
-  changedAttrList = [],
-}: {
-  productId?: number;
-  onDetailChange?: (detail: DhProductDetailPublic) => void;
-  readOnly?: boolean;
-  initialDetail?: DhProductDetailPublic;
-  changedKeys?: string[];
-  changedAttrList?: DhProductSelectedAttrPublic[];
-}) {
+export const FissionProductStep = forwardRef<
+  ProductEditorHandle,
+  {
+    productId?: number;
+    readOnly?: boolean;
+    initialDetail?: DhProductDetailPublic;
+    changedKeys?: string[];
+    changedAttrList?: DhProductSelectedAttrPublic[];
+  }
+>(function FissionProductStep(
+  {
+    productId,
+    readOnly = false,
+    initialDetail,
+    changedKeys = [],
+    changedAttrList = [],
+  },
+  ref,
+) {
   return (
     <ProductEditor
+      ref={ref}
       embedded
       productId={productId}
-      onDetailChange={onDetailChange}
       readOnly={readOnly}
       initialDetail={initialDetail}
       changedKeys={changedKeys}
       changedAttrList={changedAttrList}
     />
   );
-}
+});

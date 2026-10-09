@@ -1,33 +1,14 @@
-import { Form, InputNumber, Radio, Select, Space, Typography } from 'antd';
-import React, { useMemo } from 'react';
-import type {
-  DhItemInventoryPublic,
-  DhMeasuresUnitPublic,
-} from '@/types/api';
+import { ProFormDependency, ProFormSelect } from '@ant-design/pro-components';
+import { Form, InputNumber, Radio, Space, Typography } from 'antd';
+import React from 'react';
+import { fetchDhMeasuresUnitList } from '@/services/common/utils';
+import type { DhItemInventoryPublic, DhMeasuresUnitPublic } from '@/types/api';
 
 /** issample：2 成人 / 3 非成人（平台也可能返回其它值） */
 export const ISSAMPLE_ADULT = '2';
 export const ISSAMPLE_NON_ADULT = '3';
 
 export type StockStatus = 'in_stock' | 'in_transit' | 'pending';
-
-type SaleInfoFieldsProps = {
-  measureId?: string | null;
-  measureOptions?: DhMeasuresUnitPublic[];
-  measuresLoading?: boolean;
-  packingQuantity?: number | null;
-  minWholesaleQty?: number | null;
-  itemInventory?: DhItemInventoryPublic | null;
-  maxSaleQty?: number | null;
-  leadingTime?: number | null;
-  disabled?: boolean;
-  onMeasureIdChange?: (value: string | null) => void;
-  onPackingQuantityChange?: (value: number | null) => void;
-  onMinWholesaleQtyChange?: (value: number | null) => void;
-  onItemInventoryChange?: (value: DhItemInventoryPublic | null) => void;
-  onMaxSaleQtyChange?: (value: number | null) => void;
-  onLeadingTimeChange?: (value: number | null) => void;
-};
 
 export function formatMeasureLabel(item: DhMeasuresUnitPublic): string {
   const cn = (item.cname || '').trim();
@@ -130,208 +111,156 @@ function requiredLabel(text: string) {
   );
 }
 
+type SaleInfoFieldsProps = {
+  disabled?: boolean;
+};
+
 /**
- * 销售信息卡片字段：计件单位、销售方式、起定量、备货状态、备货期。
- * 与产品分组等同级 Form.Item，标签对齐表单 labelCol。
+ * 销售信息：字段直连 Form；计件单位用 ProForm 声明式 request；
+ * 销售方式/文案通过 ProFormDependency 订阅 measure_id / packing_quantity。
  */
 const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
-  measureId,
-  measureOptions,
-  measuresLoading = false,
-  packingQuantity,
-  minWholesaleQty,
-  itemInventory,
-  maxSaleQty,
-  leadingTime,
   disabled = false,
-  onMeasureIdChange,
-  onPackingQuantityChange,
-  onMinWholesaleQtyChange,
-  onItemInventoryChange,
-  onMaxSaleQtyChange,
-  onLeadingTimeChange,
 }) => {
-  const stockStatus = deriveStockStatus(itemInventory);
-  const packQty = packingQuantity == null ? 1 : packingQuantity;
-  const sellByPack = packQty > 1;
-  const measureUnitLabel =
-    resolveMeasureDisplayName(measureId, measureOptions) ||
-    '件';
-
-  const selectOptions = useMemo(() => {
-    const list = measureOptions || [];
-    const options = list.map((item) => ({
-      label: formatMeasureLabel(item),
-      value: item.measure_id,
-    }));
-    const current = (measureId || '').trim();
-    if (current && !options.some((item) => item.value === current)) {
-      options.unshift({ label: current, value: current });
-    }
-    return options;
-  }, [measureId, measureOptions]);
+  const form = Form.useFormInstance();
 
   return (
     <>
-      <Form.Item
-        label={requiredLabel(
-          '计件单位',
-        )}
-      >
-        <Select
-          disabled={disabled}
-          allowClear
-          showSearch
-          loading={measuresLoading}
-          optionFilterProp="label"
-          style={{ maxWidth: 280, width: '100%' }}
-          placeholder={'请选择计件单位'}
-          options={selectOptions}
-          value={measureId || undefined}
-          onChange={(value) => onMeasureIdChange?.(value || null)}
-        />
-      </Form.Item>
+      {/* packing_quantity / item_inventory 由 setFieldsValue 维护，无独立控件 */}
+      <ProFormSelect
+        name="measure_id"
+        label={requiredLabel('计件单位')}
+        disabled={disabled}
+        showSearch
+        allowClear
+        placeholder={'请选择计件单位'}
+        fieldProps={{
+          style: { maxWidth: 280, width: '100%' },
+          optionFilterProp: 'label',
+        }}
+        request={async () => {
+          const list = (await fetchDhMeasuresUnitList()) || [];
+          return list.map((item) => ({
+            label: formatMeasureLabel(item),
+            value: item.measure_id,
+          }));
+        }}
+      />
 
-      <Form.Item
-        label={requiredLabel(
-          '销售方式',
-        )}
+      <ProFormDependency
+        name={['measure_id', 'packing_quantity', 'item_inventory']}
       >
-        <Radio.Group
-          disabled={disabled}
-          value={sellByPack ? 'pack' : 'piece'}
-          onChange={(event) => {
-            if (event.target.value === 'piece') {
-              onPackingQuantityChange?.(1);
-              return;
-            }
-            onPackingQuantityChange?.(Math.max(packQty, 2));
-          }}
-        >
-          <Radio value="piece">
-            {`按件卖 (单位: ${measureUnitLabel})`}
-          </Radio>
-          <Radio value="pack">
-            <Space size={6} align="center" wrap>
-              <span>
-                {'按包卖 (每包产品的数量'}
-              </span>
-              <InputNumber
-                min={2}
-                precision={0}
-                disabled={disabled || !sellByPack}
-                value={sellByPack ? packQty : undefined}
-                style={{ width: 88 }}
-                onClick={(event) => event.stopPropagation()}
-                onChange={(value) => {
-                  if (typeof value === 'number') {
-                    onPackingQuantityChange?.(value);
-                  }
-                }}
-              />
-              <span>{measureUnitLabel})</span>
-            </Space>
-          </Radio>
-        </Radio.Group>
-      </Form.Item>
+        {({ measure_id, packing_quantity, item_inventory }) => {
+          const packQty = packing_quantity == null ? 1 : packing_quantity;
+          const sellByPack = packQty > 1;
+          const measureUnitLabel =
+            resolveMeasureDisplayName(measure_id) || '件';
+          const stockStatus = deriveStockStatus(item_inventory);
+          return (
+            <>
+              <Form.Item label={requiredLabel('销售方式')}>
+                <Radio.Group
+                  disabled={disabled}
+                  value={sellByPack ? 'pack' : 'piece'}
+                  onChange={(event) => {
+                    if (event.target.value === 'piece') {
+                      form.setFieldsValue({ packing_quantity: 1 });
+                      return;
+                    }
+                    form.setFieldsValue({
+                      packing_quantity: Math.max(packQty, 2),
+                    });
+                  }}
+                >
+                  <Radio value="piece">
+                    {`按件卖 (单位: ${measureUnitLabel})`}
+                  </Radio>
+                  <Radio value="pack">
+                    <Space size={6} align="center" wrap>
+                      <span>{'按包卖 (每包产品的数量'}</span>
+                      <InputNumber
+                        min={2}
+                        precision={0}
+                        disabled={disabled || !sellByPack}
+                        value={sellByPack ? packQty : undefined}
+                        style={{ width: 88 }}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(value) => {
+                          if (typeof value === 'number') {
+                            form.setFieldsValue({ packing_quantity: value });
+                          }
+                        }}
+                      />
+                      <span>{measureUnitLabel})</span>
+                    </Space>
+                  </Radio>
+                </Radio.Group>
+              </Form.Item>
 
-      <Form.Item
-        label={requiredLabel(
-          '起定量',
-        )}
-      >
+              <Form.Item label={requiredLabel('起定量')}>
+                <Space size={8} align="center" wrap>
+                  <Form.Item name="min_wholesale_qty" noStyle>
+                    <InputNumber
+                      min={1}
+                      precision={0}
+                      disabled={disabled}
+                      style={{ width: 120 }}
+                    />
+                  </Form.Item>
+                  <span>{sellByPack ? '包' : measureUnitLabel}</span>
+                </Space>
+              </Form.Item>
+
+              <Form.Item label={requiredLabel('备货状态')}>
+                <div>
+                  <Radio.Group
+                    disabled={disabled}
+                    value={stockStatus}
+                    onChange={(event) =>
+                      form.setFieldsValue({
+                        item_inventory: applyStockStatus(
+                          item_inventory,
+                          event.target.value,
+                        ),
+                      })
+                    }
+                  >
+                    <Radio value="in_stock">{'有备货'}</Radio>
+                    <Radio value="in_transit">{'备货途中'}</Radio>
+                    <Radio value="pending">{'待备货'}</Radio>
+                  </Radio.Group>
+                  <div style={{ marginTop: 10 }}>
+                    <Space size={8} align="center" wrap>
+                      <span>{'一次最大购买数量为'}</span>
+                      <Form.Item name="max_sale_qty" noStyle>
+                        <InputNumber
+                          min={1}
+                          precision={0}
+                          disabled={disabled}
+                          style={{ width: 120 }}
+                        />
+                      </Form.Item>
+                      <span>{sellByPack ? '包' : measureUnitLabel}</span>
+                    </Space>
+                  </div>
+                </div>
+              </Form.Item>
+            </>
+          );
+        }}
+      </ProFormDependency>
+
+      <Form.Item label={requiredLabel('备货期')}>
         <Space size={8} align="center" wrap>
-          <InputNumber
-            min={1}
-            precision={0}
-            disabled={disabled}
-            value={minWholesaleQty ?? undefined}
-            style={{ width: 120 }}
-            onChange={(value) =>
-              onMinWholesaleQtyChange?.(
-                typeof value === 'number' ? value : null,
-              )
-            }
-          />
-          <span>
-            {sellByPack
-              ? '包'
-              : measureUnitLabel}
-          </span>
-        </Space>
-      </Form.Item>
-
-      <Form.Item
-        label={requiredLabel(
-          '备货状态',
-        )}
-      >
-        <div>
-          <Radio.Group
-            disabled={disabled}
-            value={stockStatus}
-            onChange={(event) =>
-              onItemInventoryChange?.(
-                applyStockStatus(itemInventory, event.target.value),
-              )
-            }
-          >
-            <Radio value="in_stock">
-              {'有备货'}
-            </Radio>
-            <Radio value="in_transit">
-              {'备货途中'}
-            </Radio>
-            <Radio value="pending">
-              {'待备货'}
-            </Radio>
-          </Radio.Group>
-          <div style={{ marginTop: 10 }}>
-            <Space size={8} align="center" wrap>
-              <span>
-                {'一次最大购买数量为'}
-              </span>
-              <InputNumber
-                min={1}
-                precision={0}
-                disabled={disabled}
-                value={maxSaleQty ?? undefined}
-                style={{ width: 120 }}
-                onChange={(value) =>
-                  onMaxSaleQtyChange?.(
-                    typeof value === 'number' ? value : null,
-                  )
-                }
-              />
-              <span>
-                {sellByPack
-                  ? '包'
-                  : measureUnitLabel}
-              </span>
-            </Space>
-          </div>
-        </div>
-      </Form.Item>
-
-      <Form.Item
-        label={requiredLabel(
-          '备货期',
-        )}
-      >
-        <Space size={8} align="center" wrap>
-          <InputNumber
-            min={0}
-            precision={0}
-            disabled={disabled}
-            value={leadingTime ?? undefined}
-            style={{ width: 120 }}
-            onChange={(value) =>
-              onLeadingTimeChange?.(typeof value === 'number' ? value : null)
-            }
-          />
-          <span>
-            {'天'}
-          </span>
+          <Form.Item name="leading_time" noStyle>
+            <InputNumber
+              min={0}
+              precision={0}
+              disabled={disabled}
+              style={{ width: 120 }}
+            />
+          </Form.Item>
+          <span>{'天'}</span>
         </Space>
       </Form.Item>
     </>
