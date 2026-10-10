@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -284,6 +285,43 @@ class DhSkuListPriceRequest(BaseModel):
         min_length=1,
         max_length=64,
         description=f"定价参考类目 ID，默认 {DH_REF_PRICING_CATE_ID}",
+    )
+
+
+class DhProductPublishRequest(BaseModel):
+    """发布商品入参。"""
+
+    type: Literal["addnew", "addfission"] = Field(
+        default="addfission",
+        description="发布类型：addnew=新添加商品，addfission=从裂变任务数据发布（默认）",
+    )
+    mission_data_fission_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="裂变任务数据 ID；type=addfission 时必传",
+    )
+    info: dict[str, Any] | None = Field(
+        default=None,
+        description="新商品完整数据；type=addnew 时必传，默认为空",
+    )
+
+
+class DhProductPublishPublic(BaseModel):
+    """发布商品结果。"""
+
+    type: str = Field(description="发布类型")
+    item_code: str | None = Field(default=None, description="敦煌返回的商品编码")
+    mission_data_fission_id: int | None = Field(
+        default=None,
+        description="裂变任务数据 ID（addfission 时返回）",
+    )
+    fission_status: str | None = Field(
+        default=None,
+        description="裂变状态（addfission 时返回）",
+    )
+    upload_dh_product_info: dict[str, Any] | None = Field(
+        default=None,
+        description="最终上传给敦煌 dh.item.add 的参数（已去掉 htmlContent，便于排查）",
     )
 
 

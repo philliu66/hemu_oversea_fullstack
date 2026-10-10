@@ -10,6 +10,13 @@ class MissionCreate(BaseModel):
     worker_id: int = Field(ge=1, description="指定人员用户 ID")
 
 
+class MissionUpdate(BaseModel):
+    id: int = Field(ge=1, description="任务 ID")
+    title: str = Field(min_length=1, max_length=100, description="任务标题")
+    description: str | None = Field(default=None, description="任务描述")
+    worker_id: int = Field(ge=1, description="指定人员用户 ID")
+
+
 class MissionList(BaseModel):
     supplier_id: int | None = Field(
         default=None,
@@ -52,6 +59,10 @@ class MissionFissionDataAdd(BaseModel):
     raw_json: dict[str, Any] = Field(
         description="修改完成后的完整正文，发布直接使用",
     )
+    seed_json: dict[str, Any] | None = Field(
+        default=None,
+        description="加入时冻结的种子详情（与前端编辑基线一致）；缺省则用商品 raw_json",
+    )
 
 
 class MissionFissionDataDetail(BaseModel):
@@ -67,8 +78,22 @@ class MissionFissionDataDetailPublic(BaseModel):
     id: int
     mission_id: int
     seed_product_id: int
+    fission_status: str
     update_json: dict[str, Any]
     raw_json: dict[str, Any] | None = None
+    seed_json: dict[str, Any] | None = None
+
+
+class MissionFissionDataUpdate(BaseModel):
+    id: int = Field(ge=1, description="任务数据 ID")
+    mission_id: int = Field(ge=1, description="任务 ID")
+    update_json: dict[str, Any] = Field(
+        default_factory=dict,
+        description="相对最初种子详情的完整差异（按种子重算）",
+    )
+    raw_json: dict[str, Any] = Field(
+        description="修改完成后的完整正文，发布直接使用",
+    )
 
 
 class MissionFissionDataOperate(BaseModel):
@@ -121,6 +146,10 @@ class MissionFissionDataPublic(BaseModel):
     seed_product_id: int
     store_id: int
     store_name: str | None = Field(default=None, description="店铺名称，列表展示用")
+    seed_item_code: str | None = Field(
+        default=None,
+        description="原商品编码（种子商品 item_code），列表展示用",
+    )
     item_code: str | None = Field(
         default=None,
         description="新商品编码。发布成功前为空，成功后为官方 API 返回值",

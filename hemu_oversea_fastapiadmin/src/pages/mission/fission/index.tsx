@@ -9,6 +9,7 @@ import {
   createMission,
   fetchMissionList,
   markMissionFinished,
+  updateMission,
 } from '@/services/admin/missions';
 import { fetchSupplierUserOptions } from '@/services/admin/users';
 import type { MissionPublic, SupplierUserOption } from '@/types/api';
@@ -26,7 +27,7 @@ type MissionTableParams = {
   keyword?: string;
 };
 
-type CreateFormValues = {
+type MissionFormValues = {
   title: string;
   description?: string;
   worker_id: number;
@@ -36,14 +37,15 @@ const MissionFissionList: React.FC = () => {
   const access = useAccess();
   const { message } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
-  const [form] = Form.useForm<CreateFormValues>();
+  const [form] = Form.useForm<MissionFormValues>();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingMission, setEditingMission] = useState<MissionPublic | null>(
+    null,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [workers, setWorkers] = useState<SupplierUserOption[]>([]);
 
-  const openCreate = async () => {
-    form.resetFields();
-    setModalOpen(true);
+  const loadWorkers = async () => {
     try {
       const options = await fetchSupplierUserOptions();
       setWorkers(options);
@@ -52,19 +54,46 @@ const MissionFissionList: React.FC = () => {
     }
   };
 
-  const handleCreate = async () => {
+  const openCreate = async () => {
+    setEditingMission(null);
+    form.resetFields();
+    setModalOpen(true);
+    await loadWorkers();
+  };
+
+  const openEdit = async (record: MissionPublic) => {
+    setEditingMission(record);
+    form.setFieldsValue({
+      title: record.title,
+      description: record.description || undefined,
+      worker_id: record.worker_id,
+    });
+    setModalOpen(true);
+    await loadWorkers();
+  };
+
+  const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
       setSubmitting(true);
-      await createMission({
-        title: values.title.trim(),
-        description: values.description?.trim() || undefined,
-        worker_id: values.worker_id,
-      });
-      message.success(
-        '创建成功',
-      );
+      if (editingMission) {
+        await updateMission({
+          id: editingMission.id,
+          title: values.title.trim(),
+          description: values.description?.trim() || undefined,
+          worker_id: values.worker_id,
+        });
+        message.success('更新成功');
+      } else {
+        await createMission({
+          title: values.title.trim(),
+          description: values.description?.trim() || undefined,
+          worker_id: values.worker_id,
+        });
+        message.success('创建成功');
+      }
       setModalOpen(false);
+      setEditingMission(null);
       actionRef.current?.reload();
     } catch {
       // 校验失败或请求错误已提示
@@ -117,8 +146,11 @@ const MissionFissionList: React.FC = () => {
     {
       title: '操作',
       valueType: 'option',
-      width: 280,
+      width: 320,
       render: (_, record) => {
+        const canEdit =
+          access.can('mission.fission.create') &&
+          (record.status === 'pending' || record.status === 'running');
         const canMark =
           access.can('mission.fission.finish') &&
           (record.status === 'pending' || record.status === 'running');
@@ -130,6 +162,11 @@ const MissionFissionList: React.FC = () => {
               onClick={() => history.push(missionFissionDataPath(record.id))}
             >
               {'设置任务数据'}
+            </Button>
+          ) : null,
+          canEdit ? (
+            <Button type="link" key="edit" onClick={() => openEdit(record)}>
+              {'编辑'}
             </Button>
           ) : null,
           <Button
@@ -146,18 +183,14 @@ const MissionFissionList: React.FC = () => {
               onConfirm={async () => {
                 try {
                   await markMissionFinished(record.id);
-                  message.success(
-                    '已标记结束',
-                  );
+                  message.success('已标记结束');
                   actionRef.current?.reload();
                 } catch {
                   // 错误已由全局拦截器处理
                 }
               }}
             >
-              <Button type="link">
-                {'标记结束'}
-              </Button>
+              <Button type="link">{'标记结束'}</Button>
             </Popconfirm>
           ) : null,
         ];
@@ -206,11 +239,14 @@ const MissionFissionList: React.FC = () => {
         columns={columns}
       />
       <Modal
-        title={'新建任务'}
+        title={editingMission ? '编辑任务' : '新建任务'}
         open={modalOpen}
         confirmLoading={submitting}
-        onCancel={() => setModalOpen(false)}
-        onOk={handleCreate}
+        onCancel={() => {
+          setModalOpen(false);
+          setEditingMission(null);
+        }}
+        onOk={handleSubmit}
         destroyOnHidden
       >
         <Form form={form} layout="vertical">
@@ -226,18 +262,10 @@ const MissionFissionList: React.FC = () => {
               { max: 100 },
             ]}
           >
-            <Input
-              placeholder={'请输入任务标题'}
-            />
+            <Input placeholder={'请输入任务标题'} />
           </Form.Item>
-          <Form.Item
-            name="description"
-            label={'任务描述'}
-          >
-            <Input.TextArea
-              rows={3}
-              placeholder={'请输入任务描述'}
-            />
+          <Form.Item name="description" label={'任务描述'}>
+            <Input.TextArea rows={3} placeholder={'请输入任务描述'} />
           </Form.Item>
           <Form.Item
             name="worker_id"

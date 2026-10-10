@@ -5,6 +5,8 @@ import type {
   DhProductDetailPublic,
   DhProductListParams,
   DhProductPublic,
+  DhProductPublishParams,
+  DhProductPublishPublic,
   DhSkuListPriceParams,
   DhSkuListPricePublic,
   PageData,
@@ -92,5 +94,28 @@ export async function fetchDhSkuListPrice(
   return requireData(
     unwrapApiData<DhSkuListPricePublic>(res),
     '计算 SKU 标价失败',
+  );
+}
+
+/** POST /api/v1/admin/product/dh/publish */
+export async function publishDhProduct(
+  params: DhProductPublishParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<DhProductPublishPublic>>(
+    AdminProductApi.DH_PRODUCT_PUBLISH,
+    {
+      method: 'POST',
+      data: {
+        type: params.type ?? 'addfission',
+        mission_data_fission_id: params.mission_data_fission_id,
+        info: params.info ?? null,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhProductPublishPublic>(res),
+    '发布商品失败',
   );
 }

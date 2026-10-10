@@ -44,6 +44,33 @@ def get_status_message(data: dict) -> str:
     return "敦煌 API 调用失败"
 
 
+def format_status_error_message(data: dict) -> str:
+    """拼接敦煌 status.message 与 subErrors.message，用 / 分隔。"""
+    parts: list[str] = []
+    status = data.get("status")
+    if isinstance(status, dict):
+        if status.get("message"):
+            parts.append(str(status["message"]).strip())
+        sub_errors = status.get("subErrors")
+        if isinstance(sub_errors, list):
+            for item in sub_errors:
+                if not isinstance(item, dict):
+                    continue
+                message = item.get("message")
+                if not message:
+                    continue
+                text = str(message).strip()
+                if text and text not in parts:
+                    parts.append(text)
+    if parts:
+        return "/".join(parts)
+    if data.get("error_description"):
+        return str(data["error_description"])
+    if data.get("error"):
+        return str(data["error"])
+    return "敦煌 API 调用失败"
+
+
 def is_success(data: dict) -> bool:
     if data.get("error"):
         return False
@@ -64,7 +91,7 @@ def is_token_expired(data: dict) -> bool:
 def raise_if_error(data: dict) -> None:
     if is_success(data):
         return
-    message = get_status_message(data)
+    message = format_status_error_message(data)
     code = get_status_code(data)
     raise bad_request(
         message,
@@ -82,32 +109,9 @@ def raise_reauth_required(message: str = "敦煌授权已失效，请重新授�
 
 
 def format_dhgate_error_message(exc: AppError, *, fallback: str = "敦煌 API 调用失败") -> str:
-    """从 AppError 中拼出可读的敦煌官方错误信息。"""
-    parts: list[str] = []
-    if exc.message:
-        parts.append(exc.message)
+    """从 AppError 中拼出可读的敦煌官方错误信息（message/subErrors 用 / 分隔）。"""
     data = exc.data if isinstance(exc.data, dict) else {}
     response = data.get("dhgate_response")
     if isinstance(response, dict):
-        status = response.get("status")
-        if isinstance(status, dict):
-            status_message = status.get("message")
-            if status_message:
-                text = str(status_message)
-                if text not in parts:
-                    parts.append(text)
-            sub_errors = status.get("subErrors")
-            if isinstance(sub_errors, list):
-                for item in sub_errors:
-                    if not isinstance(item, dict):
-                        continue
-                    message = item.get("message")
-                    if message:
-                        text = str(message)
-                        if text not in parts:
-                            parts.append(text)
-        elif response.get("error_description"):
-            text = str(response["error_description"])
-            if text not in parts:
-                parts.append(text)
-    return "；".join(parts) or fallback
+        return format_status_error_message(response)
+    return (exc.message or "").strip() or fallback

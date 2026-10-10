@@ -228,6 +228,45 @@ def get_mission(
     )
 
 
+def update_mission(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    title: str,
+    description: str | None,
+    worker_id: int,
+) -> MissionPublic:
+    supplier_id = _require_supplier_actor(actor)
+    mission = _get_visible_mission(
+        db,
+        mission_id=mission_id,
+        actor=actor,
+        supplier_id=supplier_id,
+    )
+    if mission.status not in _MARKABLE_STATUSES:
+        raise bad_request("仅未开始或进行中的任务可编辑")
+    cleaned_title = title.strip()
+    if not cleaned_title:
+        raise bad_request("请填写任务标题")
+    worker = _get_assignable_worker(db, supplier_id=supplier_id, worker_id=worker_id)
+    cleaned_description = description.strip() if description else ""
+    mission.title = cleaned_title
+    mission.description = cleaned_description or None
+    mission.worker_id = worker.id
+    db.commit()
+    db.refresh(mission)
+    users = _load_users(
+        db,
+        {mission.worker_id, *([mission.created_by] if mission.created_by else [])},
+    )
+    return _to_public(
+        mission,
+        worker=worker,
+        creator=users.get(mission.created_by) if mission.created_by else None,
+    )
+
+
 def mark_mission_finished(
     db: Session,
     *,
@@ -261,11 +300,13 @@ def _to_fission_list_public(
     row: MissionDataDhFission,
     *,
     store_name: str | None,
+    seed_item_code: str | None = None,
 ) -> MissionFissionDataPublic:
     data = MissionFissionDataPublic.model_validate(row)
     return data.model_copy(
         update={
             "store_name": store_name,
+            "seed_item_code": seed_item_code,
             "main_image_url": _build_dh_main_image_url(row.main_image_url),
         }
     )
@@ -348,12 +389,13 @@ def list_fission_data(
         or 0
     )
     rows = db.execute(
-        select(MissionDataDhFission, Store.name)
+        select(MissionDataDhFission, Store.name, ProductDh.item_code)
         .options(
             defer(MissionDataDhFission.seed_json),
             defer(MissionDataDhFission.raw_json),
         )
         .outerjoin(Store, Store.id == MissionDataDhFission.store_id)
+        .outerjoin(ProductDh, ProductDh.id == MissionDataDhFission.seed_product_id)
         .where(*filters)
         .order_by(MissionDataDhFission.id.desc())
         .offset(pagination.offset)
@@ -361,8 +403,12 @@ def list_fission_data(
     ).all()
     return PageData(
         items=[
-            _to_fission_list_public(fission, store_name=store_name)
-            for fission, store_name in rows
+            _to_fission_list_public(
+                fission,
+                store_name=store_name,
+                seed_item_code=seed_item_code,
+            )
+            for fission, store_name, seed_item_code in rows
         ],
         total=total,
         page=pagination.page,
@@ -440,8 +486,10 @@ def get_fission_data_detail(
         id=row.id,
         mission_id=row.mission_id,
         seed_product_id=row.seed_product_id,
+        fission_status=row.fission_status,
         update_json=row.update_json or {},
         raw_json=row.raw_json if isinstance(row.raw_json, dict) else None,
+        seed_json=row.seed_json if isinstance(row.seed_json, dict) else None,
     )
 
 
@@ -453,6 +501,7 @@ def add_fission_data(
     seed_product_id: int,
     update_json: dict,
     raw_json: dict,
+    seed_json: dict | None = None,
 ) -> MissionFissionDataPublic:
     """加入任务。seed_json 冻结种子原文，raw_json 为改完后的正文，update_json 为二者差异。"""
     supplier_id = _require_supplier_actor(actor)
@@ -478,8 +527,14 @@ def add_fission_data(
 
     if not isinstance(raw_json, dict) or not raw_json:
         raise bad_request("缺少修改后的商品正文")
-    seed_json = (
-        copy.deepcopy(product.raw_json) if isinstance(product.raw_json, dict) else None
+    frozen_seed = (
+        copy.deepcopy(seed_json)
+        if isinstance(seed_json, dict) and seed_json
+        else (
+            copy.deepcopy(product.raw_json)
+            if isinstance(product.raw_json, dict)
+            else None
+        )
     )
     row = MissionDataDhFission(
         mission_id=mission.id,
@@ -504,13 +559,64 @@ def add_fission_data(
             _body_text(raw_json, "item_name") or product.item_name,
         ),
         main_image_url=_body_main_image(raw_json) or product.main_image_url,
-        seed_json=seed_json,
+        seed_json=frozen_seed,
         raw_json=raw_json,
         update_json=update_json,
         fission_status=FISSION_STATUS_PENDING,
         created_by=actor.id,
     )
     db.add(row)
+    db.commit()
+    db.refresh(row)
+    return MissionFissionDataPublic.model_validate(row)
+
+
+def update_fission_data(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    data_id: int,
+    update_json: dict,
+    raw_json: dict,
+) -> MissionFissionDataPublic:
+    """编辑任务数据。seed_json 不变，raw_json / update_json 按最初种子重算覆盖。"""
+    row = _get_mutable_fission_row(
+        db,
+        actor=actor,
+        mission_id=mission_id,
+        data_id=data_id,
+    )
+    if row.fission_status == FISSION_STATUS_SUCCESS:
+        raise bad_request("裂变成功的数据不能编辑")
+    if not isinstance(raw_json, dict) or not raw_json:
+        raise bad_request("缺少修改后的商品正文")
+
+    product = db.get(ProductDh, row.seed_product_id)
+    if product is None:
+        raise not_found("种子商品不存在")
+
+    supplier_id = row.supplier_id
+    row.store_id = _snapshot_store_id(
+        db,
+        product=product,
+        update_json=update_json,
+        supplier_id=supplier_id,
+    )
+    row.site_id = _body_text(raw_json, "site_id") or row.site_id or "EN"
+    row.cate_pub_id = _overlay_text(
+        update_json,
+        "cate_pub_id",
+        _body_text(raw_json, "cate_pub_id") or row.cate_pub_id,
+    )
+    row.item_name = _overlay_text(
+        update_json,
+        "item_name",
+        _body_text(raw_json, "item_name") or row.item_name,
+    )
+    row.main_image_url = _body_main_image(raw_json) or row.main_image_url
+    row.raw_json = raw_json
+    row.update_json = update_json if isinstance(update_json, dict) else {}
     db.commit()
     db.refresh(row)
     return MissionFissionDataPublic.model_validate(row)

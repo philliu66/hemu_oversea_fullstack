@@ -17,6 +17,7 @@
   --batch-count   每批处理商品数（默认 10）
   --total-count   最多处理商品数（默认 0=全部）
   --is-cover      覆盖模式：将算出的标价写回 sku_json（及 raw_json.itemSkuList）
+  --showinfile    为 true 时将全部异常数据汇总为 Excel 输出到 outputs 目录（默认 false）
 
 示例：
   # 从 id=1 起每批 10 个，校验全部，不覆盖
@@ -24,6 +25,9 @@
 
   # 从 id=10 起，最多 20 个，每批 10，覆盖异常标价
   uv run python script/batch_check_sku_list_price.py --start-id 10 --batch-count 10 --total-count 20 --is-cover
+
+  # 校验并导出异常汇总 Excel
+  uv run python script/batch_check_sku_list_price.py --showinfile
 """
 
 from __future__ import annotations
@@ -31,10 +35,12 @@ from __future__ import annotations
 import argparse
 import copy
 import sys
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from openpyxl import Workbook
 from sqlalchemy import select
 
 # 保证可从项目根目录导入 app.*
@@ -49,6 +55,16 @@ from app.schemas.product import DH_REF_PRICING_CATE_ID  # noqa: E402
 from app.services.sku_list_prices import calc_sku_list_price  # noqa: E402
 
 _PRICE_QUANT = Decimal("0.01")
+_OUTPUTS_DIR = _ROOT / "outputs"
+
+
+def _parse_bool(value: str) -> bool:
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("须为 true/false")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -77,6 +93,12 @@ def _parse_args() -> argparse.Namespace:
         "--is-cover",
         action="store_true",
         help="覆盖模式：将计算标价写回 sku_json / raw_json.itemSkuList",
+    )
+    parser.add_argument(
+        "--showinfile",
+        type=_parse_bool,
+        default=False,
+        help="是否生成异常汇总 Excel（默认 false；true 时输出到 outputs 目录）",
     )
     return parser.parse_args()
 
@@ -300,6 +322,42 @@ def _print_batch_report(
     print("=" * 60)
 
 
+def _write_anomaly_excel(anomaly_products: list[dict[str, Any]]) -> Path:
+    """将全部异常 SKU 汇总写入 outputs 目录下的 Excel 文件。"""
+    _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = _OUTPUTS_DIR / f"sku_list_price_anomalies_{stamp}.xlsx"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "异常SKU标价"
+    headers = [
+        "product_id",
+        "item_code",
+        "sku_code",
+        "original_price",
+        "calculated_price",
+        "error",
+    ]
+    ws.append(headers)
+
+    for product in anomaly_products:
+        for sku in product.get("anomaly_skus") or []:
+            ws.append(
+                [
+                    product.get("product_id"),
+                    product.get("item_code"),
+                    sku.get("sku_code"),
+                    sku.get("original_price"),
+                    sku.get("calculated_price"),
+                    sku.get("error"),
+                ]
+            )
+
+    wb.save(out_path)
+    return out_path
+
+
 def main() -> None:
     args = _parse_args()
     _validate_args(args)
@@ -308,6 +366,7 @@ def main() -> None:
         "开始批量校验 SKU 标价："
         f"start_id={args.start_id}, batch_count={args.batch_count}, "
         f"total_count={args.total_count or '全部'}, is_cover={args.is_cover}, "
+        f"showinfile={args.showinfile}, "
         f"cate_id={DH_REF_PRICING_CATE_ID}"
     )
 
@@ -316,6 +375,7 @@ def main() -> None:
     total_anomaly_products = 0
     total_covered = 0
     batch_no = 0
+    all_anomaly_products: list[dict[str, Any]] = []
 
     db = SessionLocal()
     try:
@@ -349,6 +409,8 @@ def main() -> None:
             total_anomaly_products += len(anomaly_products)
             total_covered += batch_covered
             cursor_id = products[-1].id + 1
+            if args.showinfile and anomaly_products:
+                all_anomaly_products.extend(anomaly_products)
 
             _print_batch_report(
                 batch_no=batch_no,
@@ -374,6 +436,9 @@ def main() -> None:
     print(f"合计异常商品：{total_anomaly_products}")
     if args.is_cover:
         print(f"合计覆盖 SKU 数：{total_covered}")
+    if args.showinfile:
+        out_path = _write_anomaly_excel(all_anomaly_products)
+        print(f"异常汇总 Excel：{out_path}")
     print("#" * 60)
 
 

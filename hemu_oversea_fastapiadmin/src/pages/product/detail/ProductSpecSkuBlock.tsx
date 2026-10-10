@@ -15,6 +15,7 @@ import {
   patchAttrValuePic,
   priceProductAttrs,
 } from './productFormMapping';
+import { useMeasureUnits } from './measureUnits';
 import { resolveMeasureDisplayName } from './SaleInfoFields';
 import SpecAttrsFields from './SpecAttrsFields';
 import SpecSkuTable from './SpecSkuTable';
@@ -97,6 +98,7 @@ export default function ProductSpecSkuBlock({
   commissionData = null,
 }: ProductSpecSkuBlockProps) {
   const form = Form.useFormInstance();
+  const measureOptions = useMeasureUnits();
 
   return (
     <ProFormDependency
@@ -132,7 +134,7 @@ export default function ProductSpecSkuBlock({
           )
           .filter((item): item is DhCategoryAttrPublic => Boolean(item));
         const measureUnitLabel =
-          resolveMeasureDisplayName(measure_id) || '件';
+          resolveMeasureDisplayName(measure_id, measureOptions) || '件';
 
         const handlePriceAttrsChange = (
           nextSelected: DhProductSelectedAttrPublic[],

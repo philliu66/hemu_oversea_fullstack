@@ -96,6 +96,17 @@ function isTextType(attr: DhCategoryAttrPublic): boolean {
   return attr.type === '4' || attr.type === '5';
 }
 
+/** 敦煌 ItemAttrVal.attrValId 要求 Long；文案/custom-* 不能当 ID 上送 */
+function isNumericAttrValId(value: string | null | undefined): boolean {
+  return /^-?\d+$/.test(String(value ?? '').trim());
+}
+
+/**
+ * 类目 isother/defined 自定义属性值在敦煌侧固定 attrValId=0
+ *（与 dh.item.get 回显一致；不能传 custom，也不能省略）。
+ */
+const CUSTOM_ATTR_VAL_ID = '0';
+
 function isCustomName(name?: string | null): boolean {
   return CUSTOM_NAME_SET.has((name || '').trim().toLowerCase());
 }
@@ -259,7 +270,14 @@ function buildDrafts(
         if (!label && !valId) {
           return;
         }
-        const id = valId || `custom-${label}`;
+        // 敦煌自定义值 attrValId 多为 0，不能当唯一 key，改用文案区分
+        const id =
+          valId &&
+          valId !== CUSTOM_ATTR_VAL_ID &&
+          valId !== CUSTOM_PLACEHOLDER_VAL_ID &&
+          valId !== CUSTOM_SELECT_VALUE
+            ? valId
+            : `custom-${label || customValues.length}`;
         if (!customValues.some((row) => row.id === id)) {
           customValues.push({ id, label: label || id });
         }
@@ -405,9 +423,17 @@ function draftsToSelectedAttrs(
             (name ? `custom-${name}` : CUSTOM_PLACEHOLDER_VAL_ID)
           : CUSTOM_PLACEHOLDER_VAL_ID);
       const prevVal = prevByValId.get(String(valId));
+      // 空占位仍写 custom 便于回流；有内容的自定义值写 0（敦煌约定）
+      const nextValId = isNumericAttrValId(valId)
+        ? valId
+        : !trimmed && !name && valId === CUSTOM_PLACEHOLDER_VAL_ID
+          ? CUSTOM_PLACEHOLDER_VAL_ID
+          : trimmed || name
+            ? CUSTOM_ATTR_VAL_ID
+            : null;
       values.push({
         attr_id: attr.attr_id,
-        attr_val_id: valId,
+        attr_val_id: nextValId,
         attr_name: name || prevVal?.attr_name || null,
         attr_name_cn: name || prevVal?.attr_name_cn || null,
         line_attrval_name: trimmed || null,
@@ -436,9 +462,13 @@ function draftsToSelectedAttrs(
       const text = draft.textValue.trim();
       if (text) {
         const prevVal = prev?.values?.[0];
+        const prevValId = prevVal?.attr_val_id;
         values.push({
           attr_id: attr.attr_id,
-          attr_val_id: prevVal?.attr_val_id || text,
+          // 文本/自定义：有合法数字 ID 则保留，否则写 0（敦煌 isother 约定）
+          attr_val_id: isNumericAttrValId(prevValId)
+            ? String(prevValId).trim()
+            : CUSTOM_ATTR_VAL_ID,
           attr_name: null,
           attr_name_cn: null,
           line_attrval_name: text,

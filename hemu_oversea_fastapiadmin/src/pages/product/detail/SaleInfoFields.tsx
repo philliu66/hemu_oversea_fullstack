@@ -1,8 +1,8 @@
 import { ProFormDependency, ProFormSelect } from '@ant-design/pro-components';
 import { Form, InputNumber, Radio, Space, Typography } from 'antd';
 import React from 'react';
-import { fetchDhMeasuresUnitList } from '@/services/common/utils';
 import type { DhItemInventoryPublic, DhMeasuresUnitPublic } from '@/types/api';
+import { loadMeasureUnits, useMeasureUnits } from './measureUnits';
 
 /** issample：2 成人 / 3 非成人（平台也可能返回其它值） */
 export const ISSAMPLE_ADULT = '2';
@@ -123,6 +123,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
   disabled = false,
 }) => {
   const form = Form.useFormInstance();
+  const measureOptions = useMeasureUnits();
 
   return (
     <>
@@ -139,7 +140,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
           optionFilterProp: 'label',
         }}
         request={async () => {
-          const list = (await fetchDhMeasuresUnitList()) || [];
+          const list = await loadMeasureUnits();
           return list.map((item) => ({
             label: formatMeasureLabel(item),
             value: item.measure_id,
@@ -154,7 +155,7 @@ const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
           const packQty = packing_quantity == null ? 1 : packing_quantity;
           const sellByPack = packQty > 1;
           const measureUnitLabel =
-            resolveMeasureDisplayName(measure_id) || '件';
+            resolveMeasureDisplayName(measure_id, measureOptions) || '件';
           const stockStatus = deriveStockStatus(item_inventory);
           return (
             <>

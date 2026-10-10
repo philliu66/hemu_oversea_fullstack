@@ -88,6 +88,23 @@ export function mergeManagedAttrsIntoList(
   return [...others, ...nextManaged];
 }
 
+/**
+ * 切换类目后收敛 attr_list：只保留自定义属性，以及仍属于新类目的类目/规格属性。
+ * 新类目无属性时 allowed 为空，原类目属性会被全部清掉。
+ */
+export function retainAttrsForCategory(
+  list: DhProductSelectedAttrPublic[] | undefined,
+  categoryAttrIds: Iterable<string>,
+): DhProductSelectedAttrPublic[] {
+  const allowed = new Set(
+    [...categoryAttrIds].map((id) => String(id).trim()).filter(Boolean),
+  );
+  return (list || []).filter(
+    (item) =>
+      isCustomProductAttr(item) || allowed.has(String(item.attr_id)),
+  );
+}
+
 export function patchAttrValuePic(
   list: DhProductSelectedAttrPublic[] | undefined,
   attrId: string,
@@ -206,6 +223,11 @@ function textOrNull(value: string | null | undefined): string | null {
   return text || null;
 }
 
+/** null / undefined / 非数组 → []，与 Form 往返、diff 对齐 */
+export function listOrEmpty<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 /** 加载详情 → 表单初始值（不含 item_group_path，分组树就绪后再写） */
 export function toProductFormValues(
   data: DhProductDetailPublic,
@@ -227,12 +249,12 @@ export function toProductFormValues(
     item_inventory: data.item_inventory ?? null,
     max_sale_qty: data.max_sale_qty,
     leading_time: data.leading_time,
-    item_img_list: data.item_img_list || [],
+    item_img_list: listOrEmpty(data.item_img_list),
     attr_list: categoryProductAttrs(data.attr_list),
-    item_spec_self_def_list: data.item_spec_self_def_list || [],
-    sku_list: data.sku_list || [],
+    item_spec_self_def_list: listOrEmpty(data.item_spec_self_def_list),
+    sku_list: listOrEmpty(data.sku_list),
     price_config_type: data.price_config_type,
-    item_wholesale_range_list: data.item_wholesale_range_list || [],
+    item_wholesale_range_list: listOrEmpty(data.item_wholesale_range_list),
     gross_weight: data.gross_weight,
     length: data.length,
     width: data.width,
@@ -309,20 +331,24 @@ export function buildDetailFromForm(
       values.leading_time !== undefined
         ? values.leading_time
         : baseline.leading_time,
-    item_img_list: values.item_img_list ?? baseline.item_img_list ?? [],
+    item_img_list: listOrEmpty(
+      values.item_img_list ?? baseline.item_img_list,
+    ),
     attr_list: applyCustomAttrDraftsToAttrList(
       values.attr_list,
       normalizeCustomAttrDrafts(values.customAttrs),
     ),
-    item_spec_self_def_list:
+    item_spec_self_def_list: listOrEmpty(
       values.item_spec_self_def_list ?? baseline.item_spec_self_def_list,
-    sku_list: values.sku_list ?? baseline.sku_list ?? [],
+    ),
+    sku_list: listOrEmpty(values.sku_list ?? baseline.sku_list),
     price_config_type:
       values.price_config_type !== undefined
         ? values.price_config_type
         : baseline.price_config_type,
-    item_wholesale_range_list:
+    item_wholesale_range_list: listOrEmpty(
       values.item_wholesale_range_list ?? baseline.item_wholesale_range_list,
+    ),
     gross_weight:
       values.gross_weight !== undefined
         ? values.gross_weight

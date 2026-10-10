@@ -1,16 +1,13 @@
-import { UploadOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import {
   App,
   Button,
   Image,
-  Modal,
   Popconfirm,
   Space,
   Tag,
   Typography,
-  Upload,
 } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
@@ -19,8 +16,10 @@ import {
   fetchMissionFissionDataList,
   markMissionFissionDataFinished,
 } from '@/services/admin/missions';
+import { publishDhProduct } from '@/services/admin/products';
 import type { FissionStatus, MissionFissionDataPublic } from '@/types/api';
 import { AddFissionDrawer } from './AddFissionDrawer';
+import { EditFissionDrawer } from './EditFissionDrawer';
 import { ViewFissionDrawer } from './ViewFissionDrawer';
 
 type FissionTableParams = {
@@ -52,25 +51,62 @@ export function FissionDataTable({
   const { message } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [viewDataId, setViewDataId] = useState<number>();
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDataId, setEditDataId] = useState<number>();
+  const [publishingId, setPublishingId] = useState<number>();
 
   const statusLabel = (status: FissionStatus) =>
     FISSION_STATUS_LABEL[status] ?? status;
+
+  const copyCode = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      message.success('已复制');
+    } catch {
+      message.error('复制失败');
+    }
+  };
+
+  const renderCodeTag = (
+    value: string | null | undefined,
+    color: string,
+  ) => {
+    const text = (value || '').trim() || '-';
+    const canCopy = text !== '-';
+    return (
+      <Tag
+        color={color}
+        style={{ cursor: canCopy ? 'pointer' : 'default', marginInlineEnd: 0 }}
+        onClick={() => {
+          if (canCopy) {
+            void copyCode(text);
+          }
+        }}
+      >
+        {text}
+      </Tag>
+    );
+  };
 
   const columns: ProColumns<MissionFissionDataPublic>[] = [
     {
       title: '商品',
       dataIndex: 'product',
       search: false,
-      width: 320,
+      width: 360,
       render: (_, record) => (
         <Space align="start" size={12} style={{ maxWidth: '100%' }}>
           {record.main_image_url ? (
             <Image
               src={record.main_image_url}
-              alt={record.item_name || record.item_code || undefined}
+              alt={
+                record.item_name ||
+                record.seed_item_code ||
+                record.item_code ||
+                undefined
+              }
               width={48}
               height={48}
               style={{
@@ -97,9 +133,13 @@ export function FissionDataTable({
             >
               {record.item_name || '-'}
             </Typography.Paragraph>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {record.item_code || '-'}
-            </Typography.Text>
+            <Space size={4} wrap>
+              {renderCodeTag(record.seed_item_code, 'default')}
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {'->'}
+              </Typography.Text>
+              {renderCodeTag(record.item_code, 'success')}
+            </Space>
           </div>
         </Space>
       ),
@@ -116,30 +156,46 @@ export function FissionDataTable({
       title: '裂变状态',
       dataIndex: 'fission_status',
       search: false,
-      render: (_, record) => (
-        <Tag color={FISSION_COLOR[record.fission_status]}>
-          {statusLabel(record.fission_status)}
-        </Tag>
-      ),
-    },
-    {
-      title: '裂变信息',
-      dataIndex: 'fission_msg',
-      search: false,
-      ellipsis: true,
-      render: (_, record) => record.fission_msg || '-',
+      width: 200,
+      render: (_, record) => {
+        const msg = (record.fission_msg || '').trim();
+        return (
+          <div style={{ minWidth: 0, maxWidth: 200 }}>
+            <Tag color={FISSION_COLOR[record.fission_status]}>
+              {statusLabel(record.fission_status)}
+            </Tag>
+            {msg ? (
+              <Typography.Paragraph
+                type="secondary"
+                ellipsis={{ rows: 1, tooltip: msg }}
+                style={{
+                  marginBottom: 0,
+                  marginTop: 4,
+                  fontSize: 12,
+                  lineHeight: 1.4,
+                }}
+              >
+                {msg}
+              </Typography.Paragraph>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       title: '操作',
       dataIndex: 'option',
       valueType: 'option' as const,
       search: false as const,
-      width: editable ? 240 : 100,
+      width: editable ? 220 : 200,
       render: (_: unknown, record: MissionFissionDataPublic) => {
         const actions = [
           <Button
             key="view"
-            type="link"
+            color="default"
+            variant="filled"
+            size="small"
+            shape="round"
             onClick={() => {
               setViewDataId(record.id);
               setViewOpen(true);
@@ -148,60 +204,121 @@ export function FissionDataTable({
             {'查看变更'}
           </Button>,
         ];
-        if (!editable || record.fission_status === 'success') {
-          return actions;
-        }
-        if (record.fission_status !== 'marked_finished') {
+        // 裂变成功：仅保留查看变更
+        if (record.fission_status !== 'success') {
+          // 详情页与设置任务数据页均支持单个裂变
           actions.push(
             <Popconfirm
-              key="finish"
-              title={'确认将这条任务数据标记结束？'}
+              key="fission"
+              title={'确认对该任务数据进行单个裂变发布？'}
               onConfirm={async () => {
+                setPublishingId(record.id);
                 try {
-                  await markMissionFissionDataFinished({
-                    id: record.id,
-                    mission_id: missionId,
+                  const result = await publishDhProduct({
+                    type: 'addfission',
+                    mission_data_fission_id: record.id,
                   });
                   message.success(
-                    '已标记结束',
+                    result.item_code
+                      ? `裂变成功：${result.item_code}`
+                      : '裂变成功',
                   );
                   actionRef.current?.reload();
                 } catch {
-                  // 错误已由全局拦截器处理
+                  // 失败时后端可能已写回状态，仍刷新列表
+                  actionRef.current?.reload();
+                } finally {
+                  setPublishingId(undefined);
                 }
               }}
             >
-              <Button type="link">
-                {'标记结束'}
+              <Button
+                type="primary"
+                size="small"
+                shape="round"
+                loading={publishingId === record.id}
+              >
+                {'单个裂变'}
               </Button>
             </Popconfirm>,
           );
+          if (editable) {
+            actions.push(
+              <Button
+                key="edit"
+                type="dashed"
+                size="small"
+                shape="round"
+                onClick={() => {
+                  setEditDataId(record.id);
+                  setEditOpen(true);
+                }}
+              >
+                {'编辑'}
+              </Button>,
+            );
+            if (record.fission_status !== 'marked_finished') {
+              actions.push(
+                <Popconfirm
+                  key="finish"
+                  title={'确认将这条任务数据标记结束？'}
+                  onConfirm={async () => {
+                    try {
+                      await markMissionFissionDataFinished({
+                        id: record.id,
+                        mission_id: missionId,
+                      });
+                      message.success('已标记结束');
+                      actionRef.current?.reload();
+                    } catch {
+                      // 错误已由全局拦截器处理
+                    }
+                  }}
+                >
+                  <Button type="primary" danger size="small" shape="round">
+                    {'标记结束'}
+                  </Button>
+                </Popconfirm>,
+              );
+            }
+            actions.push(
+              <Popconfirm
+                key="delete"
+                title={'确认删除这条任务数据？'}
+                onConfirm={async () => {
+                  try {
+                    await deleteMissionFissionData({
+                      id: record.id,
+                      mission_id: missionId,
+                    });
+                    message.success('已删除');
+                    actionRef.current?.reload();
+                  } catch {
+                    // 错误已由全局拦截器处理
+                  }
+                }}
+              >
+                <Button danger size="small" shape="round">
+                  {'删除'}
+                </Button>
+              </Popconfirm>,
+            );
+          }
         }
-        actions.push(
-          <Popconfirm
-            key="delete"
-            title={'确认删除这条任务数据？'}
-            onConfirm={async () => {
-              try {
-                await deleteMissionFissionData({
-                  id: record.id,
-                  mission_id: missionId,
-                });
-                message.success(
-                  '已删除',
-                );
-                actionRef.current?.reload();
-              } catch {
-                // 错误已由全局拦截器处理
-              }
+        // 一行最多 2 个按钮，超出自动换行
+        return (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, max-content)',
+              gap: 8,
+              justifyContent: 'start',
+              alignItems: 'center',
             }}
           >
-            <Button type="link" danger>
-              {'删除'}
-            </Button>
-          </Popconfirm>,
+            {actions}
+          </div>
         );
-        return actions;
       },
     },
   ];
@@ -212,7 +329,7 @@ export function FissionDataTable({
         actionRef={actionRef}
         rowKey="id"
         search={false}
-        scroll={{ x: 1280 }}
+        scroll={{ x: 1140 }}
         headerTitle={'任务数据'}
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,
@@ -224,9 +341,7 @@ export function FissionDataTable({
                 <Button key="add" onClick={() => setAddOpen(true)}>
                   {'手动添加'}
                 </Button>,
-                <Button key="import" onClick={() => setImportOpen(true)}>
-                  {'批量导入'}
-                </Button>,
+                // 暂时屏蔽批量导入
               ]
             : false
         }
@@ -250,6 +365,20 @@ export function FissionDataTable({
         dataId={viewDataId}
         onClose={() => setViewOpen(false)}
       />
+      <EditFissionDrawer
+        open={editOpen}
+        missionId={missionId}
+        dataId={editDataId}
+        onClose={() => {
+          setEditOpen(false);
+          setEditDataId(undefined);
+        }}
+        onSaved={() => {
+          setEditOpen(false);
+          setEditDataId(undefined);
+          actionRef.current?.reload();
+        }}
+      />
       <AddFissionDrawer
         open={addOpen}
         missionId={missionId}
@@ -259,21 +388,6 @@ export function FissionDataTable({
           actionRef.current?.reload();
         }}
       />
-      <Modal
-        title={'批量导入'}
-        open={importOpen}
-        onCancel={() => setImportOpen(false)}
-        okButtonProps={{ disabled: true }}
-      >
-        <p>
-          {'后续将上传指定格式的 Excel，解析后批量加入任务数据。'}
-        </p>
-        <Upload disabled>
-          <Button disabled icon={<UploadOutlined />}>
-            Excel
-          </Button>
-        </Upload>
-      </Modal>
     </>
   );
 }

@@ -16,11 +16,13 @@ from app.schemas.mission import (
     MissionFissionDataList,
     MissionFissionDataOperate,
     MissionFissionDataPublic,
+    MissionFissionDataUpdate,
     MissionList,
     MissionLogList,
     MissionLogPublic,
     MissionMarkFinished,
     MissionPublic,
+    MissionUpdate,
 )
 from app.services import missions as mission_service
 
@@ -75,6 +77,24 @@ def create_mission(
         mission_service.create_mission(
             db,
             actor=current_user,
+            title=payload.title,
+            description=payload.description,
+            worker_id=payload.worker_id,
+        )
+    )
+
+
+@router.post("/update", response_model=ApiResponse[MissionPublic])
+def update_mission(
+    payload: MissionUpdate,
+    current_user: User = Depends(require_perm("mission.fission.create")),
+    db: Session = Depends(get_db),
+) -> ApiResponse[MissionPublic]:
+    return success(
+        mission_service.update_mission(
+            db,
+            actor=current_user,
+            mission_id=payload.id,
             title=payload.title,
             description=payload.description,
             worker_id=payload.worker_id,
@@ -171,6 +191,28 @@ def add_fission_data(
             actor=current_user,
             mission_id=payload.mission_id,
             seed_product_id=payload.seed_product_id,
+            update_json=payload.update_json,
+            raw_json=payload.raw_json,
+            seed_json=payload.seed_json,
+        )
+    )
+
+
+@router.post(
+    "/fission-data/update",
+    response_model=ApiResponse[MissionFissionDataPublic],
+)
+def update_fission_data(
+    payload: MissionFissionDataUpdate,
+    current_user: User = Depends(require_perm("mission.fission.data")),
+    db: Session = Depends(get_db),
+) -> ApiResponse[MissionFissionDataPublic]:
+    return success(
+        mission_service.update_fission_data(
+            db,
+            actor=current_user,
+            mission_id=payload.mission_id,
+            data_id=payload.id,
             update_json=payload.update_json,
             raw_json=payload.raw_json,
         )

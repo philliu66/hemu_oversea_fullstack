@@ -63,6 +63,7 @@ export const AdminProductApi = {
   DH_PRODUCT_LIST: '/api/v1/admin/product/dh/list',
   DH_PRODUCT_DETAIL: '/api/v1/admin/product/dh/detail',
   DH_SKU_LIST_PRICE: '/api/v1/admin/product/dh/skulistprice/get',
+  DH_PRODUCT_PUBLISH: '/api/v1/admin/product/dh/publish',
 } as const;
 
 /** 管理端任务相关路径 */
@@ -70,10 +71,12 @@ export const AdminMissionApi = {
   LIST: '/api/v1/admin/missions/list',
   DETAIL: '/api/v1/admin/missions/detail',
   CREATE: '/api/v1/admin/missions/create',
+  UPDATE: '/api/v1/admin/missions/update',
   MARK_FINISHED: '/api/v1/admin/missions/mark-finished',
   FISSION_DATA_LIST: '/api/v1/admin/missions/fission-data/list',
   FISSION_DATA_DETAIL: '/api/v1/admin/missions/fission-data/detail',
   FISSION_DATA_ADD: '/api/v1/admin/missions/fission-data/add',
+  FISSION_DATA_UPDATE: '/api/v1/admin/missions/fission-data/update',
   FISSION_DATA_DELETE: '/api/v1/admin/missions/fission-data/delete',
   FISSION_DATA_MARK_FINISHED:
     '/api/v1/admin/missions/fission-data/mark-finished',

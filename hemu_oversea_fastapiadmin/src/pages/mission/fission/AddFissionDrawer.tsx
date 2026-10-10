@@ -3,50 +3,10 @@ import { App, Button, Drawer, Space } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import type { ProductEditorHandle } from '@/pages/product/detail/ProductEditor';
 import { addMissionFissionData } from '@/services/admin/missions';
-import type { DhProductDetailPublic, DhProductPublic } from '@/types/api';
-import { diffAttrList } from './attrDiff';
+import type { DhProductPublic } from '@/types/api';
 import { FissionProductStep } from './FissionProductStep';
 import { SeedProductSelectTable } from './SeedProductSelectTable';
-
-const TRACKED_KEYS = [
-  'item_name',
-  'key_word1',
-  'key_word2',
-  'key_word3',
-  'cate_pub_id',
-  'item_group_id',
-  'store_id',
-  'attr_list',
-  'sku_list',
-  'item_img_list',
-  'item_spec_self_def_list',
-  'html_content',
-  'short_desc',
-  'after_sale_template_id',
-  'shipping_model_id',
-] as const satisfies readonly (keyof DhProductDetailPublic)[];
-
-function buildUpdateData(
-  baseline: DhProductDetailPublic,
-  current: DhProductDetailPublic,
-): Record<string, unknown> {
-  const update: Record<string, unknown> = {};
-  for (const key of TRACKED_KEYS) {
-    if (key === 'attr_list') {
-      const attrDiff = diffAttrList(baseline.attr_list, current.attr_list);
-      if (attrDiff) {
-        update.attr_list = attrDiff;
-      }
-      continue;
-    }
-    const before = JSON.stringify(baseline[key] ?? null);
-    const after = JSON.stringify(current[key] ?? null);
-    if (before !== after) {
-      update[key] = current[key] ?? null;
-    }
-  }
-  return update;
-}
+import { buildFissionUpdateData } from './fissionUpdate';
 
 export function AddFissionDrawer({
   open,
@@ -88,26 +48,20 @@ export function AddFissionDrawer({
 
   const handleConfirm = async () => {
     if (!selected) {
-      message.warning(
-        '请先选择一个种子商品',
-      );
+      message.warning('请先选择一个种子商品');
       return false;
     }
     if (!editorRef.current?.isReady()) {
-      message.warning(
-        '商品信息还在加载，请稍后再确认',
-      );
+      message.warning('商品信息还在加载，请稍后再确认');
       return false;
     }
     const baseline = editorRef.current.getBaseline();
     const current = editorRef.current.getSnapshot();
     if (!baseline || !current || current.id !== selected.id) {
-      message.warning(
-        '商品信息还在加载，请稍后再确认',
-      );
+      message.warning('商品信息还在加载，请稍后再确认');
       return false;
     }
-    const updateJson = buildUpdateData(baseline, current);
+    const updateJson = buildFissionUpdateData(baseline, current);
     setSubmitting(true);
     try {
       await addMissionFissionData({
@@ -115,10 +69,9 @@ export function AddFissionDrawer({
         seed_product_id: selected.id,
         update_json: updateJson,
         raw_json: current,
+        seed_json: baseline,
       });
-      message.success(
-        '已加入任务',
-      );
+      message.success('已加入任务');
       onAdded();
       return true;
     } catch {
@@ -183,9 +136,7 @@ export function AddFissionDrawer({
               }
               return (
                 <Space>
-                  <Button onClick={() => props.onPre?.()}>
-                    {'上一步'}
-                  </Button>
+                  <Button onClick={() => props.onPre?.()}>{'上一步'}</Button>
                   <Button
                     type="primary"
                     loading={submitting}
@@ -267,9 +218,7 @@ export function AddFissionDrawer({
             component={false}
             onFinish={async () => {
               if (!selected) {
-                message.warning(
-                  '请先选择一个种子商品',
-                );
+                message.warning('请先选择一个种子商品');
                 return false;
               }
               return true;

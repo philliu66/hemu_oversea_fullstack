@@ -87,6 +87,7 @@ import {
   mergeManagedAttrsIntoList,
   nonPriceProductAttrs,
   priceProductAttrs,
+  retainAttrsForCategory,
   toProductFormValues,
   type CustomAttrDraft,
   type ProductFormValues,
@@ -238,6 +239,23 @@ export const ProductEditor = forwardRef<
   const baselineItemGroupIdRef = useRef<string | null | undefined>(undefined);
 
   const displayCategory = pickedCategory ?? baseDetail?.category ?? null;
+  /** 规格卡片标红：仅定价属性变更，不含普通类目属性 */
+  const priceAttrIdSetFromDetail = new Set(
+    priceProductAttrs(baseDetail?.attr_list).map((item) => String(item.attr_id)),
+  );
+  const hasChangedPriceAttr = changedAttrList.some((item) => {
+    const attrId = String(item.attr_id);
+    if (attrId === DH_CUSTOM_PRODUCT_ATTR_ID) {
+      return false;
+    }
+    return (
+      String(item.is_price_attr) === '1' || priceAttrIdSetFromDetail.has(attrId)
+    );
+  });
+  const specCardChanged =
+    isChanged('sku_list') ||
+    isChanged('item_spec_self_def_list') ||
+    hasChangedPriceAttr;
 
   useImperativeHandle(
     ref,
@@ -266,14 +284,17 @@ export const ProductEditor = forwardRef<
     try {
       const attrs = await fetchDhCategoryAttrs(categoryId);
       if (categoryAttrsReqRef.current !== reqId) {
-        return;
+        return undefined;
       }
-      setCategoryAttrs(attrs.attrs || []);
+      const list = attrs.attrs || [];
+      setCategoryAttrs(list);
+      return list;
     } catch {
       if (categoryAttrsReqRef.current !== reqId) {
-        return;
+        return undefined;
       }
       setCategoryAttrs([]);
+      return undefined;
     } finally {
       if (categoryAttrsReqRef.current === reqId) {
         setCategoryAttrsLoading(false);
@@ -414,7 +435,20 @@ export const ProductEditor = forwardRef<
             category_path: pathData.path_items.map((item) => item.cate_pub_id),
             cate_pub_id: selectedCategory.cate_pub_id,
           });
-          void loadCategoryAttrs(picked.id);
+          const nextCategoryAttrs = await loadCategoryAttrs(picked.id);
+          // 拉取失败时不改 attr_list，避免误清空；成功（含空列表）则去掉旧类目属性
+          if (nextCategoryAttrs === undefined) {
+            return;
+          }
+          const prev = form.getFieldValue('attr_list') as
+            | DhProductSelectedAttrPublic[]
+            | undefined;
+          form.setFieldsValue({
+            attr_list: retainAttrsForCategory(
+              prev,
+              nextCategoryAttrs.map((item) => String(item.attr_id)),
+            ),
+          });
         } catch (error) {
           message.error(
             error instanceof Error ? error.message : '获取分类全路径失败',
@@ -822,12 +856,7 @@ export const ProductEditor = forwardRef<
         </Card>
 
         <Card
-          title={changedLabel(
-            '商品规格',
-            isChanged('sku_list') ||
-              isChanged('item_spec_self_def_list') ||
-              changedCategoryAttrIds.length > 0,
-          )}
+          title={changedLabel('商品规格', specCardChanged)}
           style={{ marginTop: 16 }}
         >
           <ProductSpecSkuBlock

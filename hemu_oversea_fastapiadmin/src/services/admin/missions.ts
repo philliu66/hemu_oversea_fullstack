@@ -6,9 +6,11 @@ import type {
   MissionFissionDataAddParams,
   MissionFissionDataDetailPublic,
   MissionFissionDataPublic,
+  MissionFissionDataUpdateParams,
   MissionListParams,
   MissionLogPublic,
   MissionPublic,
+  MissionUpdateParams,
   PageData,
 } from '@/types/api';
 import { unwrapApiData } from '@/utils/http';
@@ -79,6 +81,22 @@ export async function createMission(
     },
   );
   return requireData(unwrapApiData<MissionPublic>(res), '创建任务失败');
+}
+
+/** POST /api/v1/admin/missions/update */
+export async function updateMission(
+  params: MissionUpdateParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionPublic>>(
+    AdminMissionApi.UPDATE,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(unwrapApiData<MissionPublic>(res), '更新任务失败');
 }
 
 /** POST /api/v1/admin/missions/mark-finished */
@@ -152,6 +170,25 @@ export async function addMissionFissionData(
   return requireData(
     unwrapApiData<MissionFissionDataPublic>(res),
     '添加任务数据失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/fission-data/update */
+export async function updateMissionFissionData(
+  params: MissionFissionDataUpdateParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionFissionDataPublic>>(
+    AdminMissionApi.FISSION_DATA_UPDATE,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<MissionFissionDataPublic>(res),
+    '更新任务数据失败',
   );
 }
 

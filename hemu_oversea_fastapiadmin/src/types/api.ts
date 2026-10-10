@@ -478,6 +478,24 @@ export type DhSkuListPricePublic = {
   list_price: string | number;
 };
 
+/** POST /api/v1/admin/product/dh/publish */
+export type DhProductPublishType = 'addnew' | 'addfission';
+
+export type DhProductPublishParams = {
+  type?: DhProductPublishType;
+  mission_data_fission_id?: number;
+  info?: Record<string, unknown> | null;
+};
+
+export type DhProductPublishPublic = {
+  type: string;
+  item_code?: string | null;
+  mission_data_fission_id?: number | null;
+  fission_status?: string | null;
+  /** 最终上传给敦煌 dh.item.add 的参数（不含 htmlContent） */
+  upload_dh_product_info?: Record<string, unknown> | null;
+};
+
 export type DhItemWeightRangePublic = {
   base_qt?: number | null;
   step_qt?: number | null;
@@ -701,17 +719,35 @@ export type MissionCreateParams = {
   worker_id: number;
 };
 
+export type MissionUpdateParams = {
+  id: number;
+  title: string;
+  description?: string;
+  worker_id: number;
+};
+
 export type MissionFissionDataDetailPublic = {
   id: number;
   mission_id: number;
   seed_product_id: number;
+  fission_status: FissionStatus | string;
   update_json: Record<string, unknown>;
   raw_json: DhProductDetailPublic | null;
+  seed_json: DhProductDetailPublic | null;
 };
 
 export type MissionFissionDataAddParams = {
   mission_id: number;
   seed_product_id: number;
+  update_json: Record<string, unknown>;
+  raw_json: DhProductDetailPublic;
+  /** 加入时冻结的种子详情，供后续编辑按最初种子重算差异 */
+  seed_json?: DhProductDetailPublic;
+};
+
+export type MissionFissionDataUpdateParams = {
+  id: number;
+  mission_id: number;
   update_json: Record<string, unknown>;
   raw_json: DhProductDetailPublic;
 };
@@ -723,6 +759,8 @@ export type MissionFissionDataPublic = {
   seed_product_id: number;
   store_id: number;
   store_name?: string | null;
+  /** 原商品编码（种子商品） */
+  seed_item_code?: string | null;
   item_code: string | null;
   site_id: string;
   cate_pub_id?: string | null;

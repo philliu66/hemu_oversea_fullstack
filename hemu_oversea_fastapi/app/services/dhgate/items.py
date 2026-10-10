@@ -26,6 +26,7 @@ from typing import Any
 from app.core.errors import AppError, bad_request
 from app.services.dhgate.client import DhgateClient
 from app.services.dhgate.logistics import list_shipping_templates
+from app.services.dhgate.response import format_dhgate_error_message
 
 _DEFAULT_SITE_ID = "EN"
 _ALLOWED_SITE_IDS = frozenset({"EN", "RU", "ES", "ID"})
@@ -802,23 +803,7 @@ def _apply_fission_update_info(
 
 
 def _fission_error_message(exc: AppError) -> str:
-    parts: list[str] = []
-    if exc.message:
-        parts.append(exc.message)
-    data = exc.data if isinstance(exc.data, dict) else {}
-    response = data.get("dhgate_response")
-    status = response.get("status") if isinstance(response, dict) else None
-    sub_errors = status.get("subErrors") if isinstance(status, dict) else None
-    if isinstance(sub_errors, list):
-        for item in sub_errors:
-            if not isinstance(item, dict):
-                continue
-            message = item.get("message")
-            if message:
-                text = str(message)
-                if text not in parts:
-                    parts.append(text)
-    return "；".join(parts) or "裂变发布失败"
+    return format_dhgate_error_message(exc, fallback="裂变发布失败")
 
 
 def _fission_error_detail(exc: AppError) -> dict[str, Any]:
@@ -859,6 +844,53 @@ def _ensure_promo_image(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return patched
 
 
+def _is_numeric_attr_val_id(value: Any) -> bool:
+    """敦煌 ItemAttrVal.attrValId 要求 Long；仅保留纯数字（可带负号）。"""
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        return False
+    if text[0] == "-":
+        return text[1:].isdigit() and bool(text[1:])
+    return text.isdigit()
+
+
+def _sanitize_item_attr_val(val: dict[str, Any]) -> dict[str, Any]:
+    """清洗类目属性值的 attrValId。
+
+    敦煌对 isother/defined 自定义属性值约定 attrValId=0（见 dh.item.get 回显），
+    不能传 custom / 文案，也不能省略 ID 只留 lineAttrvalName。
+    """
+    out = dict(val)
+    attr_val_id = out.get("attrValId")
+    has_line = bool(
+        str(out.get("lineAttrvalName") or "").strip()
+        or str(out.get("lineAttrvalNameCn") or "").strip()
+    )
+
+    # 已是合法数字（含 0）直接保留
+    if attr_val_id is not None and _is_numeric_attr_val_id(attr_val_id):
+        return out
+
+    if attr_val_id is not None:
+        text = str(attr_val_id).strip()
+        lowered = text.lower()
+        # 文案误写入 attrValId 时回填展示名；custom/其他 占位不回填
+        if lowered not in {"custom", "其它", "其他", "other"} and text:
+            if not out.get("lineAttrvalName"):
+                out["lineAttrvalName"] = text
+            if not out.get("lineAttrvalNameCn"):
+                out["lineAttrvalNameCn"] = text
+            has_line = True
+
+    if has_line:
+        # 有自定义文案 → 上送 attrValId=0（与线上已发布商品一致）
+        out["attrValId"] = "0"
+    else:
+        # 空占位（仅 custom、无文案）去掉，后续过滤丢弃
+        out.pop("attrValId", None)
+    return out
+
+
 def _map_item_attrs(raw: Any) -> list[dict[str, Any]]:
     def map_attr(item: dict[str, Any]) -> dict[str, Any]:
         mapped = _copy_keys(item, _ITEM_ATTR_KEYS)
@@ -868,10 +900,25 @@ def _map_item_attrs(raw: Any) -> list[dict[str, Any]]:
             if is_custom
             else _ITEM_ATTR_VAL_KEYS
         )
-        values = _map_list(
-            item.get("itemAttrValList"),
-            lambda val: _copy_keys(val, val_keys, keep_empty_keys=("picUrl",)),
-        )
+
+        def map_val(val: dict[str, Any]) -> dict[str, Any]:
+            copied = _copy_keys(val, val_keys, keep_empty_keys=("picUrl",))
+            if not copied:
+                return copied
+            if is_custom:
+                return copied
+            return _sanitize_item_attr_val(copied)
+
+        values = _map_list(item.get("itemAttrValList"), map_val)
+        # 清洗后无展示内容且无合法 ID 的空值丢弃
+        values = [
+            v
+            for v in values
+            if v.get("attrValId") is not None
+            or v.get("lineAttrvalName")
+            or v.get("lineAttrvalNameCn")
+            or v.get("attrName")
+        ]
         if values:
             mapped["itemAttrValList"] = values
         return mapped
@@ -882,6 +929,12 @@ def _map_item_attrs(raw: Any) -> list[dict[str, Any]]:
 def _is_custom_attr(item: dict[str, Any]) -> bool:
     attr_id = item.get("attrId")
     if attr_id is None:
+        # 父级无 attrId 时看属性值上的 attrId（管理端转换后常见）
+        values = item.get("itemAttrValList")
+        if isinstance(values, list):
+            for val in values:
+                if isinstance(val, dict) and str(val.get("attrId") or "").strip() == _CUSTOM_ATTR_ID:
+                    return True
         return False
     return str(attr_id).strip() == _CUSTOM_ATTR_ID
 

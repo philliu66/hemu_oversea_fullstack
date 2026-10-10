@@ -13,9 +13,12 @@ from app.schemas.product import (
     DhProductDetailRequest,
     DhProductListRequest,
     DhProductPublic,
+    DhProductPublishPublic,
+    DhProductPublishRequest,
     DhSkuListPricePublic,
     DhSkuListPriceRequest,
 )
+from app.services import product_publish as product_publish_service
 from app.services import products as product_service
 from app.services.sku_list_prices import calc_sku_list_price
 
@@ -111,3 +114,30 @@ def get_dh_sku_list_price(
             cate_id=payload.cate_id,
         )
     )
+
+
+@router.post(
+    "/dh/publish",
+    response_model=ApiResponse[DhProductPublishPublic],
+    summary="发布商品",
+)
+def publish_dh_product(
+    payload: DhProductPublishRequest,
+    current_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[DhProductPublishPublic]:
+    """
+    发布商品到敦煌（dh.item.add）。
+
+    - type=addfission（默认）：按 mission_data_fission_id 读取任务数据 raw_json 发布，
+      成功后写回 item_code / 裂变状态
+    - type=addnew：按 info 完整商品数据发布
+    """
+    result = product_publish_service.publish_product(
+        db,
+        actor=current_user,
+        publish_type=payload.type,
+        mission_data_fission_id=payload.mission_data_fission_id,
+        info=payload.info,
+    )
+    return success(DhProductPublishPublic.model_validate(result))
