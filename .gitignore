@@ -27,6 +27,9 @@ venv/
 *.sql.bak
 *_backup*.sql
 
+# Local script outputs (Excel / debug dumps)
+hemu_oversea_fastapi/outputs/
+
 # Node / Umi / Ant Design Pro
 node_modules/
 dist/
