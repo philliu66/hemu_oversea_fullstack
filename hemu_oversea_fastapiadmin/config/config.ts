@@ -7,7 +7,8 @@ import proxy from './proxy';
 
 import routes from './routes';
 
-const { UMI_ENV = 'dev' } = process.env;
+/** local=本机后端；dev=服务器后端。见 config/proxy.ts 与 package.json scripts */
+const { UMI_ENV = 'local' } = process.env;
 
 // Compute commit hash: env vars take precedence, fall back to git at build time
 const commitHash =

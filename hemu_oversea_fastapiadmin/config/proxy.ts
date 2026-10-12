@@ -1,16 +1,27 @@
 /**
- * @name 代理的配置
- * @see 在生产环境 代理是无法生效的，所以这里没有生产环境的配置
+ * @name 开发代理（仅 max dev 生效，build 后无效）
+ * @description 通过 UMI_ENV 切换后端：
+ *   - local：本机 FastAPI（本机 Postgres）
+ *   - dev：服务器 FastAPI（服务器 Postgres，经 Nginx HTTPS）
  * @doc https://umijs.org/docs/guides/proxy
  */
 export default {
-  /** 本地联调 FastAPI：http://127.0.0.1:8600（避免与管理端开发端口 8000 冲突） */
-  dev: {
+  /** 对接本机 uvicorn :8600 */
+  local: {
     '/api/': {
       target: 'http://127.0.0.1:8600',
       changeOrigin: true,
     },
   },
+  /** 对接服务器 https://hemuoversea.xiaohemu.net（浏览器仍请求本机 /api，由代理转发，免 CORS） */
+  dev: {
+    '/api/': {
+      target: 'https://hemuoversea.xiaohemu.net',
+      changeOrigin: true,
+      secure: true,
+    },
+  },
+  /** 兼容旧脚本 / record 等，默认等同 local */
   test: {
     '/api/': {
       target: 'http://127.0.0.1:8600',

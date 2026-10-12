@@ -206,12 +206,13 @@ export const layout: RunTimeLayoutConfig = ({
 
 /**
  * @name request 配置，可以配置错误处理
- * 开发环境走 config/proxy → FastAPI(127.0.0.1:8600)；
- * 生产环境可改为真实 API 域名。
+ * 开发：baseURL 保持 ''，由 config/proxy + UMI_ENV 转发
+ *   - UMI_ENV=local → 本机 http://127.0.0.1:8600
+ *   - UMI_ENV=dev → 服务器 https://hemuoversea.xiaohemu.net
+ * 生产构建（部署到同域 Nginx）：继续 ''，浏览器请求同源 /api/
  * @doc https://umijs.org/docs/max/request#配置
  */
 export const request: RequestConfig = {
-  // 开发经 proxy 转发到 FastAPI；生产部署时再填 API 根地址
   baseURL: '',
   ...errorConfig,
 };
