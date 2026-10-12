@@ -32,8 +32,9 @@ app/
   core/                   # 配置、数据库、安全、依赖、异常、中间件、种子
 alembic/                  # 迁移脚本
 docker-compose.yml        # 仅启动 PostgreSQL
-.env.example              # 配置样例（可进 Git）
-.env                      # 本机密钥（不进 Git）
+.env.example              # 本机配置样例（可进 Git）
+.env.server.example       # 服务器配置模板（可进 Git；复制为 .env 后填必改项）
+.env                      # 本机/服务器密钥（不进 Git）
 ```
 
 约定：`api/` 对 HTTP，`schemas/` 对 JSON，`models/` 对表，`services/` 对业务，`core/` 对全站配件，`main.py` 只组装。业务逻辑只写一份；App 与管理端只拆入口和鉴权。
@@ -113,6 +114,150 @@ uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8600
 | `superadmin` | `BOOTSTRAP_PASSWORD`（默认 `123456`） | 平台超管，走 `/api/v1/admin/auth/login` |
 
 `/docs` 中：login → Authorize 粘贴 **access_token**（不要带 `Bearer` 前缀）→ 再调需登录接口。
+
+## 服务器部署与运维
+
+更完整的架构、安全组、Nginx、迁移说明见仓库根目录 [`DEPLOY_README/`](../DEPLOY_README/)。下文为当前线上常用流程摘要。
+
+约定：
+
+- 应用目录：服务器上的 `hemu_oversea_fastapi/`（下文以该目录为 cwd）
+- systemd 单元名：`hemu-oversea-fastapi.service`
+- Uvicorn：有 Nginx 时监听 `127.0.0.1:8600`；Postgres 用 Docker Compose，映射本机 `5500`
+- 正式域名示例：`https://hemuoversea.xiaohemu.net`（CORS / OAuth 回调与地址栏一致）
+- **不要**用 `nohup` 作为正式常驻方案
+
+### 首次上线（摘要）
+
+```bash
+cd /你的仓库路径
+git pull
+cd hemu_oversea_fastapi
+
+cp .env.server.example .env
+# 编辑 .env：POSTGRES_PASSWORD、SECRET_KEY、BOOTSTRAP_PASSWORD、CORS_ORIGINS 等
+
+sudo docker compose up -d
+sudo docker compose ps    # postgres 应为 healthy
+
+uv sync
+uv run alembic upgrade head
+
+# 配置并启动 systemd（见下方单元示例）后：
+sudo systemctl enable --now hemu-oversea-fastapi
+sudo systemctl status hemu-oversea-fastapi
+curl -sS http://127.0.0.1:8600/health
+```
+
+安全组放行 **80/443**（Nginx）；**不要**对公网开放 Postgres `5500`。有 Nginx 后公网可关掉 `8600`。
+
+### systemd 单元示例
+
+文件：`/etc/systemd/system/hemu-oversea-fastapi.service`（路径、`User=` 按实机修改）：
+
+```ini
+[Unit]
+Description=HeMu Oversea FastAPI
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=www
+WorkingDirectory=/你的仓库路径/hemu_oversea_fastapi
+EnvironmentFile=-/你的仓库路径/hemu_oversea_fastapi/.env
+ExecStart=/你的仓库路径/hemu_oversea_fastapi/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8600 --workers 2
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+首次写入或修改该文件后：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now hemu-oversea-fastapi
+```
+
+生产 **不要**加 `--reload`。无 Nginx、需公网直连 API 时，可将 `--host` 临时改为 `0.0.0.0`，并放行安全组 `8600`。
+
+### 后续发版顺序
+
+```text
+本机推送 Git
+  → 服务器 git pull
+  → 有依赖变化则 uv sync
+  → 有表结构变化则 alembic upgrade head
+  → systemctl restart hemu-oversea-fastapi
+  → 探活 / 看日志
+```
+
+| 变更类型 | 服务器操作 |
+|----------|------------|
+| 仅业务代码 | `git pull` → `restart` |
+| 依赖（`pyproject.toml` / lock） | `git pull` → `uv sync` → `restart` |
+| 数据库迁移 | `git pull` →（如需）`uv sync` → `alembic upgrade head` → `restart` |
+| 仅改服务器 `.env` | 保存后 `restart`（无需 pull） |
+
+日常发版示例：
+
+```bash
+cd /你的仓库路径
+git pull
+cd hemu_oversea_fastapi
+
+uv sync                          # 依赖无变可跳过
+uv run alembic upgrade head      # 无新迁移可跳过
+
+sudo systemctl restart hemu-oversea-fastapi
+sudo systemctl status hemu-oversea-fastapi
+curl -sS http://127.0.0.1:8600/health
+```
+
+### 常用命令
+
+**systemd（FastAPI）**
+
+```bash
+sudo systemctl status hemu-oversea-fastapi
+sudo systemctl start hemu-oversea-fastapi
+sudo systemctl stop hemu-oversea-fastapi
+sudo systemctl restart hemu-oversea-fastapi
+sudo journalctl -u hemu-oversea-fastapi -f
+sudo journalctl -u hemu-oversea-fastapi -n 100 --no-pager
+```
+
+**依赖与迁移**
+
+```bash
+uv sync
+uv run alembic upgrade head
+uv run alembic current
+```
+
+**Postgres（Docker）**
+
+```bash
+sudo docker compose ps
+sudo docker compose logs -f postgres --tail=100
+sudo docker compose restart postgres   # 一般很少需要
+```
+
+**探活**
+
+```bash
+curl -sS http://127.0.0.1:8600/health
+# 经 Nginx 的接口示例（路径以实际为准）：
+curl -sS https://hemuoversea.xiaohemu.net/api/v1/common/ping
+```
+
+**Nginx（仅改了反代配置时）**
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
 
 ## 主要接口
 
