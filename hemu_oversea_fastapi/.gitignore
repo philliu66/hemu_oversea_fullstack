@@ -7,4 +7,5 @@ wheels/
 
 .venv
 .env
+.env.server
 .pytest_cache/

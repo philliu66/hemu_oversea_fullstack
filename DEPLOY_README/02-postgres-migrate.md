@@ -18,8 +18,9 @@ Compose 摘要：
 
 ```bash
 cd /opt/hemu_oversea_fastapi   # 按你的实际代码路径调整
-cp .env.example .env           # 若尚无 .env
-# 编辑 .env：至少改掉 POSTGRES_PASSWORD（及 SECRET_KEY 等）
+# 推荐用服务器模板（也可 cp .env.example .env）
+cp .env.server.example .env    # 若尚无 .env
+# 编辑 .env：填齐标注「必改」的项（至少 POSTGRES_PASSWORD、SECRET_KEY）
 docker compose up -d
 docker compose ps
 # postgres 应为 healthy，且有 0.0.0.0:5500->5432/tcp（仅本机访问即可）
