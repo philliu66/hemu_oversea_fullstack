@@ -68,7 +68,7 @@ docker compose -f /opt/hemu_oversea_fastapi/docker-compose.yml ps
 ### 3. 数据库连接失败 / 启动卡在播种
 
 - `docker compose ps` 是否 healthy
-- `DATABASE_URL` 主机/端口/密码是否与 Compose 一致（同机一般为 `localhost:5500`）
+- `.env` 的 `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_PASSWORD` 是否正确（同机一般为 `localhost:5500`）
 - 应用是否在 Postgres 就绪前启动（可重启一次 hemu-fastapi）
 
 ### 4. 本机有数据，云上是空的
@@ -91,7 +91,7 @@ docker compose -f /opt/hemu_oversea_fastapi/docker-compose.yml ps
 
 | 变量 | 作用 |
 |------|------|
-| `DATABASE_URL` | SQLAlchemy / Alembic；驱动 `postgresql+psycopg` |
+| `POSTGRES_*` | Compose 起库 + 应用组装连接串；可选 `DATABASE_URL` 覆盖 |
 | `SECRET_KEY` | JWT 签名；生产必须更换 |
 | `CORS_ORIGINS` | JSON 数组；改完须重启 |
 | `DHGATE_REDIRECT_URI` | 后端 OAuth 回调（公网） |

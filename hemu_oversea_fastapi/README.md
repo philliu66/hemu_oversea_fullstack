@@ -104,19 +104,15 @@ uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8600
 
 启动时会写入种子用户（已存在则跳过）。日志出现 `Application startup complete` 后再打开 `/docs`。若启动卡在播种或报 `ConnectionTimeout`，先确认 Compose 里 Postgres 已 `healthy`。
 
-### 学习账号
+### 种子账号
 
+启动时仅写入超级管理员（已存在则跳过创建，并按配置同步密码）：
 
-| 用户名        | 密码               | 说明                                         |
-| ---------- | ---------------- | ------------------------------------------ |
-| `admin`    | `admin123456`    | 走 `/api/v1/admin/auth/login`，可调 `/admin/*` |
-| `operator` | `operator123456` | 可看后台用户列表，不能调仅 admin 的 ping                 |
-| `user`     | `user123456`     | 走 `/api/v1/app/auth/login`，只能调 App 接口      |
+| 用户名         | 密码                   | 说明                                      |
+| ----------- | -------------------- | --------------------------------------- |
+| `superadmin` | `BOOTSTRAP_PASSWORD`（默认 `123456`） | 平台超管，走 `/api/v1/admin/auth/login` |
 
-
-`/docs` 中：用对应端的 login → Authorize 粘贴 **access_token**（不要带 `Bearer`  前缀）→ 再调需登录接口。App token 调 `/admin`、管理端 token 调 `/app` 均为 401。
-
-公开注册：`POST /api/v1/app/auth/register`，角色固定为 `user`，不能自选。管理端没有注册接口。
+`/docs` 中：login → Authorize 粘贴 **access_token**（不要带 `Bearer` 前缀）→ 再调需登录接口。
 
 ## 主要接口
 
@@ -177,11 +173,12 @@ uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8600
 
 | 变量                                            | 作用                                               |
 | --------------------------------------------- | ------------------------------------------------ |
-| `DATABASE_URL`                                | SQLAlchemy / Alembic 共用，驱动为 `postgresql+psycopg` |
+| `POSTGRES_USER` / `PASSWORD` / `DB` / `HOST` / `PORT` | Compose 与应用共用；未设 `DATABASE_URL` 时组装为 `postgresql+psycopg://...` |
+| `DATABASE_URL`（可选）                        | 非空时覆盖上面的组装结果（如 RDS） |
 | `SECRET_KEY`                                  | 签 JWT，不要提交真实值                                    |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_MINUTES` | 登录失败限流：窗口内次数与分钟数                                 |
 | `CORS_ORIGINS`                                | JSON 数组，前端源；改完须重启                                |
-| `BOOTSTRAP_*_PASSWORD`                        | 种子账号明文，只在首次插入时哈希入库                               |
+| `BOOTSTRAP_PASSWORD`                          | 种子账号 `superadmin` 密码；启动时写入或同步                     |
 
 
 `.env` 已在 `.gitignore`。图形客户端连库建议 DBeaver / `psql`；Navicat 15 无法正常浏览 PostgreSQL 16。

@@ -13,7 +13,7 @@
 当前工程特点（与部署相关）：
 
 - 后端目录：`hemu_oversea_fastapi/`；管理端：`hemu_oversea_fastapiadmin/`
-- `hemu_oversea_fastapi/docker-compose.yml` **只**启动 PostgreSQL 16，端口映射 `5500:5432`
+- `hemu_oversea_fastapi/docker-compose.yml` **只**启动 PostgreSQL 16；用户/密码/库名/宿主机端口来自 `.env` 的 `POSTGRES_*`（默认端口映射 `5500:5432`）
 - FastAPI 本机开发常用：`uvicorn app.main:app --host 127.0.0.1 --port 8600`
 - 配置全部来自 `hemu_oversea_fastapi/.env`（见 `.env.example`）
 - 管理端开发态通过 Umi `proxy` 转到 `127.0.0.1:8600`；**生产没有 proxy**，必须配置 API 根地址或同域反代

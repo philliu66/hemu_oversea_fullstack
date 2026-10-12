@@ -34,7 +34,7 @@ cd /opt/hemu_oversea_fastapi
 
 # 1. 环境文件（从本机安全拷贝或按 .env.example 新建，再改生产值）
 cp .env.example .env
-# 编辑 .env：DATABASE_URL、SECRET_KEY、CORS_ORIGINS、DHGATE_* 等
+# 编辑 .env：POSTGRES_PASSWORD、SECRET_KEY、CORS_ORIGINS、DHGATE_* 等
 
 # 2. 依赖
 uv sync

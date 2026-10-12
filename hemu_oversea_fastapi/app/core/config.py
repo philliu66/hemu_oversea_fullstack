@@ -1,6 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Self
+from urllib.parse import quote_plus
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -13,7 +16,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: str
+    # Docker Compose 与应用共用；未设置 DATABASE_URL 时由此组装连接串
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_DB: str = "hemu_oversea_fastapi"
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5500
+    # 可选覆盖（如 RDS 完整 DSN）；非空时优先于上面的 POSTGRES_*
+    DATABASE_URL: str = ""
+
     SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
@@ -23,7 +34,6 @@ class Settings(BaseSettings):
     CAPTCHA_LENGTH: int = 4
     CAPTCHA_EXPIRE_SECONDS: int = 300
     BOOTSTRAP_PASSWORD: str = "123456"
-    BOOTSTRAP_SUPPLIER_ID: int = 1
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
     # 敦煌开放平台 OAuth2
@@ -41,6 +51,17 @@ class Settings(BaseSettings):
     DHGATE_OAUTH_SCOPE: str = "basic"
     DHGATE_OAUTH_STATE_TTL_MINUTES: int = 10
     DHGATE_TOKEN_REFRESH_BUFFER_MINUTES: int = 5
+
+    @model_validator(mode="after")
+    def assemble_database_url(self) -> Self:
+        if self.DATABASE_URL.strip():
+            return self
+        password = quote_plus(self.POSTGRES_PASSWORD)
+        self.DATABASE_URL = (
+            f"postgresql+psycopg://{self.POSTGRES_USER}:{password}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+        return self
 
 
 @lru_cache

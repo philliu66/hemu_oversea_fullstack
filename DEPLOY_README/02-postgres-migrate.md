@@ -8,8 +8,8 @@ Compose 摘要：
 
 - 镜像：`postgres:16`
 - 容器名：`hemu_oversea_fastapi_postgres`
-- 默认库：`hemu_oversea_fastapi`
-- 端口：`5500:5432`
+- 用户 / 密码 / 库名 / 宿主机端口：来自同目录 `.env` 的 `POSTGRES_*`（见 `.env.example`）
+- 默认：库 `hemu_oversea_fastapi`，端口 `5500:5432`
 - 数据卷：`postgres_data`
 
 ## 1. 服务器启动 Postgres
@@ -18,12 +18,14 @@ Compose 摘要：
 
 ```bash
 cd /opt/hemu_oversea_fastapi   # 按你的实际代码路径调整
+cp .env.example .env           # 若尚无 .env
+# 编辑 .env：至少改掉 POSTGRES_PASSWORD（及 SECRET_KEY 等）
 docker compose up -d
 docker compose ps
 # postgres 应为 healthy，且有 0.0.0.0:5500->5432/tcp（仅本机访问即可）
 ```
 
-生产环境请修改 Compose 中的 `POSTGRES_PASSWORD`（及用户/库名如有变更），并保证与 `.env` 中 `DATABASE_URL` 一致。不要长期使用示例密码 `postgres/postgres`。
+生产环境请在 `.env` 中设置强密码 `POSTGRES_PASSWORD`，不要长期使用示例值 `postgres`。Compose 与 FastAPI 共用同一套 `POSTGRES_*`，无需再手写一份 `DATABASE_URL`（除非要用 RDS 等完整 DSN 覆盖）。
 
 ## 2. 从本机迁移数据
 
@@ -83,19 +85,26 @@ FastAPI 与 Postgres **同机**部署时，应用代码一般**不需要**为连
 本地示例（`hemu_oversea_fastapi/.env.example`）：
 
 ```env
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5500/hemu_oversea_fastapi
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=hemu_oversea_fastapi
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5500
 ```
 
-| 场景 | `DATABASE_URL` |
-|------|----------------|
-| FastAPI 与 Docker Postgres 同机 | 可用 `localhost:5500`（与本地结构相同） |
-| 使用阿里云 RDS 或其他主机 | 改为 RDS/内网地址与端口 |
-| 生产密码 | 必须改强密码，并与 Compose/`POSTGRES_PASSWORD` 一致 |
+| 场景 | 怎么配 |
+|------|--------|
+| FastAPI 与 Docker Postgres 同机 | `POSTGRES_HOST=localhost`，端口与 `POSTGRES_PORT` 一致 |
+| 本机应用连服务器上的库 | `POSTGRES_HOST=服务器IP`，密码与服务器一致（更推荐 SSH 隧道，勿对公网开 5500） |
+| 阿里云 RDS 等 | 改 `POSTGRES_*`，或设置完整 `DATABASE_URL=` 覆盖 |
+| 生产密码 | 只改 `.env` 的 `POSTGRES_PASSWORD`（须在**首次** `compose up` 前改好） |
 
 除数据库外，上线至少检查：
 
 ```env
-DATABASE_URL=postgresql+psycopg://postgres:强密码@localhost:5500/hemu_oversea_fastapi
+POSTGRES_PASSWORD=换成强密码
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5500
 
 SECRET_KEY=换成很长的随机串
 

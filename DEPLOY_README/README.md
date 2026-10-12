@@ -29,4 +29,4 @@
 
 - 用 `nohup uvicorn ... &` 作为正式常驻方案（进程挂掉不拉起、重启需手动、日志与多 worker 难管）。临时验证可用，正式环境请用 **systemd**（或后续 Docker 化应用）。
 - 安全组对公网开放 `5500`（Postgres）。
-- 生产继续使用默认密码 `postgres/postgres` 与示例 `SECRET_KEY`。
+- 生产继续使用默认密码（`.env` 中 `POSTGRES_PASSWORD=postgres`）与示例 `SECRET_KEY`。
