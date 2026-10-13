@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -421,6 +422,143 @@ def sync_products_dh(
     }
 
 
+def sync_products_from_file(
+    db: Session,
+    *,
+    items: list[dict[str, Any]],
+    site_id_default: str = _DEFAULT_SITE_ID,
+) -> dict[str, Any]:
+    """
+    Excel 商品同步（优化原 sync 逻辑）：
+
+    1. 行内缺少 store_identifier / item_code：只记入失败响应，不写库
+    2. 调 dh.item.get 成功：写入完整详情，sync_state=1
+    3. 敦煌 API 报错/异常：仍写入店铺+商品编码，sync_state=0，便于事后按状态排查
+    4. 返回耗时、成功/失败数及失败明细（含商品编码与异常信息）
+    """
+    if not items:
+        raise bad_request("items 不能为空")
+
+    started = time.perf_counter()
+    success_list: list[dict[str, Any]] = []
+    failed_list: list[dict[str, Any]] = []
+    clients: dict[str, DhgateClient] = {}
+    total = len(items)
+
+    for index, item in enumerate(items):
+        store_identifier = _as_str(item.get("store_identifier"))
+        item_code = _as_str(item.get("item_code"))
+        site_id = (_as_str(item.get("site_id")) or site_id_default).upper()
+
+        # Excel 必填缺失：仅响应体现，不落库
+        if not store_identifier or not item_code:
+            missing = []
+            if not store_identifier:
+                missing.append("store_identifier")
+            if not item_code:
+                missing.append("item_code")
+            failed_list.append(
+                {
+                    "index": index,
+                    "store_identifier": store_identifier,
+                    "item_code": item_code,
+                    "site_id": site_id,
+                    "product_id": None,
+                    "message": f"Excel 数据无效：缺少 {', '.join(missing)}",
+                    "sync_state": None,
+                }
+            )
+            logger.warning(
+                "文件同步跳过无效行 index=%s missing=%s",
+                index,
+                ",".join(missing),
+            )
+            continue
+
+        try:
+            client = clients.get(store_identifier)
+            if client is None:
+                client = get_dhgate_client_by_identifier(db, store_identifier)
+                client.clear_call_history()
+                clients[store_identifier] = client
+
+            detail = get_item(client, item_code=item_code, site_id=site_id)
+            saved = persist_item_detail(
+                db,
+                store_id=client.store.id,
+                item_code=item_code,
+                site_id=site_id,
+                detail=detail,
+                is_seed="1",
+            )
+            saved["store_identifier"] = store_identifier
+            success_list.append(saved)
+        except AppError as exc:
+            db.rollback()
+            # API/业务失败：尽量落库店铺+商品编码，同步状态=失败
+            fail_row = _try_mark_sync_failed(
+                db,
+                store_identifier=store_identifier,
+                item_code=item_code,
+                site_id=site_id,
+                clients=clients,
+            )
+            failed_list.append(
+                {
+                    "index": index,
+                    "store_identifier": store_identifier,
+                    "item_code": item_code,
+                    "site_id": site_id,
+                    "product_id": fail_row.id if fail_row else None,
+                    "message": exc.message,
+                    "code": exc.code,
+                    "sync_state": _SYNC_FAIL if fail_row else None,
+                }
+            )
+            logger.warning(
+                "文件同步失败 store_identifier=%s item_code=%s: %s",
+                store_identifier,
+                item_code,
+                exc.message,
+            )
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            fail_row = _try_mark_sync_failed(
+                db,
+                store_identifier=store_identifier,
+                item_code=item_code,
+                site_id=site_id,
+                clients=clients,
+            )
+            failed_list.append(
+                {
+                    "index": index,
+                    "store_identifier": store_identifier,
+                    "item_code": item_code,
+                    "site_id": site_id,
+                    "product_id": fail_row.id if fail_row else None,
+                    "message": str(exc),
+                    "sync_state": _SYNC_FAIL if fail_row else None,
+                }
+            )
+            logger.exception(
+                "文件同步异常 store_identifier=%s item_code=%s",
+                store_identifier,
+                item_code,
+            )
+        finally:
+            logger.info("当前文件同步进度: %s/%s", index + 1, total)
+
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+    return {
+        "elapsed_ms": elapsed_ms,
+        "success": success_list,
+        "failed": failed_list,
+        "success_count": len(success_list),
+        "failed_count": len(failed_list),
+    }
+
+
 def find_missing_product_sync_items(
     db: Session,
     *,
@@ -505,3 +643,36 @@ def summarize_sync_result(
         "missing_count": len(missing),
         "missing_items": missing,
     }
+
+
+def summarize_file_sync_result(
+    sync_result: dict[str, Any],
+    *,
+    missing_items: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """文件同步精简结果：耗时、成功/失败数、失败明细（含商品编码与异常信息）。"""
+    failed_raw = sync_result.get("failed") or []
+    failed: list[dict[str, Any]] = []
+    for item in failed_raw:
+        if not isinstance(item, dict):
+            continue
+        failed.append(
+            {
+                "item_code": item.get("item_code"),
+                "store_identifier": item.get("store_identifier"),
+                "site_id": item.get("site_id"),
+                "message": item.get("message"),
+                "product_id": item.get("product_id"),
+            }
+        )
+    missing = missing_items or []
+    result: dict[str, Any] = {
+        "elapsed_ms": float(sync_result.get("elapsed_ms") or 0),
+        "success_count": int(sync_result.get("success_count") or 0),
+        "failed_count": int(sync_result.get("failed_count") or 0),
+        "failed": failed,
+    }
+    if missing_items is not None:
+        result["missing_count"] = len(missing)
+        result["missing_items"] = missing
+    return result

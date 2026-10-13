@@ -29,8 +29,9 @@ from app.services.commerce import summarize_supplier_punish
 from app.services.product_groups_dh import sync_supplier_product_groups_dh
 from app.services.products_dh import (
     find_missing_product_sync_items,
-    summarize_sync_result,
+    summarize_file_sync_result,
     sync_products_dh,
+    sync_products_from_file,
 )
 from app.services.shipping_templates_dh import sync_supplier_shipping_templates_dh
 
@@ -168,8 +169,8 @@ async def test_product_sync_from_file(
     extract_field_info: str = Form(
         default='{"store_identifier":"A","item_code":"B"}',
         description=(
-            "提取字段映射（JSON）。默认同步场景："
-            '{"store_identifier":"A","item_code":"B"}'
+            "提取字段映射（JSON）。须含 store_identifier / item_code。"
+            '默认：{"store_identifier":"A","item_code":"B"}'
         ),
         examples=['{"store_identifier":"A","item_code":"B"}'],
     ),
@@ -192,18 +193,20 @@ async def test_product_sync_from_file(
         default=0,
         ge=0,
         le=1,
-        description="是否自动检查遗漏：0=否（同步全部提取行），1=是（仅同步库中不存在的商品）",
+        description="是否自动检查遗漏：0=否（处理全部提取行），1=是（仅处理库中不存在的商品）",
     ),
 ) -> ApiResponse[dict[str, Any]]:
     """
-    合并流程：
-    1. 按 getdatafromfile 相同方式从 Excel 提取 items
-       （须包含 store_identifier / item_code）
-    2. is_autocheck=0：对全部提取行执行同步入库
-    3. is_autocheck=1：先检查 item_code（按店铺）是否已在 product_dh，
-       仅对遗漏项自动落库，并返回遗漏明细
+    从 Excel 提取店铺标识与商品编码后同步入库：
 
-    响应仅返回简要统计：成功数、失败数、遗漏补充数及遗漏列表。
+    1. 按 extract_field_info 提取行（须含 store_identifier / item_code）
+    2. 行内缺少店铺或商品编码：仅在响应 failed 中体现，不写库
+    3. 调 dh.item.get 成功：写入完整详情，sync_state=1
+    4. 敦煌 API 报错/数据异常：仍写入店铺+商品编码，sync_state=0，便于事后排查
+    5. is_autocheck=1 时仅处理库中尚不存在的商品
+
+    响应：elapsed_ms、success_count、failed_count；
+    failed 含 item_code / store_identifier / message（及可选 product_id）。
     """
     field_map = utils_file_service.parse_extract_field_info(extract_field_info)
     if "store_identifier" not in field_map or "item_code" not in field_map:
@@ -224,7 +227,7 @@ async def test_product_sync_from_file(
         raise bad_request("Excel 中未解析到有效的店铺标识与商品编码")
 
     all_items = list(extract.items)
-    missing_items: list[dict[str, str]] = []
+    missing_items: list[dict[str, str]] | None = None
     if is_autocheck == 1:
         missing_items = find_missing_product_sync_items(db, items=all_items)
         sync_items = missing_items
@@ -234,16 +237,24 @@ async def test_product_sync_from_file(
     if not sync_items:
         return success(
             {
+                "elapsed_ms": 0,
                 "success_count": 0,
                 "failed_count": 0,
-                "missing_count": 0,
-                "missing_items": [],
+                "failed": [],
+                **(
+                    {
+                        "missing_count": 0,
+                        "missing_items": [],
+                    }
+                    if is_autocheck == 1
+                    else {}
+                ),
             }
         )
 
-    sync_result = sync_products_dh(db, items=sync_items)
+    sync_result = sync_products_from_file(db, items=sync_items)
     return success(
-        summarize_sync_result(
+        summarize_file_sync_result(
             sync_result,
             missing_items=missing_items if is_autocheck == 1 else None,
         )
