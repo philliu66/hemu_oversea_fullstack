@@ -18,6 +18,7 @@ import {
   Radio,
   Skeleton,
   Space,
+  Spin,
   Typography,
 } from 'antd';
 import type { DefaultOptionType } from 'antd/es/cascader';
@@ -57,10 +58,8 @@ import {
 } from '@/services/admin/categories';
 import { fetchDhProductDetail } from '@/services/admin/products';
 import {
-  fetchStoreAftersaleTemplates,
   fetchStoreList,
   fetchStoreProductGroups,
-  fetchStoreShippingTemplates,
 } from '@/services/admin/stores';
 import type {
   DhCategoryAttrPublic,
@@ -81,6 +80,7 @@ import PackageInfoFields from './PackageInfoFields';
 import ProductImagesEditor from './ProductImagesEditor';
 import ProductSpecSkuBlock from './ProductSpecSkuBlock';
 import SaleInfoFields from './SaleInfoFields';
+import TemplateInfoFields from './TemplateInfoFields';
 import {
   DH_CUSTOM_PRODUCT_ATTR_ID,
   buildDetailFromForm,
@@ -118,17 +118,6 @@ function changedLabel(text: string, changed: boolean) {
 
 function changedControlStyle(changed: boolean): React.CSSProperties {
   return changed ? { color: CHANGED_COLOR } : {};
-}
-
-function withCurrentTemplateOption(
-  items: { label: string; value: string }[],
-  currentId?: string | null,
-) {
-  const current = currentId?.trim();
-  if (!current || items.some((item) => item.value === current)) {
-    return items;
-  }
-  return [{ label: current, value: current }, ...items];
 }
 
 function pageTitle(mode: ProductPageMode): string {
@@ -503,46 +492,48 @@ export const ProductEditor = forwardRef<
           }
         }}
       >
-        <Card title={'基本信息'} loading={loading}>
-          <ProFormSelect
-            name="store_id"
-            label={changedLabel('店铺名称', isChanged('store_id'))}
-            showSearch
-            debounceTime={300}
-            params={{ supplierId }}
-            request={async () => {
-              if (!supplierId) {
-                return [];
-              }
-              const data = await fetchStoreList({
-                supplier_id: supplierId,
-                page: 1,
-                page_size: 100,
-              });
-              return data.items.map((store) => ({
-                label: store.name,
-                value: store.id,
-              }));
-            }}
-            fieldProps={{
-              style: {
-                maxWidth: 360,
-                ...changedControlStyle(isChanged('store_id')),
-              },
-            }}
-          />
-          <Form.Item
-            label={changedLabel('产品分类', isChanged('cate_pub_id'))}
-            required
-          >
-            <CategorySelectField
-              category={displayCategory}
-              pathDisplay={categoryPath}
-              disabled={readOnly}
-              changed={isChanged('cate_pub_id')}
-              onPick={handleCategoryPick}
+        <Card title={'基本信息'}>
+          <Spin spinning={loading}>
+            <ProFormSelect
+              name="store_id"
+              label={changedLabel('店铺名称', isChanged('store_id'))}
+              showSearch
+              debounceTime={300}
+              params={{ supplierId }}
+              request={async () => {
+                if (!supplierId) {
+                  return [];
+                }
+                const data = await fetchStoreList({
+                  supplier_id: supplierId,
+                  page: 1,
+                  page_size: 100,
+                });
+                return data.items.map((store) => ({
+                  label: store.name,
+                  value: store.id,
+                }));
+              }}
+              fieldProps={{
+                style: {
+                  maxWidth: 360,
+                  ...changedControlStyle(isChanged('store_id')),
+                },
+              }}
             />
-          </Form.Item>
+            <Form.Item
+              label={changedLabel('产品分类', isChanged('cate_pub_id'))}
+              required
+            >
+              <CategorySelectField
+                category={displayCategory}
+                pathDisplay={categoryPath}
+                disabled={readOnly}
+                changed={isChanged('cate_pub_id')}
+                onPick={handleCategoryPick}
+              />
+            </Form.Item>
+          </Spin>
         </Card>
 
         <Card
@@ -690,7 +681,8 @@ export const ProductEditor = forwardRef<
           </ProFormList>
         </Card>
 
-        <Card title={'产品信息'} loading={loading} style={{ marginTop: 16 }}>
+        <Card title={'产品信息'} style={{ marginTop: 16 }}>
+          <Spin spinning={loading}>
           <Form.Item
             name="item_name"
             label={changedLabel('产品标题', isChanged('item_name'))}
@@ -824,18 +816,20 @@ export const ProductEditor = forwardRef<
               </Form.Item>
             </>
           ) : null}
+          </Spin>
         </Card>
 
-        <Card title={'销售信息'} loading={loading} style={{ marginTop: 16 }}>
-          <SaleInfoFields disabled={readOnly} />
+        <Card title={'销售信息'} style={{ marginTop: 16 }}>
+          <Spin spinning={loading}>
+            <SaleInfoFields disabled={readOnly} />
+          </Spin>
         </Card>
 
         <Card
           title={changedLabel('商品图片', isChanged('item_img_list'))}
-          loading={loading}
           style={{ marginTop: 16 }}
         >
-          {loading ? null : (
+          <Spin spinning={loading}>
             <ProFormDependency name={['store_id']}>
               {({ store_id }) => (
                 <Form.Item
@@ -852,7 +846,7 @@ export const ProductEditor = forwardRef<
                 </Form.Item>
               )}
             </ProFormDependency>
-          )}
+          </Spin>
         </Card>
 
         <Card
@@ -903,86 +897,30 @@ export const ProductEditor = forwardRef<
               isChanged('height') ||
               isChanged('item_weight_range'),
           )}
-          loading={loading}
           style={{ marginTop: 16 }}
         >
-          <PackageInfoFields disabled={readOnly} />
+          <Spin spinning={loading}>
+            <PackageInfoFields disabled={readOnly} />
+          </Spin>
         </Card>
 
-        <Card title={'模板信息'} loading={loading} style={{ marginTop: 16 }}>
-          <ProFormSelect
-            name="after_sale_template_id"
-            label={changedLabel(
-              '售后模板',
-              isChanged('after_sale_template_id'),
-            )}
-            disabled={readOnly}
-            showSearch
-            allowClear
-            placeholder={'请选择售后模板'}
-            dependencies={['store_id']}
-            fieldProps={{
-              optionFilterProp: 'label',
-              style: {
-                maxWidth: 360,
-                ...changedControlStyle(isChanged('after_sale_template_id')),
-              },
-            }}
-            request={async (params) => {
-              const storeId = params.store_id as number | undefined;
-              if (!storeId) {
-                return [];
-              }
-              try {
-                const aftersale = await fetchStoreAftersaleTemplates(storeId);
-                const options = aftersale.map((item) => ({
-                  label: item.name?.trim() || item.after_sale_template_id,
-                  value: item.after_sale_template_id,
-                }));
-                return withCurrentTemplateOption(
-                  options,
-                  form.getFieldValue('after_sale_template_id'),
-                );
-              } catch {
-                return [];
-              }
-            }}
-          />
-          <ProFormSelect
-            name="shipping_model_id"
-            label={changedLabel('物流模板', isChanged('shipping_model_id'))}
-            disabled={readOnly}
-            showSearch
-            allowClear
-            placeholder={'请选择物流模板'}
-            dependencies={['store_id']}
-            fieldProps={{
-              optionFilterProp: 'label',
-              style: {
-                maxWidth: 360,
-                ...changedControlStyle(isChanged('shipping_model_id')),
-              },
-            }}
-            request={async (params) => {
-              const storeId = params.store_id as number | undefined;
-              if (!storeId) {
-                return [];
-              }
-              try {
-                const shipping = await fetchStoreShippingTemplates(storeId);
-                const options = shipping.map((item) => ({
-                  label: item.name?.trim() || item.shipping_model_id,
-                  value: item.shipping_model_id,
-                }));
-                return withCurrentTemplateOption(
-                  options,
-                  form.getFieldValue('shipping_model_id'),
-                );
-              } catch {
-                return [];
-              }
-            }}
-          />
+        <Card title={'模板信息'} style={{ marginTop: 16 }}>
+          <Spin spinning={loading}>
+            <TemplateInfoFields
+              disabled={readOnly}
+              afterSaleLabel={changedLabel(
+                '售后模板',
+                isChanged('after_sale_template_id'),
+              )}
+              shippingLabel={changedLabel(
+                '物流模板',
+                isChanged('shipping_model_id'),
+              )}
+              afterSaleChanged={isChanged('after_sale_template_id')}
+              shippingChanged={isChanged('shipping_model_id')}
+              changedControlStyle={changedControlStyle(true)}
+            />
+          </Spin>
         </Card>
       </ProForm>
     </Space>

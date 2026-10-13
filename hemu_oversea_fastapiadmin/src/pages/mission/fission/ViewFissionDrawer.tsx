@@ -94,6 +94,7 @@ export function ViewFissionDrawer({
       open={open}
       width="80vw"
       destroyOnHidden
+      maskClosable={false}
       onClose={onClose}
       styles={{ body: { padding: 24 } }}
     >

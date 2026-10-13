@@ -23,7 +23,7 @@ _PRICE_PREFIX_RE = re.compile(r"^[\s$￥€£]+")
 _PRICE_CLEAN_RE = re.compile(r"[,\s]")
 
 # 批量导入默认供应商 / 系统操作人
-DEFAULT_SUPPLIER_ID = 4
+DEFAULT_SUPPLIER_ID = 0
 DEFAULT_UPDATED_BY = 0
 
 SKU_BASE_INFO_REQUIRED_FIELDS = {"sku_code", "sku_series", "unit_price"}

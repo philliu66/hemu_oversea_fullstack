@@ -1,8 +1,8 @@
-import { ProFormDependency, ProFormSelect } from '@ant-design/pro-components';
-import { Form, InputNumber, Radio, Space, Typography } from 'antd';
-import React from 'react';
+import { ProFormDependency } from '@ant-design/pro-components';
+import { Form, InputNumber, Radio, Select, Space, Typography } from 'antd';
+import React, { useMemo } from 'react';
 import type { DhItemInventoryPublic, DhMeasuresUnitPublic } from '@/types/api';
-import { loadMeasureUnits, useMeasureUnits } from './measureUnits';
+import { useMeasureUnits } from './measureUnits';
 
 /** issample：2 成人 / 3 非成人（平台也可能返回其它值） */
 export const ISSAMPLE_ADULT = '2';
@@ -116,37 +116,51 @@ type SaleInfoFieldsProps = {
 };
 
 /**
- * 销售信息：字段直连 Form；计件单位用 ProForm 声明式 request；
+ * 销售信息：字段直连 Form；计件单位在本组件内加载（进程缓存）；
  * 销售方式/文案通过 ProFormDependency 订阅 measure_id / packing_quantity。
  */
 const SaleInfoFields: React.FC<SaleInfoFieldsProps> = ({
   disabled = false,
 }) => {
   const form = Form.useFormInstance();
-  const measureOptions = useMeasureUnits();
+  const measureId = Form.useWatch('measure_id', form) as
+    | string
+    | null
+    | undefined;
+  const { options: measureOptions, loading: measureOptionsLoading } =
+    useMeasureUnits();
+  const measureSelectOptions = useMemo(() => {
+    const list = measureOptions.map((item) => ({
+      label: formatMeasureLabel(item),
+      value: item.measure_id,
+    }));
+    const current = (measureId || '').trim();
+    if (!current || list.some((item) => item.value === current)) {
+      return list;
+    }
+    return [{ label: current, value: current }, ...list];
+  }, [measureId, measureOptions]);
+  // options 从空到有时强制重建，避免回填的 measure_id 一直显示成裸 id
+  const measureSelectKey = measureOptionsLoading
+    ? 'measure-pending'
+    : 'measure-ready';
 
   return (
     <>
       {/* packing_quantity / item_inventory 由 setFieldsValue 维护，无独立控件 */}
-      <ProFormSelect
-        name="measure_id"
-        label={requiredLabel('计件单位')}
-        disabled={disabled}
-        showSearch
-        allowClear
-        placeholder={'请选择计件单位'}
-        fieldProps={{
-          style: { maxWidth: 280, width: '100%' },
-          optionFilterProp: 'label',
-        }}
-        request={async () => {
-          const list = await loadMeasureUnits();
-          return list.map((item) => ({
-            label: formatMeasureLabel(item),
-            value: item.measure_id,
-          }));
-        }}
-      />
+      <Form.Item name="measure_id" label={requiredLabel('计件单位')}>
+        <Select
+          key={measureSelectKey}
+          disabled={disabled}
+          loading={measureOptionsLoading}
+          showSearch
+          allowClear
+          placeholder={'请选择计件单位'}
+          options={measureSelectOptions}
+          optionFilterProp="label"
+          style={{ maxWidth: 280, width: '100%' }}
+        />
+      </Form.Item>
 
       <ProFormDependency
         name={['measure_id', 'packing_quantity', 'item_inventory']}

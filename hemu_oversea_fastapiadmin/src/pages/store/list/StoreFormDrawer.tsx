@@ -223,6 +223,7 @@ export function StoreFormDrawer({
       open={open}
       width={480}
       destroyOnHidden
+      maskClosable={false}
       onClose={handleClose}
       styles={{ body: { paddingBottom: 80 } }}
       footer={

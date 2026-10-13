@@ -98,7 +98,7 @@ export default function ProductSpecSkuBlock({
   commissionData = null,
 }: ProductSpecSkuBlockProps) {
   const form = Form.useFormInstance();
-  const measureOptions = useMeasureUnits();
+  const { options: measureOptions } = useMeasureUnits();
 
   return (
     <ProFormDependency

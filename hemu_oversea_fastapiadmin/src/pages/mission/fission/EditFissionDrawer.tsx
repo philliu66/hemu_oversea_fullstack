@@ -138,6 +138,7 @@ export function EditFissionDrawer({
       open={open}
       width="80vw"
       destroyOnHidden
+      maskClosable={false}
       onClose={onClose}
       styles={{
         body: {

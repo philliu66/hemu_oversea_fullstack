@@ -87,6 +87,7 @@ export function AddFissionDrawer({
       open={open}
       width="80vw"
       destroyOnHidden
+      maskClosable={false}
       onClose={() => {
         resetDrawer();
         onClose();

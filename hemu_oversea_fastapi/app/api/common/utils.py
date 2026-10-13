@@ -29,8 +29,6 @@ from app.services.dhgate import (
 from app.services.measures_units_dh import list_measures_units_dh
 from app.services.product_package_weight import execute_dhgate_product_updates
 from app.services.sku_base_infos_dh import (
-    DEFAULT_SUPPLIER_ID,
-    DEFAULT_UPDATED_BY,
     SKU_BASE_INFO_REQUIRED_FIELDS,
     get_sku_base_info,
     upsert_sku_base_infos_from_items,
@@ -269,13 +267,24 @@ async def update_dhgate_sku_base_info_from_file(
         ge=0,
         description="工作表索引：0=读取全部 sheet；1 起为指定 sheet（1=第一个）",
     ),
+    supplier_id: int = Form(
+        default=0,
+        ge=0,
+        description="供应商 ID；默认 0",
+    ),
+    updated_by: int = Form(
+        default=0,
+        ge=0,
+        description="更新人用户 ID；0=系统，其它值=对应用户 uid",
+    ),
 ) -> ApiResponse[DhgateUpdateSkuBaseInfoFromFilePublic]:
     """
     从本地 Excel 提取后批量 upsert sku_base_info_dh（SKU 基础信息）。
 
     1. 按 extract_field_info 提取行
     2. 自动去掉售价前缀 `$` 等货币符号后写入 unit_price
-    3. 按 supplier_id + sku_code 新建或更新；本接口写死 supplier_id=4、updated_by=0（系统）
+    3. 按 supplier_id + sku_code 新建或更新；
+       supplier_id / updated_by 由表单传入，默认均为 0（updated_by=0 表示系统）
     4. 物流模板 / 重量 / 打包数 / 起订量可为空（Excel 空单元格写入 null，不跳过该行）
 
     价格表映射示例（对应截图表头）：
@@ -299,8 +308,8 @@ async def update_dhgate_sku_base_info_from_file(
     update = upsert_sku_base_infos_from_items(
         db,
         items=extract.items,
-        supplier_id=DEFAULT_SUPPLIER_ID,
-        updated_by=DEFAULT_UPDATED_BY,
+        supplier_id=supplier_id,
+        updated_by=updated_by,
     )
     return success(
         DhgateUpdateSkuBaseInfoFromFilePublic(

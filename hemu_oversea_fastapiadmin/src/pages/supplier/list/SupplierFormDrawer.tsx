@@ -195,6 +195,7 @@ export function SupplierFormDrawer({
       open={open}
       width={560}
       destroyOnHidden
+      maskClosable={false}
       onClose={handleClose}
       styles={{ body: { paddingBottom: 80 } }}
       footer={

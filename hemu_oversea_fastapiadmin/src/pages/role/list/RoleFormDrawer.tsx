@@ -136,6 +136,7 @@ export function RoleFormDrawer({
       open={open}
       width={520}
       destroyOnHidden
+      maskClosable={false}
       onClose={handleClose}
       styles={{ body: { paddingBottom: 80 } }}
       footer={
