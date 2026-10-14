@@ -7,7 +7,7 @@ import { getLocale, useModel } from '@umijs/max';
 import { Card } from 'antd';
 import hljs from 'highlight.js';
 import React from 'react';
-import Settings from '../../config/defaultSettings';
+import { buildSystemTitle } from '@/constants/brand';
 
 import 'highlight.js/styles/github.css';
 import './Welcome.css';
@@ -141,13 +141,14 @@ const Dev: React.FC = () => {
       : mdContent['en-US']);
   const { initialState } = useModel('@@initialState');
   const isDark = initialState?.settings?.navTheme === 'realDark';
+  const appTitle = buildSystemTitle(initialState?.currentUser?.supplier_name);
 
   return (
     <PageContainer
       title={
         <>
           欢迎使用{' '}
-          <span className="welcome-gradient-title">{Settings.title}</span> 🎉
+          <span className="welcome-gradient-title">{appTitle}</span> 🎉
         </>
       }
     >

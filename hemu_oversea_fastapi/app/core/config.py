@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     DHGATE_REDIRECT_URI: str = (
         "http://127.0.0.1:8000/api/v1/common/oauth/dhgate/callback"
     )
-    DHGATE_FRONTEND_REDIRECT_URI: str = "http://localhost:8000/callback"
+    DHGATE_FRONTEND_REDIRECT_URI: str = "http://localhost:8000/admin/callback"
     DHGATE_AUTHORIZE_URL: str = "https://secure.dhgate.com/dop/oauth2/authorize"
     DHGATE_TOKEN_URL: str = "https://secure.dhgate.com/dop/oauth2/access_token"
     DHGATE_API_URL: str = "http://api.dhgate.com/dop/router"

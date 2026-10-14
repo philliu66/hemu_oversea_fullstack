@@ -27,6 +27,7 @@ declare namespace API {
     role?: string;
     org_type?: string;
     supplier_id?: number;
+    supplier_name?: string;
     is_active?: boolean;
     permission_codes?: string[];
   };

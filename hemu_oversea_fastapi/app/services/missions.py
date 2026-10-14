@@ -1,13 +1,18 @@
 import copy
+import logging
+import threading
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased, defer
 
+from app.core.db import SessionLocal
 from app.core.deps import Pagination
 from app.core.errors import bad_request, forbidden, not_found
 from app.core.roles import Role
 from app.models.mission import (
+    FISSION_STATUS_FAILED,
     FISSION_STATUS_MARKED_FINISHED,
     FISSION_STATUS_PENDING,
     FISSION_STATUS_SUCCESS,
@@ -32,10 +37,13 @@ from app.schemas.mission import (
 from app.services.products import _build_dh_main_image_url
 
 PLACEHOLDER_MESSAGE = "功能待补充"
+logger = logging.getLogger(__name__)
 
 _PLATFORM_ROLES = {Role.PLATFORM_ADMIN.value, Role.SUPER_ADMIN.value, Role.PLATFORM_STAFF.value}
 _SUPPLIER_PORTAL_ROLES = {Role.SUPPLIER_ADMIN.value, Role.SUPPLIER_STAFF.value}
 _MARKABLE_STATUSES = {MISSION_STATUS_PENDING, MISSION_STATUS_RUNNING}
+_EXECUTABLE_FISSION_STATUSES = {FISSION_STATUS_PENDING, FISSION_STATUS_FAILED}
+_MOCK_BATCH_SECONDS = 10
 
 
 def _scope_supplier_id(actor: User, supplier_id: int | None) -> int:
@@ -511,6 +519,8 @@ def add_fission_data(
         actor=actor,
         supplier_id=supplier_id,
     )
+    if mission.status == MISSION_STATUS_RUNNING:
+        raise bad_request("任务正在执行中，不能再添加数据")
     if mission.status in {MISSION_STATUS_MARKED_FINISHED, MISSION_STATUS_FINISHED}:
         raise bad_request("任务已结束，不能再添加数据")
 
@@ -636,6 +646,8 @@ def _get_mutable_fission_row(
         actor=actor,
         supplier_id=supplier_id,
     )
+    if mission.status == MISSION_STATUS_RUNNING:
+        raise bad_request("任务正在执行中，不能修改数据")
     if mission.status in {MISSION_STATUS_MARKED_FINISHED, MISSION_STATUS_FINISHED}:
         raise bad_request("任务已结束，不能再修改数据")
     row = db.get(MissionDataDhFission, data_id)
@@ -702,3 +714,120 @@ def reject_placeholder(
         supplier_id=supplier_id,
     )
     raise bad_request(PLACEHOLDER_MESSAGE)
+
+
+def execute_mission(
+    db: Session,
+    *,
+    mission_id: int,
+    actor: User,
+    supplier_id: int | None,
+) -> dict:
+    """受理裂变任务执行：同步落库后后台模拟跑批（约 10s 后任务标 finished，数据状态不变）。
+
+    真实循环调用单次裂变的逻辑后续再替换 `_mock_finish_mission_batch`。
+    """
+    mission = _get_visible_mission(
+        db,
+        mission_id=mission_id,
+        actor=actor,
+        supplier_id=supplier_id,
+    )
+    if mission.status == MISSION_STATUS_RUNNING:
+        raise bad_request("任务正在执行中")
+    if mission.status == MISSION_STATUS_MARKED_FINISHED:
+        raise bad_request("任务已标记结束，不能执行")
+
+    fission_ids = list(
+        db.scalars(
+            select(MissionDataDhFission.id)
+            .where(
+                MissionDataDhFission.mission_id == mission.id,
+                MissionDataDhFission.deleted_at.is_(None),
+                MissionDataDhFission.fission_status.in_(_EXECUTABLE_FISSION_STATUSES),
+            )
+            .order_by(MissionDataDhFission.id.asc())
+        ).all()
+    )
+    if not fission_ids:
+        raise bad_request("没有可执行的任务数据")
+
+    now = datetime.now(timezone.utc)
+    mission.status = MISSION_STATUS_RUNNING
+    log = MissionLog(
+        mission_id=mission.id,
+        operator_id=actor.id,
+        started_at=now,
+        success_count=0,
+        fail_count=0,
+        remark="模拟执行中（真实跑批待补充）",
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+
+    thread = threading.Thread(
+        target=_mock_finish_mission_batch,
+        kwargs={
+            "mission_id": mission.id,
+            "log_id": log.id,
+        },
+        name=f"mission-fission-mock-{mission.id}",
+        daemon=True,
+    )
+    thread.start()
+
+    return {
+        "mission_id": mission.id,
+        "log_id": log.id,
+        "queued_count": len(fission_ids),
+    }
+
+
+def _mock_finish_mission_batch(
+    *,
+    mission_id: int,
+    log_id: int,
+) -> None:
+    """临时占位：等待后只把任务标为 finished，不改裂变数据状态。后续替换为真实跑批。"""
+    time.sleep(_MOCK_BATCH_SECONDS)
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        mission = db.get(Mission, mission_id)
+        log = db.get(MissionLog, log_id)
+        if mission is None or log is None:
+            return
+        if mission.status != MISSION_STATUS_RUNNING:
+            return
+
+        log.ended_at = now
+        log.remark = "模拟执行完成（真实跑批待补充）"
+        mission.status = MISSION_STATUS_FINISHED
+        db.commit()
+    except Exception:
+        logger.exception(
+            "mock mission batch failed mission_id=%s log_id=%s",
+            mission_id,
+            log_id,
+        )
+        db.rollback()
+        try:
+            mission = db.get(Mission, mission_id)
+            log = db.get(MissionLog, log_id)
+            now = datetime.now(timezone.utc)
+            if mission is not None and mission.status == MISSION_STATUS_RUNNING:
+                mission.status = MISSION_STATUS_PENDING
+            if log is not None and log.ended_at is None:
+                log.ended_at = now
+                log.remark = "模拟执行异常"
+            db.commit()
+        except Exception:
+            logger.exception(
+                "mock mission batch recovery failed mission_id=%s log_id=%s",
+                mission_id,
+                log_id,
+            )
+            db.rollback()
+    finally:
+        db.close()

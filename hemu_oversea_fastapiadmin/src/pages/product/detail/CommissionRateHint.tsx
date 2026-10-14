@@ -63,6 +63,37 @@ export function extractSkuSpecModel(
   return matched?.[0] || null;
 }
 
+/**
+ * 属性模板用基型号：先走定价参考同款正则，再去掉尾部 -数字。
+ * 例：BD001 / BD001-1 / BD001*' → BD001
+ */
+export function extractSkuBaseModel(
+  skuCode: string | null | undefined,
+): string | null {
+  const model = extractSkuSpecModel(skuCode);
+  if (!model) {
+    return null;
+  }
+  return model.replace(/-\d+$/, '') || null;
+}
+
+/** 商品 SKU 列表归类为去重基型号（保持首次出现顺序） */
+export function collectDistinctSkuBaseModels(
+  skuList: DhProductSkuPublic[] | null | undefined,
+): string[] {
+  const seen = new Set<string>();
+  const models: string[] = [];
+  for (const sku of skuList || []) {
+    const base = extractSkuBaseModel(sku.sku_code);
+    if (!base || seen.has(base)) {
+      continue;
+    }
+    seen.add(base);
+    models.push(base);
+  }
+  return models;
+}
+
 export type SkuSpecModelSample = {
   /** 正则清洗后的型号（用于展示与去重） */
   model: string;

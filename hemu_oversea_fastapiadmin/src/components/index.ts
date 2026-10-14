@@ -17,6 +17,7 @@ export { default as AvatarList } from './AvatarList';
 export { default as CaptchaImage } from './CaptchaImage';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as OfflineBanner } from './OfflineBanner';
+export { default as PermissionCodePicker } from './PermissionCodePicker';
 export { default as StandardFormRow } from './StandardFormRow';
 export { default as TagSelect } from './TagSelect';
 

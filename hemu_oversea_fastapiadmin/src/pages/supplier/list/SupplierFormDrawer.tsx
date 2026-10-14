@@ -1,9 +1,9 @@
-﻿import { App, Button, Drawer, Form, Input, Space, Spin, Tree } from 'antd';
-import type { DataNode } from 'antd/es/tree';
+﻿import { App, Button, Drawer, Form, Input, Space, Spin } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
+import PermissionCodePicker from '@/components/PermissionCodePicker';
 import {
   fetchSupplierAssignablePermissionTree,
-  flattenPermissionTree,
+  type PermissionTreeNode,
 } from '@/services/admin/rbac';
 import {
   createSupplier,
@@ -25,16 +25,6 @@ type FormValues = {
   confirmPassword?: string;
 };
 
-function toTreeData(
-  nodes: ReturnType<typeof flattenPermissionTree>,
-): DataNode[] {
-  return nodes.map((n) => ({
-    title: n.title,
-    key: n.key,
-    children: n.children?.length ? toTreeData(n.children) : undefined,
-  }));
-}
-
 export function SupplierFormDrawer({
   open,
   mode,
@@ -54,7 +44,7 @@ export function SupplierFormDrawer({
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [treeNodes, setTreeNodes] = useState<DataNode[]>([]);
+  const [permTree, setPermTree] = useState<PermissionTreeNode[]>([]);
 
   const readOnly = mode === 'view';
   const isCreate = mode === 'create';
@@ -67,7 +57,7 @@ export function SupplierFormDrawer({
     fetchSupplierAssignablePermissionTree()
       .then((nodes) => {
         if (!cancelled) {
-          setTreeNodes(toTreeData(flattenPermissionTree(nodes)));
+          setPermTree(nodes);
         }
       })
       .catch(() => undefined);
@@ -193,7 +183,7 @@ export function SupplierFormDrawer({
     <Drawer
       title={title}
       open={open}
-      width={560}
+      width={720}
       destroyOnHidden
       maskClosable={false}
       onClose={handleClose}
@@ -312,24 +302,11 @@ export function SupplierFormDrawer({
                     },
                   ]
             }
-            valuePropName="checkedKeys"
-            trigger="onCheck"
-            getValueFromEvent={(checked) =>
-              Array.isArray(checked) ? checked : checked.checked
-            }
           >
-            <Tree
-              checkable
+            <PermissionCodePicker
+              tree={permTree}
               disabled={readOnly}
-              defaultExpandAll
-              treeData={treeNodes}
-              style={{
-                maxHeight: 280,
-                overflow: 'auto',
-                border: '1px solid #f0f0f0',
-                borderRadius: 6,
-                padding: 8,
-              }}
+              maxHeight={320}
             />
           </Form.Item>
 

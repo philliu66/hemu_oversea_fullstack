@@ -2,7 +2,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useAccess, useModel } from '@umijs/max';
-import { App, Button, Popconfirm, Space, Tag } from 'antd';
+import { App, Button, Popconfirm, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
@@ -56,45 +56,53 @@ const StaffListPage: React.FC = () => {
       title: '账号',
       dataIndex: 'username',
       search: false,
-      width: 140,
       ellipsis: true,
+      width: 120,
     },
     {
       title: '昵称',
       dataIndex: 'nickname',
       search: false,
-      width: 120,
       ellipsis: true,
+      width: 100,
     },
     {
       title: '邮箱',
       dataIndex: 'email',
       search: false,
       ellipsis: true,
+      width: 180,
     },
     {
       title: '手机号',
       dataIndex: 'phone',
       search: false,
-      width: 140,
+      width: 120,
+      ellipsis: true,
       render: (_, record) => record.phone || '-',
     },
     {
       title: '角色',
       dataIndex: 'roles',
       search: false,
-      width: 160,
-      ellipsis: true,
-      render: (_, record) =>
-        record.roles?.length
+      width: 140,
+      // 自定义 render 时列级 ellipsis 不生效，需自行截断
+      render: (_, record) => {
+        const text = record.roles?.length
           ? record.roles.map((r) => r.name).join('、')
-          : '-',
+          : '-';
+        return (
+          <Typography.Text ellipsis={{ tooltip: text }} style={{ maxWidth: '100%' }}>
+            {text}
+          </Typography.Text>
+        );
+      },
     },
     {
       title: '状态',
       dataIndex: 'is_active',
       search: false,
-      width: 100,
+      width: 80,
       render: (_, record) =>
         record.is_active ? (
           <Tag color="success">
@@ -110,7 +118,7 @@ const StaffListPage: React.FC = () => {
       title: '创建时间',
       dataIndex: 'created_at',
       search: false,
-      width: 180,
+      width: 170,
       render: (_, record) => formatDateTime(record.created_at),
     },
     {
@@ -118,17 +126,25 @@ const StaffListPage: React.FC = () => {
       dataIndex: 'option',
       valueType: 'option',
       search: false,
-      width: 220,
+      width: 200,
       hideInTable: !canUpdate && !canDelete,
-      render: (_, record) => (
-        <Space size={0} wrap>
-          {canUpdate ? (
-            <Button type="link" onClick={() => openEdit(record)}>
+      render: (_, record) => {
+        const actions: React.ReactNode[] = [];
+        if (canUpdate) {
+          actions.push(
+            <Button
+              key="edit"
+              type="dashed"
+              size="small"
+              shape="round"
+              onClick={() => openEdit(record)}
+            >
               {'编辑'}
-            </Button>
-          ) : null}
-          {canUpdate ? (
+            </Button>,
+          );
+          actions.push(
             <Popconfirm
+              key="status"
               title={
                 record.is_active ? '确认停用该员工？' : '确认启用该员工？'
               }
@@ -138,42 +154,61 @@ const StaffListPage: React.FC = () => {
                     id: record.id,
                     is_active: !record.is_active,
                   });
-                  message.success(
-                    '状态已更新',
-                  );
+                  message.success('状态已更新');
                   actionRef.current?.reload();
                 } catch {
                   // 错误已由全局拦截器处理
                 }
               }}
             >
-              <Button type="link">
+              <Button
+                color="default"
+                variant="filled"
+                size="small"
+                shape="round"
+              >
                 {record.is_active ? '停用' : '启用'}
               </Button>
-            </Popconfirm>
-          ) : null}
-          {canDelete ? (
+            </Popconfirm>,
+          );
+        }
+        if (canDelete) {
+          actions.push(
             <Popconfirm
+              key="delete"
               title={'确认删除该员工？删除后不可登录。'}
               onConfirm={async () => {
                 try {
                   await deleteStaff(portalRole, record.id);
-                  message.success(
-                    '删除成功',
-                  );
+                  message.success('删除成功');
                   actionRef.current?.reload();
                 } catch {
                   // 错误已由全局拦截器处理
                 }
               }}
             >
-              <Button type="link" danger>
+              <Button type="primary" danger size="small" shape="round">
                 {'删除'}
               </Button>
-            </Popconfirm>
-          ) : null}
-        </Space>
-      ),
+            </Popconfirm>,
+          );
+        }
+        // 一行最多 2 个按钮，超出自动换行
+        return (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, max-content)',
+              gap: 8,
+              justifyContent: 'start',
+              alignItems: 'center',
+              maxWidth: '100%',
+            }}
+          >
+            {actions}
+          </div>
+        );
+      },
     },
   ];
 
@@ -184,6 +219,7 @@ const StaffListPage: React.FC = () => {
         actionRef={actionRef}
         rowKey="id"
         search={{ labelWidth: 'auto' }}
+        scroll={{ x: 1100 }}
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,
           pageSizeOptions: [10, 20, 50, 100],

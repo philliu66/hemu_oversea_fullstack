@@ -252,13 +252,16 @@ export async function fetchMissionLogList(
 
 /** POST /api/v1/admin/missions/execute */
 export async function executeMission(missionId: number, options?: RequestOptions) {
-  const res = await request<ApiResponse<Record<string, never>>>(
-    AdminMissionApi.EXECUTE,
-    {
-      method: 'POST',
-      data: { mission_id: missionId },
-      ...options,
-    },
-  );
-  return unwrapApiData(res);
+  const res = await request<
+    ApiResponse<{
+      mission_id: number;
+      log_id: number;
+      queued_count: number;
+    }>
+  >(AdminMissionApi.EXECUTE, {
+    method: 'POST',
+    data: { mission_id: missionId },
+    ...options,
+  });
+  return requireData(unwrapApiData(res), '提交执行失败');
 }

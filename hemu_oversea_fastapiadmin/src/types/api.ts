@@ -31,6 +31,7 @@ export type UserPublic = {
   role: string;
   org_type: string;
   supplier_id: number | null;
+  supplier_name?: string | null;
   created_by: number | null;
   is_active: boolean;
   created_at: string;
@@ -453,6 +454,80 @@ export type DhSkuBaseInfoPublic = {
   weight_kg?: string | number | null;
   packing_quantity?: number | null;
   min_wholesale_qty?: number | null;
+};
+
+/** POST /api/v1/admin/sku/dh/base-info/list */
+export type DhSkuBaseInfoListParams = {
+  keyword?: string;
+  page?: number;
+  page_size?: number;
+};
+
+/** SKU 属性模版列表项 */
+export type SkuAttrTemplateListItemPublic = {
+  id: number;
+  sku_code: string;
+  cate_pub_id: string;
+  cate_name?: string | null;
+  category_id?: number | null;
+  updated_at: string;
+};
+
+/** SKU 属性模版详情 */
+export type SkuAttrTemplatePublic = {
+  id: number;
+  supplier_id: number;
+  sku_code: string;
+  cate_pub_id: string;
+  cate_name?: string | null;
+  category_id?: number | null;
+  raw_json: {
+    attr_list?: DhProductSelectedAttrPublic[];
+    [key: string]: unknown;
+  };
+  created_at: string;
+  updated_at: string;
+  created_by: number;
+  updated_by: number;
+};
+
+export type SkuAttrTemplateListParams = {
+  sku_code?: string;
+  cate_pub_id?: string;
+  page?: number;
+  page_size?: number;
+};
+
+export type SkuAttrTemplateCreateParams = {
+  sku_code: string;
+  cate_pub_id: string;
+  raw_json: {
+    attr_list?: DhProductSelectedAttrPublic[];
+    [key: string]: unknown;
+  };
+};
+
+export type SkuAttrTemplateUpdateParams = SkuAttrTemplateCreateParams & {
+  id: number;
+};
+
+/** POST /api/v1/admin/templates/dh/sku-attr-templates/lookup */
+export type SkuAttrTemplateLookupParams = {
+  cate_pub_id: string;
+  sku_codes: string[];
+};
+
+export type SkuAttrTemplateLookupItemPublic = {
+  sku_code: string;
+  found: boolean;
+  raw_json?: {
+    attr_list?: DhProductSelectedAttrPublic[];
+    [key: string]: unknown;
+  } | null;
+};
+
+export type SkuAttrTemplateLookupPublic = {
+  items: SkuAttrTemplateLookupItemPublic[];
 };
 
 /** POST /api/v1/admin/product/dh/skulistprice/get */

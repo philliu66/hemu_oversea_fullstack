@@ -45,12 +45,22 @@ describe('requestErrorConfig', () => {
   const errorThrower = errorConfig.errorConfig!.errorThrower!;
   // biome-ignore lint/style/noNonNullAssertion: config handlers are always defined
   const errorHandler = errorConfig.errorConfig!.errorHandler!;
+  const responseTuple = errorConfig.responseInterceptors?.[0] as [
+    (response: {
+      data?: unknown;
+      config?: Record<string, unknown>;
+    }) => Promise<{ data?: unknown }> | { data?: unknown },
+    (error: unknown) => Promise<unknown>,
+  ];
+  const onFulfilled = responseTuple[0];
+  const onRejected = responseTuple[1];
 
   beforeEach(() => {
     vi.clearAllMocks();
     Object.defineProperty(window, 'location', {
       writable: true,
-      value: { pathname: '/welcome', search: '', hash: '' },
+      // 浏览器完整路径含 APP_BASE；redirect 应去掉 /admin
+      value: { pathname: '/admin/welcome', search: '', hash: '' },
     });
   });
 
@@ -124,10 +134,7 @@ describe('requestErrorConfig', () => {
       expect(message.error).toHaveBeenCalledWith('业务失败');
     });
 
-    it('should refresh and retry on 40100 BizError', async () => {
-      mockTryRefreshTokens.mockResolvedValue(true);
-      mockRequest.mockResolvedValue({ ok: true });
-
+    it('should redirect on unauthorized without retrying here', () => {
       const error: any = new Error('未登录或登录已过期');
       error.name = 'BizError';
       error.info = {
@@ -136,27 +143,22 @@ describe('requestErrorConfig', () => {
         showType: 9,
       };
 
-      const result = await errorHandler(error, {
+      errorHandler(error, {
         url: '/api/v1/admin/users/me',
         method: 'GET',
       });
 
-      expect(mockTryRefreshTokens).toHaveBeenCalled();
-      expect(mockRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: '/api/v1/admin/users/me',
-          method: 'GET',
-          __isRetryAfterRefresh: true,
-        }),
+      // 换发/重试已迁移到 response 拦截器
+      expect(mockTryRefreshTokens).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(message.error).toHaveBeenCalledWith('未登录或登录已过期');
+      expect(mockClearTokens).toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining('/user/login?redirect='),
       );
-      expect(result).toEqual({ ok: true });
-      expect(mockClearTokens).not.toHaveBeenCalled();
-      expect(mockReplace).not.toHaveBeenCalled();
     });
 
-    it('should redirect when refresh fails on HTTP 401', async () => {
-      mockTryRefreshTokens.mockResolvedValue(false);
-
+    it('should redirect when unauthorized HTTP 401 reaches errorHandler', () => {
       const error: any = new Error('Axios error');
       error.response = {
         status: 401,
@@ -167,21 +169,20 @@ describe('requestErrorConfig', () => {
         },
       };
 
-      await errorHandler(error, {
+      errorHandler(error, {
         url: '/api/v1/admin/users/me',
         method: 'GET',
       });
 
-      expect(mockTryRefreshTokens).toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockTryRefreshTokens).not.toHaveBeenCalled();
       expect(message.error).toHaveBeenCalledWith('未登录或登录已过期');
       expect(mockClearTokens).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith(
-        expect.stringContaining('/user/login?redirect='),
+        `/user/login?redirect=${encodeURIComponent('/welcome')}`,
       );
     });
 
-    it('should not refresh on auth whitelist paths', async () => {
+    it('should redirect on auth whitelist 401 without refresh', () => {
       const error: any = new Error('用户名或密码错误');
       error.name = 'BizError';
       error.info = {
@@ -190,7 +191,7 @@ describe('requestErrorConfig', () => {
         showType: 9,
       };
 
-      await errorHandler(error, {
+      errorHandler(error, {
         url: '/api/v1/admin/auth/login',
         method: 'POST',
       });
@@ -273,23 +274,130 @@ describe('requestErrorConfig', () => {
   });
 
   describe('responseInterceptors', () => {
-    const interceptor = errorConfig.responseInterceptors?.[0] as (response: {
-      data?: unknown;
-    }) => { data?: unknown };
-
-    it('should pass through successful envelope', () => {
+    it('should pass through successful envelope', async () => {
       const response = {
         data: { code: 0, message: 'ok', data: { ok: true } },
+        config: { url: '/api/v1/admin/users/me', method: 'GET' },
       };
-      expect(interceptor(response)).toEqual(response);
+      await expect(onFulfilled(response)).resolves.toEqual(response);
     });
 
-    it('should throw on failed envelope', () => {
-      expect(() => {
-        interceptor({
+    it('should throw on failed envelope', async () => {
+      await expect(
+        onFulfilled({
           data: { code: 40300, message: '权限不足', data: null },
-        });
-      }).toThrow('权限不足');
+          config: { url: '/api/v1/admin/users', method: 'GET' },
+        }),
+      ).rejects.toThrow('权限不足');
+    });
+
+    it('should refresh and retry on HTTP 401 in error interceptor', async () => {
+      mockTryRefreshTokens.mockResolvedValue(true);
+      const retryResponse = {
+        data: { code: 0, message: 'ok', data: { id: 1 } },
+        status: 200,
+      };
+      mockRequest.mockResolvedValue(retryResponse);
+
+      const error: any = new Error('Axios error');
+      error.config = {
+        url: '/api/v1/admin/users/me',
+        method: 'get',
+        headers: { Authorization: 'Bearer expired' },
+      };
+      error.response = {
+        status: 401,
+        data: {
+          code: 40100,
+          message: '未登录或登录已过期',
+          data: null,
+        },
+      };
+
+      const result = await onRejected(error);
+
+      expect(mockTryRefreshTokens).toHaveBeenCalled();
+      expect(mockRequest).toHaveBeenCalledWith(
+        '/api/v1/admin/users/me',
+        expect.objectContaining({
+          method: 'get',
+          getResponse: true,
+          __isRetryAfterRefresh: true,
+        }),
+      );
+      expect(result).toEqual(retryResponse);
+      expect(mockClearTokens).not.toHaveBeenCalled();
+    });
+
+    it('should refresh and retry on 40100 envelope in success interceptor', async () => {
+      mockTryRefreshTokens.mockResolvedValue(true);
+      const retryResponse = {
+        data: { code: 0, message: 'ok', data: { id: 1 } },
+        status: 200,
+      };
+      mockRequest.mockResolvedValue(retryResponse);
+
+      const result = await onFulfilled({
+        data: {
+          code: 40100,
+          message: '未登录或登录已过期',
+          data: null,
+        },
+        config: {
+          url: '/api/v1/admin/missions/list',
+          method: 'POST',
+          data: { page: 1 },
+        },
+      });
+
+      expect(mockTryRefreshTokens).toHaveBeenCalled();
+      expect(mockRequest).toHaveBeenCalledWith(
+        '/api/v1/admin/missions/list',
+        expect.objectContaining({
+          method: 'POST',
+          getResponse: true,
+          __isRetryAfterRefresh: true,
+        }),
+      );
+      expect(result).toEqual(retryResponse);
+    });
+
+    it('should reject when refresh fails on HTTP 401', async () => {
+      mockTryRefreshTokens.mockResolvedValue(false);
+
+      const error: any = new Error('Axios error');
+      error.config = {
+        url: '/api/v1/admin/users/me',
+        method: 'GET',
+      };
+      error.response = {
+        status: 401,
+        data: {
+          code: 40100,
+          message: '未登录或登录已过期',
+          data: null,
+        },
+      };
+
+      await expect(onRejected(error)).rejects.toBe(error);
+      expect(mockTryRefreshTokens).toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('should not refresh again after retry flag', async () => {
+      const error: any = new Error('Axios error');
+      error.config = {
+        url: '/api/v1/admin/users/me',
+        method: 'GET',
+        __isRetryAfterRefresh: true,
+      };
+      error.response = {
+        status: 401,
+        data: { code: 40100, message: '未登录或登录已过期', data: null },
+      };
+
+      await expect(onRejected(error)).rejects.toBe(error);
+      expect(mockTryRefreshTokens).not.toHaveBeenCalled();
     });
   });
 });

@@ -7,6 +7,7 @@ import { history, useModel } from '@umijs/max';
 import type { MenuProps } from 'antd';
 import { Spin } from 'antd';
 import React, { startTransition } from 'react';
+import { APP_LOGIN_PATH, isAppRoutePath } from '@/constants/deploy';
 import { adminLogout } from '@/services/admin/auth';
 import HeaderDropdown from '../HeaderDropdown';
 
@@ -42,8 +43,8 @@ const loginOut = async () => {
     // Local logout has already cleared user state; redirect should still proceed.
   }
   // 退出不保留原路由，重新登录默认进首页，避免换账号后无菜单权限报错
-  if (window.location.pathname !== '/user/login') {
-    history.replace('/user/login');
+  if (!isAppRoutePath(window.location.pathname, APP_LOGIN_PATH)) {
+    history.replace(APP_LOGIN_PATH);
   }
 };
 

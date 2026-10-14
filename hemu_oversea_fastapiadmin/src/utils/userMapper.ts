@@ -14,6 +14,7 @@ export function mapUserToCurrentUser(user: UserPublic): API.CurrentUser {
     role: user.role,
     org_type: user.org_type,
     supplier_id: user.supplier_id ?? undefined,
+    supplier_name: user.supplier_name ?? undefined,
     is_active: user.is_active,
     permission_codes: user.permission_codes ?? [],
   };

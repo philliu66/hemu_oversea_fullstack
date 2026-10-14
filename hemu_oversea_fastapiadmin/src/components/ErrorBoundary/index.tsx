@@ -1,5 +1,6 @@
 import { Button, Card, Result } from 'antd';
 import React from 'react';
+import { withAppBase } from '@/constants/deploy';
 
 function isChunkLoadError(error: Error): boolean {
   return (
@@ -44,7 +45,7 @@ function renderErrorFallback(
           >
             刷新页面
           </Button>,
-          <Button href="/" key="home">
+          <Button href={withAppBase('/')} key="home">
             返回首页
           </Button>,
         ].filter(Boolean)}

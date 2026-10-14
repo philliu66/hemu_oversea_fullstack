@@ -2,6 +2,11 @@
 
 import { join } from 'node:path';
 import { defineConfig } from '@umijs/max';
+import { SYSTEM_TITLE_SUFFIX } from '../src/constants/brand';
+import {
+  APP_BASE,
+  APP_PUBLIC_PATH,
+} from '../src/constants/deploy';
 import defaultSettings from './defaultSettings';
 import proxy from './proxy';
 
@@ -29,10 +34,10 @@ const commitHash =
 
 /**
  * @name 使用公共路径
- * @description 部署时的路径，如果部署在非根目录下，需要配置这个变量
+ * @description 与 src/constants/deploy.ts 的 APP_BASE 对齐（部署在 /admin）
  * @doc https://umijs.org/docs/api/config#publicpath
  */
-const PUBLIC_PATH: string = '/';
+const PUBLIC_PATH: string = APP_PUBLIC_PATH;
 
 export default defineConfig({
   alias: {
@@ -44,6 +49,9 @@ export default defineConfig({
    * @doc https://umijs.org/docs/api/config#hash
    */
   hash: true,
+
+  /** 路由前缀，与 Nginx /admin 一致；见 src/constants/deploy.ts */
+  base: APP_BASE,
 
   publicPath: PUBLIC_PATH,
 
@@ -115,7 +123,7 @@ export default defineConfig({
    * @name layout 插件
    * @doc https://umijs.org/docs/max/layout-menu
    */
-  title: '合木跨境Fast系统',
+  title: SYSTEM_TITLE_SUFFIX,
   layout: {
     // 路由 name 已直接写中文，不再走 menu.* 国际化查找；locale 插件本身仍保留
     locale: false,
@@ -188,8 +196,8 @@ export default defineConfig({
    * @description 配置 <head> 中额外的 script
    */
   headScripts: [
-    // 解决首次加载时白屏的问题
-    { src: join(PUBLIC_PATH, 'scripts/loading.js'), async: true },
+    // 解决首次加载时白屏的问题（勿用 path.join，避免 Windows 把 URL 路径改成反斜杠）
+    { src: `${PUBLIC_PATH}scripts/loading.js`, async: true },
   ],
 
   //================ pro 插件配置 =================

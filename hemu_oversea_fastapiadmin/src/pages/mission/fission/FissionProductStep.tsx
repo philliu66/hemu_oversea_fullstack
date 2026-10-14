@@ -20,6 +20,10 @@ export const FissionProductStep = forwardRef<
     initialDetail?: DhProductDetailPublic;
     changedKeys?: string[];
     changedAttrList?: DhProductSelectedAttrPublic[];
+    /** 切换分类时套用 SKU 属性模板（手动添加第二步） */
+    applySkuAttrTemplateOnCategoryChange?: boolean;
+    /** 产品标题清空并以种子标题为 placeholder（手动添加第二步） */
+    seedTitleAsItemNamePlaceholder?: boolean;
   }
 >(function FissionProductStep(
   {
@@ -28,6 +32,8 @@ export const FissionProductStep = forwardRef<
     initialDetail,
     changedKeys = [],
     changedAttrList = [],
+    applySkuAttrTemplateOnCategoryChange = false,
+    seedTitleAsItemNamePlaceholder = false,
   },
   ref,
 ) {
@@ -40,6 +46,10 @@ export const FissionProductStep = forwardRef<
       initialDetail={initialDetail}
       changedKeys={changedKeys}
       changedAttrList={changedAttrList}
+      applySkuAttrTemplateOnCategoryChange={
+        applySkuAttrTemplateOnCategoryChange
+      }
+      seedTitleAsItemNamePlaceholder={seedTitleAsItemNamePlaceholder}
     />
   );
 });

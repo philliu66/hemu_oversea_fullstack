@@ -1,7 +1,8 @@
 import { PageContainer } from '@ant-design/pro-components';
+import { useModel } from '@umijs/max';
 import { createStyles } from 'antd-style';
 import React from 'react';
-import Settings from '../../config/defaultSettings';
+import { buildSystemTitle } from '@/constants/brand';
 
 const useStyles = createStyles(({ token, css }) => ({
   page: css`
@@ -44,13 +45,14 @@ const useStyles = createStyles(({ token, css }) => ({
 
 const Welcome: React.FC = () => {
   const { styles } = useStyles();
+  const { initialState } = useModel('@@initialState');
+  const title = buildSystemTitle(initialState?.currentUser?.supplier_name);
 
   return (
     <PageContainer title={false} pageHeaderRender={false}>
       <div className={styles.page}>
         <div className={styles.hero}>
-          欢迎使用{' '}
-          <span className={styles.title}>{Settings.title}</span>
+          欢迎使用 <span className={styles.title}>{title}</span>
         </div>
       </div>
     </PageContainer>

@@ -149,7 +149,11 @@ const TemplateInfoFields: React.FC<TemplateInfoFieldsProps> = ({
 
   return (
     <>
-      <Form.Item name="after_sale_template_id" label={afterSaleLabel}>
+      <Form.Item
+        name="after_sale_template_id"
+        label={afterSaleLabel}
+        rules={[{ required: true, message: '请选择售后模板' }]}
+      >
         <Select
           key={afterSaleKey}
           disabled={disabled}
@@ -165,7 +169,11 @@ const TemplateInfoFields: React.FC<TemplateInfoFieldsProps> = ({
           }}
         />
       </Form.Item>
-      <Form.Item name="shipping_model_id" label={shippingLabel}>
+      <Form.Item
+        name="shipping_model_id"
+        label={shippingLabel}
+        rules={[{ required: true, message: '请选择物流模板' }]}
+      >
         <Select
           key={shippingKey}
           disabled={disabled}

@@ -104,6 +104,12 @@ export function EditFissionDrawer({
       message.warning('商品信息还在加载，请稍后再确认');
       return;
     }
+    try {
+      await editorRef.current.validate();
+    } catch {
+      message.warning('请完善必填信息');
+      return;
+    }
     const current = editorRef.current.getSnapshot();
     if (!current) {
       message.warning('商品信息还在加载，请稍后再确认');

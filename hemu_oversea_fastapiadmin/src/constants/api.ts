@@ -95,6 +95,21 @@ export const AdminCategoryApi = {
   DH_COMMISSION_RATE: '/api/v1/admin/categories/dh/commission-rate/get',
 } as const;
 
+/** 管理端模版相关路径 */
+export const AdminTemplateApi = {
+  SKU_ATTR_LIST: '/api/v1/admin/templates/dh/sku-attr-templates/list',
+  SKU_ATTR_DETAIL: '/api/v1/admin/templates/dh/sku-attr-templates/detail',
+  SKU_ATTR_CREATE: '/api/v1/admin/templates/dh/sku-attr-templates/create',
+  SKU_ATTR_UPDATE: '/api/v1/admin/templates/dh/sku-attr-templates/update',
+  SKU_ATTR_DELETE: '/api/v1/admin/templates/dh/sku-attr-templates/delete',
+  SKU_ATTR_LOOKUP: '/api/v1/admin/templates/dh/sku-attr-templates/lookup',
+} as const;
+
+/** 管理端 SKU 相关路径 */
+export const AdminSkuApi = {
+  BASE_INFO_LIST: '/api/v1/admin/sku/dh/base-info/list',
+} as const;
+
 /** 全局工具类路径 */
 export const CommonUtilsApi = {
   DHGATE_UPLOAD_IMG: '/api/v1/common/utils/dhgate/uploadimg',

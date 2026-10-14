@@ -1,8 +1,8 @@
-import type { ProColumns } from '@ant-design/pro-components';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, useParams } from '@umijs/max';
-import { Button, Card, Spin } from 'antd';
-import React, { useEffect, useState } from 'react';
+import { history, useAccess, useParams } from '@umijs/max';
+import { App, Button, Card, Spin } from 'antd';
+import React, { useEffect, useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
   executeMission,
@@ -18,9 +18,13 @@ import { MISSION_FISSION_PATH, parseMissionId, personLabel } from './utils';
 const MissionFissionDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const missionId = parseMissionId(id);
+  const access = useAccess();
+  const { message } = App.useApp();
+  const logActionRef = useRef<ActionType | null>(null);
   const [mission, setMission] = useState<MissionPublic>();
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
+  const canViewLogs = access.can('mission.logs');
 
   useEffect(() => {
     if (!missionId) {
@@ -50,8 +54,10 @@ const MissionFissionDetailPage: React.FC = () => {
     };
   }, [missionId]);
 
-  const ended =
-    mission?.status === 'marked_finished' || mission?.status === 'finished';
+  const canExecute =
+    !!mission &&
+    mission.status !== 'marked_finished' &&
+    mission.status !== 'running';
 
   const logColumns: ProColumns<MissionLogPublic>[] = [
     {
@@ -100,14 +106,20 @@ const MissionFissionDetailPage: React.FC = () => {
       extra={
         <Button
           type="primary"
-          disabled={!mission || ended}
+          disabled={!canExecute}
           loading={executing}
           onClick={async () => {
             setExecuting(true);
             try {
-              await executeMission(missionId);
+              const result = await executeMission(missionId);
+              message.success(`已提交执行，共 ${result.queued_count} 条`);
+              const detail = await fetchMissionDetail(missionId);
+              setMission(detail);
+              if (canViewLogs) {
+                logActionRef.current?.reload();
+              }
             } catch {
-              // 占位接口的「功能待补充」由全局错误提示展示
+              // 业务错误由全局错误提示展示
             } finally {
               setExecuting(false);
             }
@@ -122,30 +134,33 @@ const MissionFissionDetailPage: React.FC = () => {
         <div style={{ marginTop: 16 }}>
           <FissionDataTable missionId={missionId} />
         </div>
-        <div style={{ marginTop: 16 }}>
-          <ProTable<MissionLogPublic>
-            rowKey="id"
-            search={false}
-            headerTitle={'执行日志'}
-            pagination={{
-              defaultPageSize: PAGE_SIZE_DEFAULT,
-              showSizeChanger: true,
-            }}
-            request={async (params) => {
-              const result = await fetchMissionLogList({
-                mission_id: missionId,
-                page: params.current,
-                page_size: params.pageSize,
-              });
-              return {
-                data: result.items,
-                success: true,
-                total: result.total,
-              };
-            }}
-            columns={logColumns}
-          />
-        </div>
+        {canViewLogs ? (
+          <div style={{ marginTop: 16 }}>
+            <ProTable<MissionLogPublic>
+              actionRef={logActionRef}
+              rowKey="id"
+              search={false}
+              headerTitle={'执行日志'}
+              pagination={{
+                defaultPageSize: PAGE_SIZE_DEFAULT,
+                showSizeChanger: true,
+              }}
+              request={async (params) => {
+                const result = await fetchMissionLogList({
+                  mission_id: missionId,
+                  page: params.current,
+                  page_size: params.pageSize,
+                });
+                return {
+                  data: result.items,
+                  success: true,
+                  total: result.total,
+                };
+              }}
+              columns={logColumns}
+            />
+          </div>
+        ) : null}
       </Spin>
     </PageContainer>
   );

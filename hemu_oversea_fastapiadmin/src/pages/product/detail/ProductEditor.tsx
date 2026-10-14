@@ -61,12 +61,14 @@ import {
   fetchStoreList,
   fetchStoreProductGroups,
 } from '@/services/admin/stores';
+import { lookupSkuAttrTemplates } from '@/services/admin/templates';
 import type {
   DhCategoryAttrPublic,
   DhCategoryPublic,
   DhCommissionRatePublic,
   DhProductDetailPublic,
   DhProductSelectedAttrPublic,
+  DhProductSkuPublic,
 } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
 import CategoryAttrsFields from './CategoryAttrsFields';
@@ -75,7 +77,10 @@ import CategorySelectField, {
   formatCategoryPathDisplay,
 } from './CategorySelectField';
 import './changedHighlight.css';
-import { REF_PRICING_CATE_ID } from './CommissionRateHint';
+import {
+  collectDistinctSkuBaseModels,
+  REF_PRICING_CATE_ID,
+} from './CommissionRateHint';
 import PackageInfoFields from './PackageInfoFields';
 import ProductImagesEditor from './ProductImagesEditor';
 import ProductSpecSkuBlock from './ProductSpecSkuBlock';
@@ -88,6 +93,7 @@ import {
   nonPriceProductAttrs,
   priceProductAttrs,
   retainAttrsForCategory,
+  toCustomAttrDrafts,
   toProductFormValues,
   type CustomAttrDraft,
   type ProductFormValues,
@@ -120,6 +126,22 @@ function changedControlStyle(changed: boolean): React.CSSProperties {
   return changed ? { color: CHANGED_COLOR } : {};
 }
 
+/** 比较两份属性选择是否一致（用于多型号模板冲突检测） */
+function attrListSignature(
+  list: DhProductSelectedAttrPublic[] | undefined,
+): string {
+  const cloned = structuredClone(list || []) as DhProductSelectedAttrPublic[];
+  cloned.sort((a, b) => String(a.attr_id).localeCompare(String(b.attr_id)));
+  for (const attr of cloned) {
+    const values = [...(attr.values || [])];
+    values.sort((a, b) =>
+      String(a.attr_val_id ?? '').localeCompare(String(b.attr_val_id ?? '')),
+    );
+    attr.values = values;
+  }
+  return JSON.stringify(cloned);
+}
+
 function pageTitle(mode: ProductPageMode): string {
   switch (mode) {
     case 'create':
@@ -145,10 +167,22 @@ function filterItemGroupOption(inputValue: string, path: DefaultOptionType[]) {
   });
 }
 
+/** 商品编辑必填字段（新建 / 编辑 / 裂变共用） */
+export const PRODUCT_EDITOR_REQUIRED_FIELDS = [
+  'store_id',
+  'cate_pub_id',
+  'item_name',
+  'item_img_list',
+  'after_sale_template_id',
+  'shipping_model_id',
+] as const;
+
 export type ProductEditorHandle = {
   getBaseline: () => DhProductDetailPublic | null;
   getSnapshot: () => DhProductDetailPublic | null;
   isReady: () => boolean;
+  /** 校验必填项；失败时 reject 并展示字段错误 */
+  validate: () => Promise<void>;
 };
 
 export type ProductEditorProps = {
@@ -160,6 +194,16 @@ export type ProductEditorProps = {
   changedKeys?: string[];
   changedAttrList?: DhProductSelectedAttrPublic[];
   embedded?: boolean;
+  /**
+   * 切换产品分类时，按当前商品 SKU 基型号 + 分类查询属性模板并覆盖选择。
+   * 用于裂变「手动添加」第二步。
+   */
+  applySkuAttrTemplateOnCategoryChange?: boolean;
+  /**
+   * 加载后清空产品标题输入，将原种子标题作为 placeholder（提醒用户重新填写）。
+   * 用于裂变「手动添加」第二步；baseline 仍保留原标题供 diff。
+   */
+  seedTitleAsItemNamePlaceholder?: boolean;
 };
 
 export const ProductEditor = forwardRef<
@@ -175,12 +219,16 @@ export const ProductEditor = forwardRef<
     changedKeys = [],
     changedAttrList = [],
     embedded = false,
+    applySkuAttrTemplateOnCategoryChange = false,
+    seedTitleAsItemNamePlaceholder = false,
   },
   ref,
 ) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { initialState } = useModel('@@initialState');
   const supplierId = initialState?.currentUser?.supplier_id;
+  const [itemNamePlaceholder, setItemNamePlaceholder] =
+    useState('请输入产品标题');
   const mode: ProductPageMode =
     modeProp ??
     (readOnlyProp
@@ -261,6 +309,9 @@ export const ProductEditor = forwardRef<
         );
       },
       isReady: () => Boolean(baselineRef.current) && !loading,
+      validate: async () => {
+        await form.validateFields([...PRODUCT_EDITOR_REQUIRED_FIELDS]);
+      },
     }),
     [form, loading, pickedCategory],
   );
@@ -326,7 +377,15 @@ export const ProductEditor = forwardRef<
         baselineItemGroupIdRef.current = data.item_group_id;
         setBaseDetail(data);
         setPickedCategory(data.category);
-        form.setFieldsValue(toProductFormValues(data));
+        const formValues = toProductFormValues(data);
+        const seedTitle = (data.item_name || '').trim();
+        if (seedTitleAsItemNamePlaceholder) {
+          formValues.item_name = '';
+          setItemNamePlaceholder(seedTitle || '请输入产品标题');
+        } else {
+          setItemNamePlaceholder('请输入产品标题');
+        }
+        form.setFieldsValue(formValues);
         setLoading(false);
 
         if (data.category?.id) {
@@ -386,7 +445,15 @@ export const ProductEditor = forwardRef<
       cancelled = true;
       categoryAttrsReqRef.current += 1;
     };
-  }, [form, initialDetail, loadCategoryAttrs, message, mode, sourceProductId]);
+  }, [
+    form,
+    initialDetail,
+    loadCategoryAttrs,
+    message,
+    mode,
+    seedTitleAsItemNamePlaceholder,
+    sourceProductId,
+  ]);
 
   useEffect(() => {
     const reqId = commissionRateReqRef.current + 1;
@@ -425,18 +492,91 @@ export const ProductEditor = forwardRef<
             cate_pub_id: selectedCategory.cate_pub_id,
           });
           const nextCategoryAttrs = await loadCategoryAttrs(picked.id);
-          // 拉取失败时不改 attr_list，避免误清空；成功（含空列表）则去掉旧类目属性
+          // 拉取失败时不改 attr_list，避免误清空
           if (nextCategoryAttrs === undefined) {
             return;
           }
+
           const prev = form.getFieldValue('attr_list') as
             | DhProductSelectedAttrPublic[]
             | undefined;
+          const allowedIds = nextCategoryAttrs.map((item) =>
+            String(item.attr_id),
+          );
+
+          // 裂变手动添加：按基型号查属性模板，决定覆盖 / 提示 / 冲突
+          if (applySkuAttrTemplateOnCategoryChange && !readOnly) {
+            const skuList = (form.getFieldValue('sku_list') ||
+              []) as DhProductSkuPublic[];
+            const baseModels = collectDistinctSkuBaseModels(skuList);
+            if (baseModels.length > 0 && selectedCategory.cate_pub_id) {
+              try {
+                const lookup = await lookupSkuAttrTemplates({
+                  cate_pub_id: selectedCategory.cate_pub_id,
+                  sku_codes: baseModels,
+                });
+                const foundItems = (lookup.items || []).filter(
+                  (item) => item.found,
+                );
+                const missingModels = (lookup.items || [])
+                  .filter((item) => !item.found)
+                  .map((item) => item.sku_code);
+
+                if (foundItems.length === 0) {
+                  message.warning(
+                    `${baseModels.join('、')}型号没有对应的属性模板`,
+                  );
+                  // 无模板：不清空原先属性选择
+                  return;
+                }
+
+                const signatures = foundItems.map((item) =>
+                  attrListSignature(
+                    (item.raw_json?.attr_list ||
+                      []) as DhProductSelectedAttrPublic[],
+                  ),
+                );
+                const uniqueSignatures = new Set(signatures);
+                if (uniqueSignatures.size > 1) {
+                  modal.warning({
+                    title: '属性模板冲突',
+                    content:
+                      '该商品存在多个不同的产品型号且分类下属性选择不一致',
+                  });
+                  // 冲突：不覆盖原先数据
+                  return;
+                }
+
+                if (missingModels.length > 0) {
+                  message.warning(
+                    `${missingModels.join('、')}型号没有对应的属性模板`,
+                  );
+                }
+
+                const templateAttrList = (foundItems[0].raw_json?.attr_list ||
+                  []) as DhProductSelectedAttrPublic[];
+                // 有模板：清空原选择，用模板覆盖（仅保留新类目相关 + 自定义）
+                form.setFieldsValue({
+                  attr_list: retainAttrsForCategory(
+                    templateAttrList,
+                    allowedIds,
+                  ),
+                  customAttrs: toCustomAttrDrafts(templateAttrList),
+                });
+                return;
+              } catch (lookupError) {
+                message.error(
+                  lookupError instanceof Error
+                    ? lookupError.message
+                    : '查询属性模板失败',
+                );
+                // 查询失败时回退为常规收敛，避免卡在旧类目属性
+              }
+            }
+          }
+
           form.setFieldsValue({
-            attr_list: retainAttrsForCategory(
-              prev,
-              nextCategoryAttrs.map((item) => String(item.attr_id)),
-            ),
+            attr_list: retainAttrsForCategory(prev, allowedIds),
           });
         } catch (error) {
           message.error(
@@ -445,7 +585,14 @@ export const ProductEditor = forwardRef<
         }
       })();
     },
-    [form, loadCategoryAttrs, message],
+    [
+      applySkuAttrTemplateOnCategoryChange,
+      form,
+      loadCategoryAttrs,
+      message,
+      modal,
+      readOnly,
+    ],
   );
 
   const routeInvalid =
@@ -478,6 +625,7 @@ export const ProductEditor = forwardRef<
         labelAlign="left"
         labelCol={{ flex: '110px' }}
         wrapperCol={{ flex: 1 }}
+        scrollToFirstError
         onValuesChange={(changedValues) => {
           if (readOnly) {
             return;
@@ -500,6 +648,7 @@ export const ProductEditor = forwardRef<
               showSearch
               debounceTime={300}
               params={{ supplierId }}
+              rules={[{ required: true, message: '请选择店铺名称' }]}
               request={async () => {
                 if (!supplierId) {
                   return [];
@@ -523,7 +672,8 @@ export const ProductEditor = forwardRef<
             />
             <Form.Item
               label={changedLabel('产品分类', isChanged('cate_pub_id'))}
-              required
+              name="cate_pub_id"
+              rules={[{ required: true, message: '请选择产品分类' }]}
             >
               <CategorySelectField
                 category={displayCategory}
@@ -688,6 +838,11 @@ export const ProductEditor = forwardRef<
             label={changedLabel('产品标题', isChanged('item_name'))}
             rules={[
               {
+                required: true,
+                whitespace: true,
+                message: '请输入产品标题',
+              },
+              {
                 max: ITEM_NAME_MAX_LENGTH,
                 message: `产品标题最多 ${ITEM_NAME_MAX_LENGTH} 个字符`,
               },
@@ -698,7 +853,7 @@ export const ProductEditor = forwardRef<
               allowClear
               disabled={readOnly}
               style={changedControlStyle(isChanged('item_name'))}
-              placeholder="请输入产品标题"
+              placeholder={itemNamePlaceholder}
             />
           </Form.Item>
           <Form.Item
@@ -834,9 +989,18 @@ export const ProductEditor = forwardRef<
               {({ store_id }) => (
                 <Form.Item
                   name="item_img_list"
-                  noStyle
                   valuePropName="images"
                   trigger="onChange"
+                  rules={[
+                    {
+                      validator: async (_, value) => {
+                        const list = Array.isArray(value) ? value : [];
+                        if (list.length === 0) {
+                          throw new Error('请上传商品图片');
+                        }
+                      },
+                    },
+                  ]}
                 >
                   <ProductImagesEditor
                     disabled={readOnly}

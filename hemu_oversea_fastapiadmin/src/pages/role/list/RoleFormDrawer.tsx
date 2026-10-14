@@ -1,10 +1,10 @@
-﻿import { App, Button, Drawer, Form, Input, Space, Tree } from 'antd';
-import type { DataNode } from 'antd/es/tree';
+﻿import { App, Button, Drawer, Form, Input, Space } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
+import PermissionCodePicker from '@/components/PermissionCodePicker';
 import {
   createRole,
   fetchRolePermissionTree,
-  flattenPermissionTree,
+  type PermissionTreeNode,
   type RolePublic,
   updateRole,
 } from '@/services/admin/rbac';
@@ -14,16 +14,6 @@ type FormValues = {
   remark?: string;
   permission_codes: string[];
 };
-
-function toTreeData(
-  nodes: ReturnType<typeof flattenPermissionTree>,
-): DataNode[] {
-  return nodes.map((n) => ({
-    title: n.title,
-    key: n.key,
-    children: n.children?.length ? toTreeData(n.children) : undefined,
-  }));
-}
 
 export function RoleFormDrawer({
   open,
@@ -41,7 +31,7 @@ export function RoleFormDrawer({
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
-  const [treeNodes, setTreeNodes] = useState<DataNode[]>([]);
+  const [permTree, setPermTree] = useState<PermissionTreeNode[]>([]);
 
   const isEdit = !!editing;
 
@@ -53,7 +43,7 @@ export function RoleFormDrawer({
     fetchRolePermissionTree(portalRole)
       .then((nodes) => {
         if (!cancelled) {
-          setTreeNodes(toTreeData(flattenPermissionTree(nodes)));
+          setPermTree(nodes);
         }
       })
       .catch(() => undefined);
@@ -83,10 +73,7 @@ export function RoleFormDrawer({
   }, [editing, form, open]);
 
   const title = useMemo(
-    () =>
-      isEdit
-        ? '编辑角色'
-        : '新建角色',
+    () => (isEdit ? '编辑角色' : '新建角色'),
     [isEdit],
   );
 
@@ -106,18 +93,14 @@ export function RoleFormDrawer({
           remark: values.remark?.trim(),
           permission_codes: values.permission_codes ?? [],
         });
-        message.success(
-          '保存成功',
-        );
+        message.success('保存成功');
       } else {
         await createRole(portalRole, {
           name: values.name.trim(),
           remark: values.remark?.trim(),
           permission_codes: values.permission_codes ?? [],
         });
-        message.success(
-          '创建成功',
-        );
+        message.success('创建成功');
       }
       onSuccess();
       handleClose();
@@ -134,16 +117,14 @@ export function RoleFormDrawer({
     <Drawer
       title={title}
       open={open}
-      width={520}
+      width={720}
       destroyOnHidden
       maskClosable={false}
       onClose={handleClose}
       styles={{ body: { paddingBottom: 80 } }}
       footer={
         <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Button onClick={handleClose}>
-            {'取消'}
-          </Button>
+          <Button onClick={handleClose}>{'取消'}</Button>
           <Button type="primary" loading={submitting} onClick={handleSubmit}>
             {'确定'}
           </Button>
@@ -163,10 +144,7 @@ export function RoleFormDrawer({
         >
           <Input maxLength={100} />
         </Form.Item>
-        <Form.Item
-          name="remark"
-          label={'备注'}
-        >
+        <Form.Item name="remark" label={'备注'}>
           <Input.TextArea maxLength={255} rows={2} />
         </Form.Item>
         <Form.Item
@@ -180,23 +158,10 @@ export function RoleFormDrawer({
               message: '请选择权限',
             },
           ]}
-          valuePropName="checkedKeys"
-          trigger="onCheck"
-          getValueFromEvent={(checked) =>
-            Array.isArray(checked) ? checked : checked.checked
-          }
         >
-          <Tree
-            checkable
-            defaultExpandAll
-            treeData={treeNodes}
-            style={{
-              maxHeight: 'calc(100vh - 320px)',
-              overflow: 'auto',
-              border: '1px solid #f0f0f0',
-              borderRadius: 6,
-              padding: 8,
-            }}
+          <PermissionCodePicker
+            tree={permTree}
+            maxHeight="calc(100vh - 360px)"
           />
         </Form.Item>
       </Form>

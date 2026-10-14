@@ -141,7 +141,7 @@ def list_fission_data(
 @router.post("/logs/list", response_model=ApiResponse[PageData[MissionLogPublic]])
 def list_logs(
     payload: MissionLogList,
-    current_user: User = Depends(require_admin_user),
+    current_user: User = Depends(require_perm("mission.logs")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[PageData[MissionLogPublic]]:
     pagination = Pagination(page=payload.page, page_size=payload.page_size)
@@ -271,13 +271,14 @@ def import_fission_data(
 @router.post("/execute", response_model=ApiResponse[dict])
 def execute_mission(
     payload: MissionExecute,
-    current_user: User = Depends(require_admin_user),
+    current_user: User = Depends(require_perm("mission.fission")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
-    mission_service.reject_placeholder(
-        db,
-        mission_id=payload.mission_id,
-        actor=current_user,
-        supplier_id=payload.supplier_id,
+    return success(
+        mission_service.execute_mission(
+            db,
+            mission_id=payload.mission_id,
+            actor=current_user,
+            supplier_id=payload.supplier_id,
+        )
     )
-    return success({})

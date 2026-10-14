@@ -7,12 +7,14 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.deps import Pagination
 from app.core.errors import bad_request, not_found
-from app.core.sku_code import normalize_sku_code
+from app.core.sku_code import SKU_VARIANT_PG_REGEX, normalize_sku_code
 from app.models.sku_base_info_dh import SkuBaseInfoDh
+from app.schemas.common import PageData
 from app.schemas.utils import (
     DhSkuBaseInfoPublic,
     DhgateUpdateSkuBaseInfoFailedItem,
@@ -100,6 +102,54 @@ def _to_public(row: SkuBaseInfoDh) -> DhSkuBaseInfoPublic:
         weight_kg=row.weight_kg,
         packing_quantity=row.packing_quantity,
         min_wholesale_qty=row.min_wholesale_qty,
+    )
+
+
+def list_sku_base_infos(
+    db: Session,
+    *,
+    supplier_id: int,
+    keyword: str | None,
+    pagination: Pagination,
+) -> PageData[DhSkuBaseInfoPublic]:
+    """按供应商分页列出 sku_base_info_dh；keyword 对 sku_code 模糊匹配。
+
+    排除同型号变体（如 BD001-1 / BD001-2），仅保留基型号（BD001）。
+    """
+    if supplier_id <= 0:
+        raise bad_request("supplier_id 无效")
+
+    # PostgreSQL：sku_code !~ '^[A-Za-z]+[0-9]+-[0-9]+$'
+    not_variant = ~SkuBaseInfoDh.sku_code.op("~")(SKU_VARIANT_PG_REGEX)
+    stmt = select(SkuBaseInfoDh).where(
+        SkuBaseInfoDh.supplier_id == supplier_id,
+        not_variant,
+    )
+    count_stmt = (
+        select(func.count())
+        .select_from(SkuBaseInfoDh)
+        .where(
+            SkuBaseInfoDh.supplier_id == supplier_id,
+            not_variant,
+        )
+    )
+    kw = (keyword or "").strip()
+    if kw:
+        like = f"%{kw}%"
+        stmt = stmt.where(SkuBaseInfoDh.sku_code.ilike(like))
+        count_stmt = count_stmt.where(SkuBaseInfoDh.sku_code.ilike(like))
+
+    total = int(db.scalar(count_stmt) or 0)
+    rows = db.scalars(
+        stmt.order_by(SkuBaseInfoDh.sku_code.asc())
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
+    ).all()
+    return PageData(
+        items=[_to_public(row) for row in rows],
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
     )
 
 

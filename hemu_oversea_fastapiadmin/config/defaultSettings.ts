@@ -1,4 +1,5 @@
 import type { ProLayoutProps } from '@ant-design/pro-components';
+import { SYSTEM_TITLE_SUFFIX } from '../src/constants/brand';
 
 /**
  * @name
@@ -13,7 +14,7 @@ const Settings: ProLayoutProps & {
   fixedHeader: false,
   fixSiderbar: true,
   colorWeak: false,
-  title: '合木跨境Fast系统',
+  title: SYSTEM_TITLE_SUFFIX,
   logo: '/logo.png',
   iconfontUrl: '',
   token: {

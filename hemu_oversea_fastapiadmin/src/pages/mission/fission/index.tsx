@@ -146,7 +146,7 @@ const MissionFissionList: React.FC = () => {
     {
       title: '操作',
       valueType: 'option',
-      width: 320,
+      width: 220,
       render: (_, record) => {
         const canEdit =
           access.can('mission.fission.create') &&
@@ -154,29 +154,47 @@ const MissionFissionList: React.FC = () => {
         const canMark =
           access.can('mission.fission.finish') &&
           (record.status === 'pending' || record.status === 'running');
-        return [
-          access.can('mission.fission.data') ? (
+        const actions: React.ReactNode[] = [];
+        if (access.can('mission.fission.data')) {
+          actions.push(
             <Button
-              type="link"
               key="data"
+              type="primary"
+              size="small"
+              shape="round"
               onClick={() => history.push(missionFissionDataPath(record.id))}
             >
               {'设置任务数据'}
-            </Button>
-          ) : null,
-          canEdit ? (
-            <Button type="link" key="edit" onClick={() => openEdit(record)}>
+            </Button>,
+          );
+        }
+        if (canEdit) {
+          actions.push(
+            <Button
+              key="edit"
+              type="dashed"
+              size="small"
+              shape="round"
+              onClick={() => openEdit(record)}
+            >
               {'编辑'}
-            </Button>
-          ) : null,
+            </Button>,
+          );
+        }
+        actions.push(
           <Button
-            type="link"
             key="detail"
+            color="default"
+            variant="filled"
+            size="small"
+            shape="round"
             onClick={() => history.push(missionFissionDetailPath(record.id))}
           >
             {'详情'}
           </Button>,
-          canMark ? (
+        );
+        if (canMark) {
+          actions.push(
             <Popconfirm
               key="finish"
               title={'确认将该任务标记结束？'}
@@ -190,10 +208,26 @@ const MissionFissionList: React.FC = () => {
                 }
               }}
             >
-              <Button type="link">{'标记结束'}</Button>
-            </Popconfirm>
-          ) : null,
-        ];
+              <Button type="primary" danger size="small" shape="round">
+                {'标记结束'}
+              </Button>
+            </Popconfirm>,
+          );
+        }
+        // 一行最多 2 个按钮，超出自动换行
+        return (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, max-content)',
+              gap: 8,
+              justifyContent: 'start',
+              alignItems: 'center',
+            }}
+          >
+            {actions}
+          </div>
+        );
       },
     },
   ];

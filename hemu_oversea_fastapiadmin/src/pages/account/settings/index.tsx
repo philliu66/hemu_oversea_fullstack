@@ -19,6 +19,7 @@ import React, {
   useEffect,
   useState,
 } from 'react';
+import { APP_LOGIN_PATH } from '@/constants/deploy';
 import { adminChangePassword, fetchAdminMe } from '@/services/admin/auth';
 import type { UserPublic } from '@/types/api';
 import { clearTokens } from '@/utils/authToken';
@@ -102,7 +103,7 @@ const AccountSettings: React.FC = () => {
       startTransition(() => {
         setInitialState((s) => ({ ...s, currentUser: undefined }));
       });
-      history.replace('/user/login');
+      history.replace(APP_LOGIN_PATH);
     } catch {
       // 校验失败或接口错误：接口错误由全局拦截器提示
     } finally {

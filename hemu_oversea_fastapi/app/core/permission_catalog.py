@@ -211,6 +211,24 @@ PERMISSION_SEEDS: list[PermissionSeed] = [
         "sort_order": 43,
     },
     {
+        "code": "template",
+        "parent_code": None,
+        "type": "menu",
+        "title": "模版管理",
+        "path": "/template",
+        "scope": "supplier",
+        "sort_order": 45,
+    },
+    {
+        "code": "template.skuAttr",
+        "parent_code": "template",
+        "type": "menu",
+        "title": "属性模板",
+        "path": "/template/sku-attr",
+        "scope": "supplier",
+        "sort_order": 46,
+    },
+    {
         "code": "mission",
         "parent_code": None,
         "type": "menu",
@@ -254,6 +272,15 @@ PERMISSION_SEEDS: list[PermissionSeed] = [
         "path": None,
         "scope": "supplier",
         "sort_order": 513,
+    },
+    {
+        "code": "mission.logs",
+        "parent_code": "mission",
+        "type": "button",
+        "title": "查看任务日志",
+        "path": None,
+        "scope": "supplier",
+        "sort_order": 52,
     },
 ]
 

@@ -15,24 +15,32 @@ import React, {
   useState,
 } from 'react';
 import CaptchaImage from '@/components/CaptchaImage';
+import { SYSTEM_TITLE_SUFFIX } from '@/constants/brand';
+import { stripAppBase, withAppBase } from '@/constants/deploy';
 import { adminLogin, getAdminCaptcha } from '@/services/admin/auth';
-import Settings from '../../../../config/defaultSettings';
 
 /**
- * Validate redirect URL to prevent open redirect attacks.
- * Only allow same-origin relative paths starting with '/'.
+ * 校验登录后跳转地址，防止开放重定向。
+ * 入参可为带或不带 APP_BASE 的同源相对路径；返回浏览器完整 pathname（含 base）。
  */
 const getSafeRedirectUrl = (redirect: string | null): string => {
-  if (!redirect?.startsWith('/')) return '/';
+  if (!redirect?.startsWith('/')) {
+    return withAppBase('/');
+  }
 
-  if (redirect.startsWith('//')) return '/';
+  if (redirect.startsWith('//')) {
+    return withAppBase('/');
+  }
 
   try {
     const parsed = new URL(redirect, window.location.origin);
-    if (parsed.origin !== window.location.origin) return '/';
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    if (parsed.origin !== window.location.origin) {
+      return withAppBase('/');
+    }
+    const routePath = stripAppBase(parsed.pathname);
+    return `${withAppBase(routePath)}${parsed.search}${parsed.hash}`;
   } catch {
-    return '/';
+    return withAppBase('/');
   }
 };
 
@@ -136,10 +144,7 @@ const Login: React.FC = () => {
   return (
     <div className={styles.container}>
       <Helmet>
-        <title>
-          {'登录页'}
-          {Settings.title && ` - ${Settings.title}`}
-        </title>
+        <title>{`登录页 - ${SYSTEM_TITLE_SUFFIX}`}</title>
       </Helmet>
       <div
         style={{
@@ -155,7 +160,7 @@ const Login: React.FC = () => {
             paddingTop: 64,
           }}
           logo={<img alt="logo" src="/logo.png" />}
-          title={Settings.title}
+          title={SYSTEM_TITLE_SUFFIX}
           subTitle={false}
           onFinish={async (values) => {
             await handleSubmit(values as LoginFormValues);

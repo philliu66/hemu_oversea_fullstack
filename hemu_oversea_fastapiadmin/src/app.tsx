@@ -17,6 +17,8 @@ import {
   VersionDropdown,
 } from '@/components';
 import AvatarName from '@/components/RightContent/AvatarName';
+import { buildSystemTitle } from '@/constants/brand';
+import { APP_LOGIN_PATH } from '@/constants/deploy';
 import { getAdminCurrentUser } from '@/services/admin/auth';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
@@ -28,10 +30,9 @@ import {
 } from './utils/authToken';
 
 const isDev = process.env.NODE_ENV === 'development';
-const loginPath = '/user/login';
-/** 无需登录即可访问的路径（登录页、OAuth 回调等） */
+/** 无需登录即可访问的路径（登录页、OAuth 回调等；均为 Umi 路由路径，不含 APP_BASE） */
 const publicPaths = [
-  loginPath,
+  APP_LOGIN_PATH,
   '/user/register',
   '/user/register-result',
   '/callback',
@@ -77,7 +78,7 @@ export async function getInitialState(): Promise<{
     const currentUser = await fetchUserInfo();
     if (!currentUser) {
       history.replace(
-        `${loginPath}?redirect=${encodeURIComponent(
+        `${APP_LOGIN_PATH}?redirect=${encodeURIComponent(
           location.pathname + location.search + location.hash,
         )}`,
       );
@@ -101,6 +102,7 @@ export const layout: RunTimeLayoutConfig = ({
   initialState,
   setInitialState,
 }) => {
+  const appTitle = buildSystemTitle(initialState?.currentUser?.supplier_name);
   return {
     menuItemRender: (item, dom) => {
       if (item.path) {
@@ -135,7 +137,7 @@ export const layout: RunTimeLayoutConfig = ({
         !publicPaths.includes(location.pathname)
       ) {
         history.replace(
-          `${loginPath}?redirect=${encodeURIComponent(location.pathname + location.search + location.hash)}`,
+          `${APP_LOGIN_PATH}?redirect=${encodeURIComponent(location.pathname + location.search + location.hash)}`,
         );
       }
     },
@@ -201,6 +203,7 @@ export const layout: RunTimeLayoutConfig = ({
       );
     },
     ...initialState?.settings,
+    title: appTitle,
   };
 };
 
@@ -209,7 +212,7 @@ export const layout: RunTimeLayoutConfig = ({
  * 开发：baseURL 保持 ''，由 config/proxy + UMI_ENV 转发
  *   - UMI_ENV=local → 本机 http://127.0.0.1:8600
  *   - UMI_ENV=dev → 服务器 https://hemuoversea.xiaohemu.net
- * 生产构建（部署到同域 Nginx）：继续 ''，浏览器请求同源 /api/
+ * 生产构建（部署到同域 Nginx /admin）：继续 ''，浏览器请求同源 /api/
  * @doc https://umijs.org/docs/max/request#配置
  */
 export const request: RequestConfig = {

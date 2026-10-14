@@ -55,6 +55,12 @@ export function AddFissionDrawer({
       message.warning('商品信息还在加载，请稍后再确认');
       return false;
     }
+    try {
+      await editorRef.current.validate();
+    } catch {
+      message.warning('请完善必填信息');
+      return false;
+    }
     const baseline = editorRef.current.getBaseline();
     const current = editorRef.current.getSnapshot();
     if (!baseline || !current || current.id !== selected.id) {
@@ -239,6 +245,8 @@ export function AddFissionDrawer({
                 key={`${selected.id}-${editorNonce}`}
                 ref={editorRef}
                 productId={selected.id}
+                applySkuAttrTemplateOnCategoryChange
+                seedTitleAsItemNamePlaceholder
               />
             ) : null}
           </StepsForm.StepForm>

@@ -1,6 +1,7 @@
-﻿import type { RequestConfig } from '@umijs/max';
+﻿import type { AxiosResponse, RequestConfig } from '@umijs/max';
 import { history, request } from '@umijs/max';
 import { message, notification } from 'antd';
+import { APP_LOGIN_PATH, isAppRoutePath, stripAppBase } from '@/constants/deploy';
 import { isUnauthorizedCode } from '@/constants/errorCodes';
 import type { ApiResponse } from '@/types/api';
 import { tryRefreshTokens } from '@/utils/authRefresh';
@@ -11,8 +12,6 @@ import {
   isApiSuccess,
   isAuthWhitelist,
 } from '@/utils/http';
-
-const loginPath = '/user/login';
 
 /** 换发成功后重试原请求时打标，避免死循环 */
 const RETRY_AFTER_REFRESH = '__isRetryAfterRefresh';
@@ -67,13 +66,15 @@ function redirectToLogin() {
   if (typeof window === 'undefined') {
     return;
   }
-  if (window.location.pathname === loginPath) {
+  if (isAppRoutePath(window.location.pathname, APP_LOGIN_PATH)) {
     return;
   }
+  // redirect 存 Umi 路由路径（不含 APP_BASE），与 getInitialState 一致
+  const routePath = stripAppBase(window.location.pathname);
   const redirect = encodeURIComponent(
-    window.location.pathname + window.location.search + window.location.hash,
+    routePath + window.location.search + window.location.hash,
   );
-  history.replace(`${loginPath}?redirect=${redirect}`);
+  history.replace(`${APP_LOGIN_PATH}?redirect=${redirect}`);
 }
 
 function throwBizError(payload: {
@@ -147,6 +148,10 @@ function isUnauthorizedError(error: any): boolean {
   return false;
 }
 
+function isUnauthorizedPayload(payload: unknown): boolean {
+  return isApiResponse(payload) && isUnauthorizedCode(payload.code);
+}
+
 function canAttemptRefresh(opts: RequestOpts): boolean {
   if (opts.skipAuthRefresh || opts[RETRY_AFTER_REFRESH]) {
     return false;
@@ -169,29 +174,52 @@ function unauthorizedTip(error: any): string {
 }
 
 /**
- * 401 时先静默换发，成功则重试原请求；失败再提示并跳登录。
- * 返回值会作为原 request 的结果（umi-request 约定）。
+ * access 过期时静默换发并重试原请求。
+ *
+ * 必须放在 axios response 拦截器里完成：umi 生成的 request 在 catch 里会
+ * 忽略 errorHandler 的返回值并始终 reject(原错误)，导致「第一次失败、
+ * 第二次才成功」。拦截器返回 AxiosResponse 才能让原 Promise resolve。
  */
-async function handleUnauthorized(error: any, opts: RequestOpts) {
-  if (canAttemptRefresh(opts)) {
-    const refreshed = await tryRefreshTokens();
-    if (refreshed) {
-      return request({
-        ...opts,
-        [RETRY_AFTER_REFRESH]: true,
-      });
-    }
+async function refreshAndRetry(
+  config: Record<string, unknown> | undefined,
+): Promise<AxiosResponse | null> {
+  if (!config || typeof config.url !== 'string' || !config.url) {
+    return null;
+  }
+  const opts: RequestOpts = {
+    url: config.url,
+    method: typeof config.method === 'string' ? config.method : 'GET',
+    skipAuthRefresh: Boolean(config.skipAuthRefresh),
+    [RETRY_AFTER_REFRESH]: Boolean(config[RETRY_AFTER_REFRESH]),
+  };
+  if (!canAttemptRefresh(opts)) {
+    return null;
   }
 
-  message.error(unauthorizedTip(error));
-  redirectToLogin();
-  return undefined;
+  const refreshed = await tryRefreshTokens();
+  if (!refreshed) {
+    return null;
+  }
+
+  const headers = {
+    ...((config.headers as Record<string, unknown> | undefined) || {}),
+  };
+  delete headers.Authorization;
+  delete headers.authorization;
+
+  // getResponse: true → 返回 AxiosResponse，供拦截器恢复原请求
+  return request(config.url, {
+    ...config,
+    headers,
+    getResponse: true,
+    [RETRY_AFTER_REFRESH]: true,
+  });
 }
 
 /**
  * 全局请求错误处理：
  * - 业务失败（code !== 0）：message.error 提示后端 message
- * - 未登录（40100 / HTTP 401）：先尝试 refresh，失败再跳转登录
+ * - 未登录（40100 / HTTP 401）：换发在 response 拦截器；此处仅提示并跳登录
  * - 网络异常：统一兜底文案
  */
 export const errorConfig: RequestConfig = {
@@ -212,8 +240,11 @@ export const errorConfig: RequestConfig = {
         throw error;
       }
 
+      // 换发/重试已在 response 拦截器完成；走到这里说明无法续期
       if (isUnauthorizedError(error)) {
-        return handleUnauthorized(error, requestOpts);
+        message.error(unauthorizedTip(error));
+        redirectToLogin();
+        return;
       }
 
       // 业务错误（响应拦截器 / errorThrower 抛出）
@@ -242,7 +273,6 @@ export const errorConfig: RequestConfig = {
             });
             break;
           case ErrorShowType.REDIRECT:
-            // 未授权已在上方 isUnauthorizedError 分支处理
             message.error(
               errorMessage ||
                 t('app.request.unauthorized', '未登录或登录已过期，请重新登录'),
@@ -292,12 +322,34 @@ export const errorConfig: RequestConfig = {
   requestInterceptors: [(config) => applyRequestConvention(config)],
 
   responseInterceptors: [
-    (response) => {
-      const payload = (response as { data?: unknown }).data;
-      // Umi 仅在 data.success === false 时触发 errorThrower；
-      // FastAPI 使用 code !== 0，需在此补抛错，统一走 errorHandler 弹提示。
-      throwIfEnvelopeFailed(payload);
-      return response;
-    },
+    [
+      async (response) => {
+        const payload = (response as { data?: unknown }).data;
+        // HTTP 200 但业务码 40100：同样尝试静默换发后重试
+        if (isUnauthorizedPayload(payload)) {
+          const retried = await refreshAndRetry(
+            (response as { config?: Record<string, unknown> }).config,
+          );
+          if (retried) {
+            return retried;
+          }
+        }
+        // Umi 仅在 data.success === false 时触发 errorThrower；
+        // FastAPI 使用 code !== 0，需在此补抛错，统一走 errorHandler 弹提示。
+        throwIfEnvelopeFailed(payload);
+        return response;
+      },
+      async (error: any) => {
+        if (isUnauthorizedError(error)) {
+          const retried = await refreshAndRetry(
+            error?.config as Record<string, unknown> | undefined,
+          );
+          if (retried) {
+            return retried;
+          }
+        }
+        return Promise.reject(error);
+      },
+    ],
   ],
 };

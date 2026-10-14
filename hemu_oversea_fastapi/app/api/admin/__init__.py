@@ -7,10 +7,12 @@ from app.api.admin.permissions import router as permissions_router
 from app.api.admin.platform_roles import router as platform_roles_router
 from app.api.admin.platform_staff import router as platform_staff_router
 from app.api.admin.products import router as products_router
+from app.api.admin.sku import router as sku_router
 from app.api.admin.stores import router as stores_router
 from app.api.admin.supplier_roles import router as supplier_roles_router
 from app.api.admin.supplier_staff import router as supplier_staff_router
 from app.api.admin.suppliers import router as suppliers_router
+from app.api.admin.templates import router as templates_router
 from app.api.admin.users import router as users_router
 
 router = APIRouter(prefix="/admin")
@@ -26,3 +28,5 @@ router.include_router(stores_router)
 router.include_router(products_router)
 router.include_router(categories_router)
 router.include_router(missions_router)
+router.include_router(templates_router)
+router.include_router(sku_router)

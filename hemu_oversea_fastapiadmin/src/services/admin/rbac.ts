@@ -113,20 +113,67 @@ export async function deleteRole(portalRole: string | undefined, id: number) {
   });
 }
 
-export function flattenPermissionTree(
-  nodes: PermissionTreeNode[],
-): {
+export type PermissionButtonOption = {
+  code: string;
   title: string;
-  value: string;
+};
+
+export type MenuPermissionTreeNode = {
+  title: string;
   key: string;
-  children?: ReturnType<typeof flattenPermissionTree>;
-}[] {
-  return nodes.map((n) => ({
-    title: `${n.title} (${n.code})`,
-    value: n.code,
-    key: n.code,
-    children: n.children?.length
-      ? flattenPermissionTree(n.children)
-      : undefined,
-  }));
+  children?: MenuPermissionTreeNode[];
+};
+
+/** 把权限树拆成：仅菜单的树 + 各菜单下的按钮列表 */
+export function splitMenuAndButtonPermissions(nodes: PermissionTreeNode[]): {
+  menuTree: MenuPermissionTreeNode[];
+  buttonsByMenuCode: Record<string, PermissionButtonOption[]>;
+  rootButtons: PermissionButtonOption[];
+  allMenuCodes: Set<string>;
+  allButtonCodes: Set<string>;
+} {
+  const buttonsByMenuCode: Record<string, PermissionButtonOption[]> = {};
+  const allMenuCodes = new Set<string>();
+  const allButtonCodes = new Set<string>();
+
+  const toButton = (n: PermissionTreeNode): PermissionButtonOption => {
+    allButtonCodes.add(n.code);
+    return { code: n.code, title: n.title };
+  };
+
+  const walkMenus = (
+    list: PermissionTreeNode[],
+  ): MenuPermissionTreeNode[] => {
+    const result: MenuPermissionTreeNode[] = [];
+    for (const node of list) {
+      if (node.type === 'button') {
+        continue;
+      }
+      allMenuCodes.add(node.code);
+      const children = node.children ?? [];
+      const buttonChildren = children.filter((c) => c.type === 'button');
+      const menuChildren = children.filter((c) => c.type !== 'button');
+      if (buttonChildren.length) {
+        buttonsByMenuCode[node.code] = buttonChildren.map(toButton);
+      }
+      result.push({
+        title: node.title,
+        key: node.code,
+        children: menuChildren.length ? walkMenus(menuChildren) : undefined,
+      });
+    }
+    return result;
+  };
+
+  const rootButtons = nodes
+    .filter((n) => n.type === 'button')
+    .map(toButton);
+
+  return {
+    menuTree: walkMenus(nodes),
+    buttonsByMenuCode,
+    rootButtons,
+    allMenuCodes,
+    allButtonCodes,
+  };
 }

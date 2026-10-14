@@ -129,6 +129,26 @@ export default [
     ],
   },
   {
+    path: '/template',
+    name: '模版管理',
+    icon: 'fileText',
+    routeId: 'template',
+    access: 'canAccessRoute',
+    routes: [
+      {
+        path: '/template',
+        redirect: '/template/sku-attr',
+      },
+      {
+        path: '/template/sku-attr',
+        name: '属性模板',
+        component: './template/sku-attr',
+        routeId: 'template.skuAttr',
+        access: 'canAccessRoute',
+      },
+    ],
+  },
+  {
     path: '/mission',
     name: '任务管理',
     icon: 'schedule',

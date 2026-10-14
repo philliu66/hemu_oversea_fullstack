@@ -64,6 +64,7 @@ class UserPublic(BaseModel):
     role: str
     org_type: str
     supplier_id: int | None
+    supplier_name: str | None = None
     created_by: int | None
     is_active: bool
     created_at: datetime

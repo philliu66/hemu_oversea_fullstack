@@ -3,6 +3,7 @@
  * @description 通过 UMI_ENV 切换后端：
  *   - local：本机 FastAPI（本机 Postgres）
  *   - dev：服务器 FastAPI（服务器 Postgres，经 Nginx HTTPS）
+ * 前端页面部署在 /admin（见 src/constants/deploy.ts），/api 仍走域名根路径，代理规则无需改。
  * @doc https://umijs.org/docs/guides/proxy
  */
 export default {
