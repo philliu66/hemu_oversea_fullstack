@@ -90,9 +90,11 @@ import {
   DH_CUSTOM_PRODUCT_ATTR_ID,
   buildDetailFromForm,
   mergeManagedAttrsIntoList,
-  nonPriceProductAttrs,
+  nonSaleCategoryAttrs,
   priceProductAttrs,
   retainAttrsForCategory,
+  selectedAttrsForCategoryIds,
+  syncIsPriceAttrByCategory,
   toCustomAttrDrafts,
   toProductFormValues,
   type CustomAttrDraft,
@@ -390,7 +392,17 @@ export const ProductEditor = forwardRef<
 
         if (data.category?.id) {
           const categoryId = data.category.id;
-          void loadCategoryAttrs(categoryId);
+          void loadCategoryAttrs(categoryId).then((attrs) => {
+            if (cancelled || attrs === undefined) {
+              return;
+            }
+            const prev = form.getFieldValue('attr_list') as
+              | DhProductSelectedAttrPublic[]
+              | undefined;
+            form.setFieldsValue({
+              attr_list: syncIsPriceAttrByCategory(prev, attrs),
+            });
+          });
           void (async () => {
             try {
               const pathData = await fetchDhCategoryPath(categoryId);
@@ -557,9 +569,9 @@ export const ProductEditor = forwardRef<
                   []) as DhProductSelectedAttrPublic[];
                 // 有模板：清空原选择，用模板覆盖（仅保留新类目相关 + 自定义）
                 form.setFieldsValue({
-                  attr_list: retainAttrsForCategory(
-                    templateAttrList,
-                    allowedIds,
+                  attr_list: syncIsPriceAttrByCategory(
+                    retainAttrsForCategory(templateAttrList, allowedIds),
+                    nextCategoryAttrs,
                   ),
                   customAttrs: toCustomAttrDrafts(templateAttrList),
                 });
@@ -576,7 +588,10 @@ export const ProductEditor = forwardRef<
           }
 
           form.setFieldsValue({
-            attr_list: retainAttrsForCategory(prev, allowedIds),
+            attr_list: syncIsPriceAttrByCategory(
+              retainAttrsForCategory(prev, allowedIds),
+              nextCategoryAttrs,
+            ),
           });
         } catch (error) {
           message.error(
@@ -698,14 +713,12 @@ export const ProductEditor = forwardRef<
           ) : (
             <ProFormDependency name={['attr_list']}>
               {({ attr_list }) => {
-                const priceSelectedAttrs = priceProductAttrs(attr_list);
-                const priceAttrIdSet = new Set(
-                  priceSelectedAttrs.map((item) => String(item.attr_id)),
+                // 按类目定义 sale_attr 分流；与商品规格区块统一
+                const normalCategoryAttrs = nonSaleCategoryAttrs(categoryAttrs);
+                const normalSelectedAttrs = selectedAttrsForCategoryIds(
+                  attr_list,
+                  normalCategoryAttrs.map((item) => String(item.attr_id)),
                 );
-                const normalCategoryAttrs = categoryAttrs.filter(
-                  (attr) => !priceAttrIdSet.has(String(attr.attr_id)),
-                );
-                const normalSelectedAttrs = nonPriceProductAttrs(attr_list);
                 if (normalCategoryAttrs.length === 0) {
                   return !loading ? (
                     <Typography.Text type="secondary">
@@ -726,6 +739,10 @@ export const ProductEditor = forwardRef<
                             const managedIds = normalCategoryAttrs.map((item) =>
                               String(item.attr_id),
                             );
+                            const cleared = nextSelected.map((item) => ({
+                              ...item,
+                              is_price_attr: '0',
+                            }));
                             const prev = form.getFieldValue('attr_list') as
                               | DhProductSelectedAttrPublic[]
                               | undefined;
@@ -733,7 +750,7 @@ export const ProductEditor = forwardRef<
                               attr_list: mergeManagedAttrsIntoList(
                                 prev,
                                 managedIds,
-                                nextSelected,
+                                cleared,
                               ),
                             });
                           }

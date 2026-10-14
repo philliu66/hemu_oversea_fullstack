@@ -1,11 +1,13 @@
 import { ProFormDependency } from '@ant-design/pro-components';
-import { Divider, Form, Skeleton } from 'antd';
-import React, { useEffect, useRef, useState } from 'react';
+import { App, Divider, Form, Skeleton } from 'antd';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchStoreBaseDiscount } from '@/services/admin/stores';
 import type {
   DhCategoryAttrPublic,
   DhCommissionRatePublic,
   DhProductSelectedAttrPublic,
+  DhProductSkuPublic,
+  DhProductSpecSelfDefPublic,
   StoreBaseDiscountPublic,
 } from '@/types/api';
 import CommissionRateHint from './CommissionRateHint';
@@ -13,12 +15,17 @@ import PriceRangeFields from './PriceRangeFields';
 import {
   mergeManagedAttrsIntoList,
   patchAttrValuePic,
-  priceProductAttrs,
+  saleCategoryAttrs,
+  selectedAttrsForCategoryIds,
 } from './productFormMapping';
 import { useMeasureUnits } from './measureUnits';
 import { resolveMeasureDisplayName } from './SaleInfoFields';
 import SpecAttrsFields from './SpecAttrsFields';
 import SpecSkuTable from './SpecSkuTable';
+import {
+  buildSkuListFromSpecAttrs,
+  buildSpecComboSignature,
+} from './specSkuBuild';
 
 type ProductSpecSkuBlockProps = {
   readOnly?: boolean;
@@ -98,7 +105,93 @@ export default function ProductSpecSkuBlock({
   commissionData = null,
 }: ProductSpecSkuBlockProps) {
   const form = Form.useFormInstance();
+  const { modal } = App.useApp();
   const { options: measureOptions } = useMeasureUnits();
+  /** 取消确认时 remount 规格区，回滚本地草稿到表单值 */
+  const [specUiEpoch, setSpecUiEpoch] = useState(0);
+
+  const applyPriceAttrsToForm = useCallback(
+    (
+      priceCategoryAttrs: DhCategoryAttrPublic[],
+      nextSelected: DhProductSelectedAttrPublic[],
+    ) => {
+      const managedIds = priceCategoryAttrs.map((item) => String(item.attr_id));
+      const priced = nextSelected.map((item) => ({
+        ...item,
+        is_price_attr: '1',
+      }));
+      const prev = form.getFieldValue('attr_list') as
+        | DhProductSelectedAttrPublic[]
+        | undefined;
+      form.setFieldsValue({
+        attr_list: mergeManagedAttrsIntoList(prev, managedIds, priced),
+      });
+    },
+    [form],
+  );
+
+  const requestSpecDrivenUpdate = useCallback(
+    (options: {
+      priceCategoryAttrs: DhCategoryAttrPublic[];
+      currentPriceSelected: DhProductSelectedAttrPublic[];
+      currentSpecs: DhProductSpecSelfDefPublic[];
+      nextPriceSelected?: DhProductSelectedAttrPublic[];
+      nextSpecs?: DhProductSpecSelfDefPublic[];
+    }) => {
+      const nextPrice =
+        options.nextPriceSelected ?? options.currentPriceSelected;
+      const nextSpecs = options.nextSpecs ?? options.currentSpecs;
+      const prevKey = buildSpecComboSignature(
+        options.currentPriceSelected,
+        options.currentSpecs,
+      );
+      const nextKey = buildSpecComboSignature(nextPrice, nextSpecs);
+      const comboChanged = prevKey !== nextKey;
+
+      const commit = () => {
+        if (options.nextPriceSelected) {
+          applyPriceAttrsToForm(
+            options.priceCategoryAttrs,
+            options.nextPriceSelected,
+          );
+        }
+        if (options.nextSpecs) {
+          form.setFieldsValue({ item_spec_self_def_list: options.nextSpecs });
+        }
+        if (comboChanged) {
+          form.setFieldsValue({
+            sku_list: buildSkuListFromSpecAttrs(nextPrice, nextSpecs),
+          });
+        }
+      };
+
+      if (!comboChanged) {
+        commit();
+        return;
+      }
+
+      const existingSkus = (form.getFieldValue('sku_list') ||
+        []) as DhProductSkuPublic[];
+      if (existingSkus.length === 0) {
+        commit();
+        return;
+      }
+
+      modal.confirm({
+        title: '重新计算 SKU',
+        content: '目前已存在的数据将会被清空',
+        okText: '确认',
+        cancelText: '取消',
+        onOk: () => {
+          commit();
+        },
+        onCancel: () => {
+          setSpecUiEpoch((value) => value + 1);
+        },
+      });
+    },
+    [applyPriceAttrsToForm, form, modal],
+  );
 
   return (
     <ProFormDependency
@@ -125,32 +218,36 @@ export default function ProductSpecSkuBlock({
         price_config_type,
         item_wholesale_range_list,
       }) => {
-        const priceSelectedAttrs = priceProductAttrs(attr_list);
-        const priceCategoryAttrs = priceSelectedAttrs
-          .map((item) =>
-            categoryAttrs.find(
-              (attr) => String(attr.attr_id) === String(item.attr_id),
-            ),
-          )
-          .filter((item): item is DhCategoryAttrPublic => Boolean(item));
+        // 按类目定义 sale_attr 分流；与商品属性区块统一
+        const priceCategoryAttrs = saleCategoryAttrs(categoryAttrs);
+        const priceSelectedAttrs = selectedAttrsForCategoryIds(
+          attr_list,
+          priceCategoryAttrs.map((item) => String(item.attr_id)),
+        );
+        const currentSpecs = (item_spec_self_def_list ||
+          []) as DhProductSpecSelfDefPublic[];
         const measureUnitLabel =
           resolveMeasureDisplayName(measure_id, measureOptions) || '件';
 
         const handlePriceAttrsChange = (
           nextSelected: DhProductSelectedAttrPublic[],
         ) => {
-          const managedIds = priceCategoryAttrs.map((item) =>
-            String(item.attr_id),
-          );
-          const priced = nextSelected.map((item) => ({
-            ...item,
-            is_price_attr: '1',
-          }));
-          const prev = form.getFieldValue('attr_list') as
-            | DhProductSelectedAttrPublic[]
-            | undefined;
-          form.setFieldsValue({
-            attr_list: mergeManagedAttrsIntoList(prev, managedIds, priced),
+          requestSpecDrivenUpdate({
+            priceCategoryAttrs,
+            currentPriceSelected: priceSelectedAttrs,
+            currentSpecs,
+            nextPriceSelected: nextSelected,
+          });
+        };
+
+        const handleSpecSelfDefsChange = (
+          next: DhProductSpecSelfDefPublic[],
+        ) => {
+          requestSpecDrivenUpdate({
+            priceCategoryAttrs,
+            currentPriceSelected: priceSelectedAttrs,
+            currentSpecs,
+            nextSpecs: next,
           });
         };
 
@@ -179,11 +276,12 @@ export default function ProductSpecSkuBlock({
                   />
                 ) : (
                   <SpecAttrsFields
+                    key={specUiEpoch}
                     disabled={readOnly}
                     changedAttrIds={changedCategoryAttrIds}
                     priceCategoryAttrs={priceCategoryAttrs}
                     priceSelectedAttrs={priceSelectedAttrs}
-                    specSelfDefs={item_spec_self_def_list}
+                    specSelfDefs={currentSpecs}
                     storeId={store_id || undefined}
                     onSelectedAttrsChange={
                       readOnly ? undefined : handlePriceAttrsChange
@@ -191,9 +289,9 @@ export default function ProductSpecSkuBlock({
                     onValuePicChange={
                       readOnly ? undefined : handleAttrValuePicChange
                     }
-                    onSpecSelfDefsChange={(next) => {
-                      form.setFieldsValue({ item_spec_self_def_list: next });
-                    }}
+                    onSpecSelfDefsChange={
+                      readOnly ? undefined : handleSpecSelfDefsChange
+                    }
                   />
                 )}
                 <Divider plain style={{ margin: '28px 0' }}>
@@ -223,7 +321,7 @@ export default function ProductSpecSkuBlock({
                   <SpecSkuTable
                     disabled={readOnly || categoryAttrsLoading}
                     priceSelectedAttrs={priceSelectedAttrs}
-                    specSelfDefs={item_spec_self_def_list}
+                    specSelfDefs={currentSpecs}
                     itemCode={itemCode}
                     measureUnitLabel={measureUnitLabel}
                     supplierId={supplierId}

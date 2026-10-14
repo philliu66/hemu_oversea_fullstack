@@ -16,7 +16,7 @@ import React, {
 } from 'react';
 import CaptchaImage from '@/components/CaptchaImage';
 import { SYSTEM_TITLE_SUFFIX } from '@/constants/brand';
-import { stripAppBase, withAppBase } from '@/constants/deploy';
+import { APP_PUBLIC_PATH, stripAppBase, withAppBase } from '@/constants/deploy';
 import { adminLogin, getAdminCaptcha } from '@/services/admin/auth';
 
 /**
@@ -159,7 +159,7 @@ const Login: React.FC = () => {
             maxWidth: '75vw',
             paddingTop: 64,
           }}
-          logo={<img alt="logo" src="/logo.png" />}
+          logo={<img alt="logo" src={`${APP_PUBLIC_PATH}logo.png`} />}
           title={SYSTEM_TITLE_SUFFIX}
           subTitle={false}
           onFinish={async (values) => {

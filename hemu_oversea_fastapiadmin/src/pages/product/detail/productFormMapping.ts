@@ -1,4 +1,5 @@
 import type {
+  DhCategoryAttrPublic,
   DhCategoryPublic,
   DhItemInventoryPublic,
   DhItemWeightRangePublic,
@@ -62,6 +63,19 @@ export function isPriceProductAttr(attr: DhProductSelectedAttrPublic) {
   return String(attr.is_price_attr) === '1';
 }
 
+/** 类目定义：销售/规格属性（对应商品规格区块） */
+export function isSaleCategoryAttr(attr: DhCategoryAttrPublic) {
+  return String(attr.sale_attr) === '1';
+}
+
+export function saleCategoryAttrs(attrs?: DhCategoryAttrPublic[]) {
+  return (attrs || []).filter(isSaleCategoryAttr);
+}
+
+export function nonSaleCategoryAttrs(attrs?: DhCategoryAttrPublic[]) {
+  return (attrs || []).filter((attr) => !isSaleCategoryAttr(attr));
+}
+
 export function categoryProductAttrs(list?: DhProductSelectedAttrPublic[]) {
   return (list || []).filter((item) => !isCustomProductAttr(item));
 }
@@ -72,6 +86,42 @@ export function priceProductAttrs(list?: DhProductSelectedAttrPublic[]) {
 
 export function nonPriceProductAttrs(list?: DhProductSelectedAttrPublic[]) {
   return categoryProductAttrs(list).filter((item) => !isPriceProductAttr(item));
+}
+
+/** 从已选 attr_list 中取出属于给定类目属性 ID 的项（不含自定义 attr_id=11） */
+export function selectedAttrsForCategoryIds(
+  list: DhProductSelectedAttrPublic[] | undefined,
+  categoryAttrIds: Iterable<string>,
+): DhProductSelectedAttrPublic[] {
+  const idSet = new Set(
+    [...categoryAttrIds].map((id) => String(id).trim()).filter(Boolean),
+  );
+  return categoryProductAttrs(list).filter((item) =>
+    idSet.has(String(item.attr_id)),
+  );
+}
+
+/**
+ * 按类目定义的 sale_attr 同步 attr_list.is_price_attr。
+ * 自定义属性不动；销售属性标 1，其余普通类目属性标 0。
+ */
+export function syncIsPriceAttrByCategory(
+  list: DhProductSelectedAttrPublic[] | undefined,
+  categoryAttrs: DhCategoryAttrPublic[],
+): DhProductSelectedAttrPublic[] {
+  const saleIds = new Set(
+    saleCategoryAttrs(categoryAttrs).map((item) => String(item.attr_id)),
+  );
+  return (list || []).map((item) => {
+    if (isCustomProductAttr(item)) {
+      return item;
+    }
+    const nextFlag = saleIds.has(String(item.attr_id)) ? '1' : '0';
+    if (String(item.is_price_attr ?? '') === nextFlag) {
+      return item;
+    }
+    return { ...item, is_price_attr: nextFlag };
+  });
 }
 
 export function mergeManagedAttrsIntoList(

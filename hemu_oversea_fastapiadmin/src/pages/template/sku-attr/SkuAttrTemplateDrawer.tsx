@@ -61,9 +61,63 @@ type SkuAttrTemplateDrawerProps = {
 
 const DH_CUSTOM_ATTR_MAX_COUNT = 20;
 const DH_CUSTOM_ATTR_MAX_LENGTH = 40;
+/** 与 CategoryAttrsFields 一致：空自定义占位 id */
+const CUSTOM_PLACEHOLDER_VAL_ID = 'custom';
+const CUSTOM_SELECT_VALUE = '__attr_custom__';
+/** 敦煌 isother 自定义值约定 attrValId=0 */
+const CUSTOM_ATTR_VAL_ID = '0';
 
 function isSaleAttr(attr: DhCategoryAttrPublic) {
   return String(attr.sale_attr) === '1';
+}
+
+function isRequiredAttr(attr: DhCategoryAttrPublic) {
+  return String(attr.required) === '1';
+}
+
+function attrDisplayName(attr: DhCategoryAttrPublic): string {
+  return (
+    attr.line_attr_name_cn?.trim() ||
+    attr.line_attr_name?.trim() ||
+    attr.attr_id
+  );
+}
+
+/** 已选属性值是否有实质内容（排除仅勾选自定义但未填内容） */
+function isMeaningfulSelectedValue(
+  item: DhProductSelectedAttrPublic['values'][number],
+): boolean {
+  const valId = String(item.attr_val_id ?? '').trim();
+  const text = (
+    item.line_attrval_name_cn ||
+    item.line_attrval_name ||
+    ''
+  ).trim();
+  const name = (item.attr_name_cn || item.attr_name || '').trim();
+
+  if (
+    !valId ||
+    valId === CUSTOM_PLACEHOLDER_VAL_ID ||
+    valId === CUSTOM_SELECT_VALUE
+  ) {
+    return Boolean(text || name);
+  }
+  if (valId === CUSTOM_ATTR_VAL_ID) {
+    return Boolean(text || name);
+  }
+  return true;
+}
+
+function isRequiredAttrFilled(
+  attr: DhCategoryAttrPublic,
+  selectedMap: Map<string, DhProductSelectedAttrPublic>,
+): boolean {
+  const selected = selectedMap.get(String(attr.attr_id));
+  const values = selected?.values || [];
+  if (!values.length) {
+    return false;
+  }
+  return values.some(isMeaningfulSelectedValue);
 }
 
 function createEmptyCustomAttr(): CustomAttrDraft {
@@ -73,6 +127,15 @@ function createEmptyCustomAttr(): CustomAttrDraft {
     attr_name: '',
     content: '',
   };
+}
+
+function RequiredLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+      <span style={{ color: '#ff4d4f', marginRight: 4 }}>*</span>
+      {children}
+    </Typography.Text>
+  );
 }
 
 const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
@@ -103,6 +166,11 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
   const [attrList, setAttrList] = useState<DhProductSelectedAttrPublic[]>([]);
   /** 自定义属性草稿（attr_id=11），保存时合并进 attr_list */
   const [customAttrs, setCustomAttrs] = useState<CustomAttrDraft[]>([]);
+  /** 点击保存后展示字段级校验错误 */
+  const [triedSubmit, setTriedSubmit] = useState(false);
+  const [missingRequiredAttrIds, setMissingRequiredAttrIds] = useState<
+    string[]
+  >([]);
   const categoryAttrsReqRef = useRef(0);
   const loadedKeyRef = useRef<string>('');
 
@@ -150,6 +218,8 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
     setAttrList([]);
     setCustomAttrs([]);
     setCategoryAttrsLoading(false);
+    setTriedSubmit(false);
+    setMissingRequiredAttrIds([]);
     categoryAttrsReqRef.current += 1;
   }, []);
 
@@ -278,16 +348,42 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
   }, [open, mode, templateId, applyCategory, resetForm, message, onClose]);
 
   const handleCategoryPick = (picked: DhCategoryPublic) => {
+    setMissingRequiredAttrIds([]);
     void applyCategory(picked, { retainAttrs: true });
   };
 
   const validateBeforeSave = () => {
+    setTriedSubmit(true);
+
     if (!skuCode) {
+      setMissingRequiredAttrIds([]);
       message.warning('请选择产品型号');
       return false;
     }
     if (!pickedCategory?.cate_pub_id) {
+      setMissingRequiredAttrIds([]);
       message.warning('请选择商品分类');
+      return false;
+    }
+    if (categoryAttrsLoading) {
+      setMissingRequiredAttrIds([]);
+      message.warning('类目属性加载中，请稍后再保存');
+      return false;
+    }
+
+    const selectedMap = new Map(
+      attrList.map((item) => [String(item.attr_id), item]),
+    );
+    const missingAttrs = normalCategoryAttrs
+      .filter(isRequiredAttr)
+      .filter((attr) => !isRequiredAttrFilled(attr, selectedMap));
+    setMissingRequiredAttrIds(missingAttrs.map((attr) => String(attr.attr_id)));
+
+    if (missingAttrs.length > 0) {
+      const names = missingAttrs.map(attrDisplayName);
+      const preview = names.slice(0, 3).join('、');
+      const more = names.length > 3 ? `等 ${names.length} 项` : '';
+      message.warning(`请填写必填类目属性：${preview}${more}`);
       return false;
     }
     return true;
@@ -320,6 +416,8 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
           setSkuCode(undefined);
           setAttrList([]);
           setCustomAttrs([]);
+          setTriedSubmit(false);
+          setMissingRequiredAttrIds([]);
           onModeChange('create');
         } else {
           onClose();
@@ -423,12 +521,7 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
       ) : (
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <div>
-            <Typography.Text
-              strong
-              style={{ display: 'block', marginBottom: 8 }}
-            >
-              产品型号
-            </Typography.Text>
+            <RequiredLabel>产品型号</RequiredLabel>
             <Select
               showSearch
               allowClear
@@ -439,22 +532,28 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
               disabled={readOnly}
               loading={skuOptionsLoading}
               optionFilterProp="label"
+              status={triedSubmit && !skuCode ? 'error' : undefined}
               onChange={(value) => setSkuCode(value)}
             />
+            {triedSubmit && !skuCode ? (
+              <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                请选择产品型号
+              </Typography.Text>
+            ) : null}
           </div>
           <div>
-            <Typography.Text
-              strong
-              style={{ display: 'block', marginBottom: 8 }}
-            >
-              商品分类
-            </Typography.Text>
+            <RequiredLabel>商品分类</RequiredLabel>
             <CategorySelectField
               category={pickedCategory}
               pathDisplay={categoryPath}
               disabled={readOnly}
               onPick={handleCategoryPick}
             />
+            {triedSubmit && !pickedCategory?.cate_pub_id ? (
+              <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                请选择商品分类
+              </Typography.Text>
+            ) : null}
           </div>
           <div>
             <Typography.Text
@@ -472,27 +571,57 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
             ) : normalCategoryAttrs.length === 0 ? (
               <Typography.Text type="secondary">暂无类目属性</Typography.Text>
             ) : (
-              <CategoryAttrsFields
-                attrs={normalCategoryAttrs}
-                selectedAttrs={normalSelectedAttrs}
-                disabled={readOnly}
-                onSelectedAttrsChange={
-                  readOnly
-                    ? undefined
-                    : (nextSelected) => {
-                        const managedIds = normalCategoryAttrs.map((item) =>
-                          String(item.attr_id),
-                        );
-                        setAttrList((prev) =>
-                          mergeManagedAttrsIntoList(
-                            prev,
-                            managedIds,
-                            nextSelected,
-                          ),
-                        );
-                      }
-                }
-              />
+              <>
+                {triedSubmit && missingRequiredAttrIds.length > 0 ? (
+                  <Typography.Text
+                    type="danger"
+                    style={{ display: 'block', marginBottom: 8, fontSize: 12 }}
+                  >
+                    请填写标 * 的必填类目属性
+                  </Typography.Text>
+                ) : null}
+                <CategoryAttrsFields
+                  attrs={normalCategoryAttrs}
+                  selectedAttrs={normalSelectedAttrs}
+                  disabled={readOnly}
+                  changedAttrIds={
+                    triedSubmit ? missingRequiredAttrIds : undefined
+                  }
+                  onSelectedAttrsChange={
+                    readOnly
+                      ? undefined
+                      : (nextSelected) => {
+                          const managedIds = normalCategoryAttrs.map((item) =>
+                            String(item.attr_id),
+                          );
+                          setAttrList((prev) =>
+                            mergeManagedAttrsIntoList(
+                              prev,
+                              managedIds,
+                              nextSelected,
+                            ),
+                          );
+                          if (triedSubmit) {
+                            const selectedMap = new Map(
+                              nextSelected.map((item) => [
+                                String(item.attr_id),
+                                item,
+                              ]),
+                            );
+                            setMissingRequiredAttrIds(
+                              normalCategoryAttrs
+                                .filter(isRequiredAttr)
+                                .filter(
+                                  (attr) =>
+                                    !isRequiredAttrFilled(attr, selectedMap),
+                                )
+                                .map((attr) => String(attr.attr_id)),
+                            );
+                          }
+                        }
+                  }
+                />
+              </>
             )}
             <Divider />
             <Typography.Text

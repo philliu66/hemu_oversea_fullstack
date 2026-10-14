@@ -1,5 +1,6 @@
 import type { ProLayoutProps } from '@ant-design/pro-components';
 import { SYSTEM_TITLE_SUFFIX } from '../src/constants/brand';
+import { APP_PUBLIC_PATH } from '../src/constants/deploy';
 
 /**
  * @name
@@ -15,7 +16,7 @@ const Settings: ProLayoutProps & {
   fixSiderbar: true,
   colorWeak: false,
   title: SYSTEM_TITLE_SUFFIX,
-  logo: '/logo.png',
+  logo: `${APP_PUBLIC_PATH}logo.png`,
   iconfontUrl: '',
   token: {
     // 参见ts声明，demo 见文档，通过token 修改样式
