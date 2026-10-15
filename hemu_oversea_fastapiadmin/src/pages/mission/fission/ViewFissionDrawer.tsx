@@ -42,6 +42,7 @@ export function ViewFissionDrawer({
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<DhProductDetailPublic>();
+  const [supplierId, setSupplierId] = useState<number>();
   const [changedKeys, setChangedKeys] = useState<string[]>([]);
   const [changedAttrList, setChangedAttrList] = useState<
     DhProductSelectedAttrPublic[]
@@ -54,6 +55,7 @@ export function ViewFissionDrawer({
     let cancelled = false;
     setLoading(true);
     setDetail(undefined);
+    setSupplierId(undefined);
     setChangedKeys([]);
     setChangedAttrList([]);
     void fetchMissionFissionDataDetail({
@@ -66,6 +68,7 @@ export function ViewFissionDrawer({
         }
         const updateJson = data.update_json || {};
         setDetail(data.raw_json ?? undefined);
+        setSupplierId(data.supplier_id);
         setChangedKeys(Object.keys(updateJson));
         setChangedAttrList(asChangedAttrList(updateJson.attr_list));
       })
@@ -101,11 +104,12 @@ export function ViewFissionDrawer({
       <Spin spinning={loading}>
         {detail ? (
           <FissionProductStep
-            key={dataId}
+            key={`${dataId}-${supplierId ?? 0}`}
             readOnly
             initialDetail={detail}
             changedKeys={changedKeys}
             changedAttrList={changedAttrList}
+            supplierId={supplierId}
           />
         ) : null}
       </Spin>

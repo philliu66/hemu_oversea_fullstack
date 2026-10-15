@@ -1,4 +1,4 @@
-﻿import { PageContainer } from '@ant-design/pro-components';
+import { PageContainer } from '@ant-design/pro-components';
 import { useAccess, useModel } from '@umijs/max';
 import { App, Card, Empty, Space, Spin, Tabs, Tree } from 'antd';
 import type { DataNode, EventDataNode } from 'antd/es/tree';

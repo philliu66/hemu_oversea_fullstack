@@ -18,12 +18,20 @@ export default function access(
     return codes.has(code);
   };
 
+  const canPlatform = isPlatformAdmin || isPlatformStaff;
+  const canSupplier = isSupplierAdmin || isSupplierStaff;
+
   return {
     canAdmin: isPlatformAdmin || role === 'admin',
-    canPlatform: isPlatformAdmin || isPlatformStaff,
+    canPlatform,
     canPlatformAdmin: isPlatformAdmin,
     canSupplierAdmin: isSupplierAdmin,
-    canSupplier: isSupplierAdmin || isSupplierStaff,
+    canSupplier,
+    /**
+     * 供应商侧业务数据（店铺/商品/模板/任务等）是否可写。
+     * 平台角色默认只读；供应商门户按权限码控制。
+     */
+    canWriteSupplierData: canSupplier,
     /** 路由级：配合 routes.ts 的 access + routeId */
     canAccessRoute: (route: { routeId?: string }) => has(route.routeId),
     /** 按钮/任意权限码 */

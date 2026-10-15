@@ -1,3 +1,4 @@
+import { useAccess } from '@umijs/max';
 import {
   App,
   Button,
@@ -151,8 +152,10 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
   onModeChange,
   onSaved,
 }) => {
+  const access = useAccess();
   const { message } = App.useApp();
   const readOnly = mode === 'view';
+  const canWrite = access.canWriteSupplierData;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -459,31 +462,37 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
 
   const footer =
     mode === 'view' ? (
-      <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-        <Popconfirm
-          title="确认删除该属性模板？"
-          onConfirm={async () => {
-            if (!templateId) {
-              return;
-            }
-            try {
-              await deleteSkuAttrTemplate(templateId, {
-                supplier_id: supplierId,
-              });
-              message.success('删除成功');
-              onSaved();
-              onClose();
-            } catch {
-              // 错误已由全局拦截器处理
-            }
-          }}
-        >
-          <Button danger>删除</Button>
-        </Popconfirm>
-        <Button type="primary" onClick={() => onModeChange('edit')}>
-          编辑
-        </Button>
-      </Space>
+      canWrite ? (
+        <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+          <Popconfirm
+            title="确认删除该属性模板？"
+            onConfirm={async () => {
+              if (!templateId) {
+                return;
+              }
+              try {
+                await deleteSkuAttrTemplate(templateId, {
+                  supplier_id: supplierId,
+                });
+                message.success('删除成功');
+                onSaved();
+                onClose();
+              } catch {
+                // 错误已由全局拦截器处理
+              }
+            }}
+          >
+            <Button danger>删除</Button>
+          </Popconfirm>
+          <Button type="primary" onClick={() => onModeChange('edit')}>
+            编辑
+          </Button>
+        </Space>
+      ) : (
+        <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+          <Button onClick={onClose}>关闭</Button>
+        </Space>
+      )
     ) : mode === 'create' ? (
       <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
         <Button onClick={onClose}>取消</Button>

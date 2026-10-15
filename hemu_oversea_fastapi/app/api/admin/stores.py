@@ -33,7 +33,10 @@ from app.schemas.store_inspection import (
 from app.services import products as product_service
 from app.services import store_oauth, stores as store_service
 from app.services.commerce import summarize_supplier_punish
-from app.services.supplier_scope import resolve_supplier_id
+from app.services.supplier_scope import (
+    assert_supplier_data_writable,
+    resolve_supplier_id,
+)
 
 router = APIRouter(
     prefix="/stores",
@@ -96,6 +99,7 @@ def create_store_authorize_url(
     db: Session = Depends(get_db),
 ) -> ApiResponse[StoreAuthorizePublic]:
     """按店铺类型生成平台授权链接（管理端登录后调用，前端再跳转）。"""
+    assert_supplier_data_writable(current_user)
     authorize_url, store_type = store_oauth.create_authorize_url(
         db,
         store_id=payload.id,
@@ -116,6 +120,7 @@ def create_store(
     current_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[StorePublic]:
+    assert_supplier_data_writable(current_user)
     supplier_id = resolve_supplier_id(db, current_user, payload.supplier_id)
     store = store_service.create_store(
         db,
@@ -137,6 +142,7 @@ def update_store(
     current_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[StorePublic]:
+    assert_supplier_data_writable(current_user)
     store = store_service.update_store(
         db,
         store_id=payload.id,
@@ -157,6 +163,7 @@ def delete_store(
     current_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
+    assert_supplier_data_writable(current_user)
     store_service.soft_delete_store(
         db, store_id=payload.id, actor_id=current_user.id
     )

@@ -80,3 +80,14 @@ def resolve_supplier_id(
         assert_supplier_accessible(db, actor, supplier_id)
         return supplier_id
     raise forbidden()
+
+
+def assert_supplier_data_writable(actor: User) -> None:
+    """
+    供应商侧业务数据（店铺/商品/模板/任务等）默认仅供应商可写。
+
+    平台角色仅允许查看，禁止新增/修改/删除（含授权、发布、执行等写操作）。
+    供应商管理、人员管理等平台自有能力不走此校验。
+    """
+    if actor.role in PLATFORM_ROLES:
+        raise forbidden("平台账号仅可查看供应商业务数据，不可新增、修改或删除")

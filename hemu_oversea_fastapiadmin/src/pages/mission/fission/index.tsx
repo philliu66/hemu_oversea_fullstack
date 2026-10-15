@@ -4,7 +4,7 @@ import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useAccess, useModel } from '@umijs/max';
 import { App, Button, Form, Input, Modal, Popconfirm, Select } from 'antd';
 import React, { useRef, useState } from 'react';
-import SupplierSelectField from '@/components/SupplierSelectField';
+import { buildPlatformSupplierSearchColumn } from '@/components/SupplierSelectField';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
   createMission,
@@ -138,21 +138,12 @@ const MissionFissionList: React.FC = () => {
   const columns: ProColumns<MissionPublic>[] = [
     ...(access.canPlatform
       ? [
-          {
-            title: '供应商',
-            dataIndex: 'supplier_id',
-            hideInTable: true,
-            order: 100,
-            renderFormItem: () => (
-              <SupplierSelectField
-                value={selectedSupplierId}
-                onChange={(v) => {
-                  setSelectedSupplierId(v);
-                  actionRef.current?.reload();
-                }}
-              />
-            ),
-          } as ProColumns<MissionPublic>,
+          buildPlatformSupplierSearchColumn<MissionPublic>({
+            onChange: (v) => {
+              setSelectedSupplierId(v);
+              actionRef.current?.reload();
+            },
+          }),
           {
             title: '供应商',
             dataIndex: 'supplier_name',
@@ -209,13 +200,15 @@ const MissionFissionList: React.FC = () => {
       width: 220,
       render: (_, record) => {
         const canEdit =
+          access.canWriteSupplierData &&
           access.can('mission.fission.create') &&
           (record.status === 'pending' || record.status === 'running');
         const canMark =
+          access.canWriteSupplierData &&
           access.can('mission.fission.finish') &&
           (record.status === 'pending' || record.status === 'running');
         const actions: React.ReactNode[] = [];
-        if (access.can('mission.fission.data')) {
+        if (access.can('mission.fission.data') || access.canPlatform) {
           actions.push(
             <Button
               key="data"
@@ -224,7 +217,7 @@ const MissionFissionList: React.FC = () => {
               shape="round"
               onClick={() => history.push(missionFissionDataPath(record.id))}
             >
-              {'设置任务数据'}
+              {access.canWriteSupplierData ? '设置任务数据' : '查看任务数据'}
             </Button>,
           );
         }
@@ -305,7 +298,7 @@ const MissionFissionList: React.FC = () => {
           showSizeChanger: true,
         }}
         toolBarRender={() =>
-          access.can('mission.fission.create')
+          access.canWriteSupplierData && access.can('mission.fission.create')
             ? [
                 <Button
                   type="primary"

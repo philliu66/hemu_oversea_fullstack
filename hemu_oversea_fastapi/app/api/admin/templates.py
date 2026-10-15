@@ -17,7 +17,10 @@ from app.schemas.sku_attr_template import (
     SkuAttrTemplateUpdate,
 )
 from app.services import sku_attr_templates as template_service
-from app.services.supplier_scope import resolve_supplier_id
+from app.services.supplier_scope import (
+    assert_supplier_data_writable,
+    resolve_supplier_id,
+)
 
 router = APIRouter(
     prefix="/templates/dh",
@@ -77,6 +80,7 @@ def create_sku_attr_template(
     current_user: User = Depends(require_perm("template.skuAttr")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[SkuAttrTemplatePublic]:
+    assert_supplier_data_writable(current_user)
     supplier_id = resolve_supplier_id(db, current_user, payload.supplier_id)
     return success(
         template_service.create_sku_attr_template(
@@ -99,6 +103,7 @@ def update_sku_attr_template(
     current_user: User = Depends(require_perm("template.skuAttr")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[SkuAttrTemplatePublic]:
+    assert_supplier_data_writable(current_user)
     supplier_id = resolve_supplier_id(db, current_user, payload.supplier_id)
     return success(
         template_service.update_sku_attr_template(
@@ -122,6 +127,7 @@ def delete_sku_attr_template(
     current_user: User = Depends(require_perm("template.skuAttr")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
+    assert_supplier_data_writable(current_user)
     supplier_id = resolve_supplier_id(db, current_user, payload.supplier_id)
     template_service.delete_sku_attr_template(
         db,

@@ -89,6 +89,7 @@ class MissionFissionDataDetail(BaseModel):
 class MissionFissionDataDetailPublic(BaseModel):
     id: int
     mission_id: int
+    supplier_id: int = Field(description="所属供应商 ID（由任务数据记录带出）")
     seed_product_id: int
     fission_status: str
     update_json: dict[str, Any]

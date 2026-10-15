@@ -7,7 +7,7 @@ import {
   ProFormSelect,
   ProFormText,
 } from '@ant-design/pro-components';
-import { history, useModel, useSearchParams } from '@umijs/max';
+import { history, useAccess, useModel, useSearchParams } from '@umijs/max';
 import {
   App,
   Button,
@@ -230,6 +230,7 @@ export const ProductEditor = forwardRef<
   ref,
 ) {
   const { message, modal } = App.useApp();
+  const access = useAccess();
   const { initialState } = useModel('@@initialState');
   const [searchParams] = useSearchParams();
   const querySupplierIdRaw = Number(searchParams.get('supplier_id'));
@@ -247,14 +248,13 @@ export const ProductEditor = forwardRef<
   );
   const [itemNamePlaceholder, setItemNamePlaceholder] =
     useState('请输入产品标题');
-  const mode: ProductPageMode =
+  const forceReadOnly =
+    readOnlyProp === true || !access.canWriteSupplierData;
+  const resolvedMode: ProductPageMode =
     modeProp ??
-    (readOnlyProp
-      ? 'view'
-      : productId || initialDetail
-        ? 'edit'
-        : 'create');
-  const editable = readOnlyProp === true ? false : isProductPageEditable(mode);
+    (productId || initialDetail ? 'edit' : 'create');
+  const mode: ProductPageMode = forceReadOnly ? 'view' : resolvedMode;
+  const editable = forceReadOnly ? false : isProductPageEditable(mode);
   const readOnly = !editable;
   const sourceProductId = mode === 'copy' ? fromId : productId;
   const formInstanceKey =
@@ -1128,7 +1128,7 @@ export const ProductEditor = forwardRef<
       title={pageTitle(mode)}
       onBack={() => history.push(PRODUCT_LIST_PATH)}
       extra={
-        mode === 'view' && productId ? (
+        access.canWriteSupplierData && mode === 'view' && productId ? (
           <Space wrap>
             <Button
               type="primary"

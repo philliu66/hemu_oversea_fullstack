@@ -4,7 +4,7 @@ import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useAccess, useModel } from '@umijs/max';
 import { App, Button, Popconfirm, Space, Tag } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
-import SupplierSelectField from '@/components/SupplierSelectField';
+import { buildPlatformSupplierSearchColumn } from '@/components/SupplierSelectField';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
   STORE_OAUTH_RESULT_MESSAGE_TYPE,
@@ -166,21 +166,12 @@ const StoreList: React.FC = () => {
   const columns: ProColumns<StorePublic>[] = [
     ...(access.canPlatform
       ? [
-          {
-            title: '供应商',
-            dataIndex: 'supplier_id',
-            hideInTable: true,
-            order: 100,
-            renderFormItem: () => (
-              <SupplierSelectField
-                value={selectedSupplierId}
-                onChange={(v) => {
-                  setSelectedSupplierId(v);
-                  actionRef.current?.reload();
-                }}
-              />
-            ),
-          } as ProColumns<StorePublic>,
+          buildPlatformSupplierSearchColumn<StorePublic>({
+            onChange: (v) => {
+              setSelectedSupplierId(v);
+              actionRef.current?.reload();
+            },
+          }),
           {
             title: '供应商',
             dataIndex: 'supplier_name',
@@ -285,34 +276,40 @@ const StoreList: React.FC = () => {
           <Button type="link" size="small" onClick={() => openView(record.id)}>
             {'查看'}
           </Button>
-          <Button type="link" size="small" onClick={() => openEdit(record.id)}>
-            {'编辑'}
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => void handleAuthorize(record.id)}
-          >
-            {'授权'}
-          </Button>
-          <Popconfirm
-            title={'确认删除该店铺？'}
-            onConfirm={async () => {
-              try {
-                await deleteStore(record.id);
-                message.success(
-                  '删除成功',
-                );
-                actionRef.current?.reload();
-              } catch {
-                // 错误已由全局拦截器处理
-              }
-            }}
-          >
-            <Button type="link" size="small" danger>
-              {'删除'}
-            </Button>
-          </Popconfirm>
+          {access.canWriteSupplierData ? (
+            <>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => openEdit(record.id)}
+              >
+                {'编辑'}
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => void handleAuthorize(record.id)}
+              >
+                {'授权'}
+              </Button>
+              <Popconfirm
+                title={'确认删除该店铺？'}
+                onConfirm={async () => {
+                  try {
+                    await deleteStore(record.id);
+                    message.success('删除成功');
+                    actionRef.current?.reload();
+                  } catch {
+                    // 错误已由全局拦截器处理
+                  }
+                }}
+              >
+                <Button type="link" size="small" danger>
+                  {'删除'}
+                </Button>
+              </Popconfirm>
+            </>
+          ) : null}
         </Space>
       ),
     },
@@ -332,16 +329,20 @@ const StoreList: React.FC = () => {
           pageSizeOptions: [10, 20, 50, 100],
           showSizeChanger: true,
         }}
-        toolBarRender={() => [
-          <Button
-            type="primary"
-            key="create"
-            icon={<PlusOutlined />}
-            onClick={openCreate}
-          >
-            {'新建'}
-          </Button>,
-        ]}
+        toolBarRender={() =>
+          access.canWriteSupplierData
+            ? [
+                <Button
+                  type="primary"
+                  key="create"
+                  icon={<PlusOutlined />}
+                  onClick={openCreate}
+                >
+                  {'新建'}
+                </Button>,
+              ]
+            : []
+        }
         request={async (params) => {
           const supplierId = resolveRequestSupplierId(
             currentUser,

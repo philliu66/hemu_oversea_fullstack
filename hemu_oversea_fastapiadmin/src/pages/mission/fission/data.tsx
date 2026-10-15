@@ -1,4 +1,4 @@
-﻿import { PageContainer } from '@ant-design/pro-components';
+import { PageContainer } from '@ant-design/pro-components';
 import { history, useAccess, useParams } from '@umijs/max';
 import { App, Card, Spin } from 'antd';
 import React, { useEffect, useState } from 'react';
@@ -15,19 +15,21 @@ const MissionFissionDataPage: React.FC = () => {
   const missionId = parseMissionId(id);
   const [mission, setMission] = useState<MissionPublic>();
   const [loading, setLoading] = useState(true);
-  const canSetData = access.can('mission.fission.data');
+  const canViewData =
+    access.can('mission.fission.data') || access.canPlatform;
+  const canWriteData = access.canWriteSupplierData;
 
   useEffect(() => {
-    if (!canSetData) {
+    if (!canViewData) {
       message.warning(
-        '无设置任务数据权限',
+        '无查看任务数据权限',
       );
       history.replace(MISSION_FISSION_PATH);
     }
-  }, [canSetData, message]);
+  }, [canViewData, message]);
 
   useEffect(() => {
-    if (!missionId || !canSetData) {
+    if (!missionId || !canViewData) {
       setLoading(false);
       return;
     }
@@ -52,7 +54,7 @@ const MissionFissionDataPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [canSetData, missionId]);
+  }, [canViewData, missionId]);
 
   if (!missionId) {
     return (
@@ -66,7 +68,7 @@ const MissionFissionDataPage: React.FC = () => {
 
   return (
     <PageContainer
-      title={'设置任务数据'}
+      title={canWriteData ? '设置任务数据' : '查看任务数据'}
       onBack={() => history.push(MISSION_FISSION_PATH)}
     >
       <Spin spinning={loading}>
@@ -75,7 +77,7 @@ const MissionFissionDataPage: React.FC = () => {
           <FissionDataTable
             missionId={missionId}
             supplierId={mission?.supplier_id}
-            editable
+            editable={canWriteData}
           />
         </div>
       </Spin>

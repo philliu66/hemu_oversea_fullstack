@@ -831,6 +831,7 @@ export type MissionUpdateParams = {
 export type MissionFissionDataDetailPublic = {
   id: number;
   mission_id: number;
+  supplier_id: number;
   seed_product_id: number;
   fission_status: FissionStatus | string;
   update_json: Record<string, unknown>;

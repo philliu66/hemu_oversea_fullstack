@@ -25,6 +25,7 @@ const MissionFissionDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
   const canViewLogs = access.can('mission.logs');
+  const canWrite = access.canWriteSupplierData;
 
   useEffect(() => {
     if (!missionId) {
@@ -55,6 +56,7 @@ const MissionFissionDetailPage: React.FC = () => {
   }, [missionId]);
 
   const canExecute =
+    canWrite &&
     !!mission &&
     mission.status !== 'marked_finished' &&
     mission.status !== 'running';
@@ -104,35 +106,41 @@ const MissionFissionDetailPage: React.FC = () => {
       }
       onBack={() => history.push(MISSION_FISSION_PATH)}
       extra={
-        <Button
-          type="primary"
-          disabled={!canExecute}
-          loading={executing}
-          onClick={async () => {
-            setExecuting(true);
-            try {
-              const result = await executeMission(missionId);
-              message.success(`已提交执行，共 ${result.queued_count} 条`);
-              const detail = await fetchMissionDetail(missionId);
-              setMission(detail);
-              if (canViewLogs) {
-                logActionRef.current?.reload();
+        canWrite ? (
+          <Button
+            type="primary"
+            disabled={!canExecute}
+            loading={executing}
+            onClick={async () => {
+              setExecuting(true);
+              try {
+                const result = await executeMission(missionId);
+                message.success(`已提交执行，共 ${result.queued_count} 条`);
+                const detail = await fetchMissionDetail(missionId);
+                setMission(detail);
+                if (canViewLogs) {
+                  logActionRef.current?.reload();
+                }
+              } catch {
+                // 业务错误由全局错误提示展示
+              } finally {
+                setExecuting(false);
               }
-            } catch {
-              // 业务错误由全局错误提示展示
-            } finally {
-              setExecuting(false);
-            }
-          }}
-        >
-          {'执行任务'}
-        </Button>
+            }}
+          >
+            {'执行任务'}
+          </Button>
+        ) : undefined
       }
     >
       <Spin spinning={loading}>
         {mission ? <MissionInfo mission={mission} /> : null}
         <div style={{ marginTop: 16 }}>
-          <FissionDataTable missionId={missionId} />
+          <FissionDataTable
+            missionId={missionId}
+            supplierId={mission?.supplier_id}
+            editable={canWrite}
+          />
         </div>
         {canViewLogs ? (
           <div style={{ marginTop: 16 }}>

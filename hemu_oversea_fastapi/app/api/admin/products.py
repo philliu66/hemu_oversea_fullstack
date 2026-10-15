@@ -20,7 +20,10 @@ from app.schemas.product import (
 from app.services import product_publish as product_publish_service
 from app.services import products as product_service
 from app.services.sku_list_prices import calc_sku_list_price
-from app.services.supplier_scope import resolve_supplier_id
+from app.services.supplier_scope import (
+    assert_supplier_data_writable,
+    resolve_supplier_id,
+)
 
 router = APIRouter(
     prefix="/product",
@@ -132,6 +135,7 @@ def publish_dh_product(
       成功后写回 item_code / 裂变状态
     - type=addnew：按 info 完整商品数据发布
     """
+    assert_supplier_data_writable(current_user)
     result = product_publish_service.publish_product(
         db,
         actor=current_user,

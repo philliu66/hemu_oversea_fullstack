@@ -34,6 +34,7 @@ export function EditFissionDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [rawDetail, setRawDetail] = useState<DhProductDetailPublic>();
   const [seedDetail, setSeedDetail] = useState<DhProductDetailPublic>();
+  const [supplierId, setSupplierId] = useState<number>();
   const editorRef = useRef<ProductEditorHandle>(null);
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export function EditFissionDrawer({
     setLoading(true);
     setRawDetail(undefined);
     setSeedDetail(undefined);
+    setSupplierId(undefined);
     void (async () => {
       try {
         const data = await fetchMissionFissionDataDetail({
@@ -78,6 +80,7 @@ export function EditFissionDrawer({
         }
         setRawDetail(data.raw_json);
         setSeedDetail(seed);
+        setSupplierId(data.supplier_id);
       } catch (error: unknown) {
         if (!cancelled) {
           message.error(
@@ -166,9 +169,10 @@ export function EditFissionDrawer({
       <Spin spinning={loading}>
         {rawDetail ? (
           <FissionProductStep
-            key={dataId}
+            key={`${dataId}-${supplierId ?? 0}`}
             ref={editorRef}
             initialDetail={rawDetail}
+            supplierId={supplierId}
           />
         ) : null}
       </Spin>

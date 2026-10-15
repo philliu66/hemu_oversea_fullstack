@@ -1,3 +1,4 @@
+import type { ProColumns } from '@ant-design/pro-components';
 import { useAccess, useModel } from '@umijs/max';
 import { Select } from 'antd';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -15,9 +16,48 @@ type Props = {
   visible?: boolean;
 };
 
+export type SupplierSelectOption = { label: string; value: number };
+
+/** 拉取平台可见供应商下拉（admin=全部，staff=自己维护） */
+export async function loadSupplierSelectOptions(): Promise<
+  SupplierSelectOption[]
+> {
+  const items: SupplierOption[] = await fetchSupplierOptions();
+  return items.map((item) => ({
+    label: `${item.name}（${item.code}）`,
+    value: item.id,
+  }));
+}
+
+/**
+ * ProTable 搜索区「供应商」列。必须带 valueType: 'select'，
+ * 否则 ProComponents 会落成普通文本输入框。
+ */
+export function buildPlatformSupplierSearchColumn<DataType>(options: {
+  onChange: (value: number | undefined) => void;
+}): ProColumns<DataType> {
+  return {
+    title: '供应商',
+    dataIndex: 'supplier_id',
+    valueType: 'select',
+    hideInTable: true,
+    order: 100,
+    fieldProps: {
+      showSearch: true,
+      allowClear: true,
+      optionFilterProp: 'label',
+      placeholder: '请选择供应商',
+      onChange: (value: number | null | undefined) => {
+        options.onChange(value == null ? undefined : Number(value));
+      },
+    },
+    request: async () => loadSupplierSelectOptions(),
+  };
+}
+
 /**
  * 平台角色供应商下拉。供应商角色不渲染。
- * 可用于 ProTable renderFormItem 或独立筛选区。
+ * 可用于独立筛选区（非 ProTable 搜索表单）。
  */
 const SupplierSelectField: React.FC<Props> = ({
   value,
@@ -34,21 +74,13 @@ const SupplierSelectField: React.FC<Props> = ({
   const show =
     visible ?? (Boolean(access.canPlatform) || isPlatformRole(role));
 
-  const [options, setOptions] = useState<
-    { label: string; value: number }[]
-  >([]);
+  const [options, setOptions] = useState<SupplierSelectOption[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadOptions = useCallback(async () => {
     setLoading(true);
     try {
-      const items: SupplierOption[] = await fetchSupplierOptions();
-      setOptions(
-        items.map((item) => ({
-          label: `${item.name}（${item.code}）`,
-          value: item.id,
-        })),
-      );
+      setOptions(await loadSupplierSelectOptions());
     } catch {
       setOptions([]);
     } finally {

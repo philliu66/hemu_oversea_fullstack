@@ -5,7 +5,7 @@ import { history, useAccess, useModel } from '@umijs/max';
 import { App, Button, Image, Space, Typography } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import SupplierSelectField from '@/components/SupplierSelectField';
+import { buildPlatformSupplierSearchColumn } from '@/components/SupplierSelectField';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import { DH_PRODUCT_STATE_LABEL, DH_PRODUCT_STATES } from '@/constants/product';
 import { fetchDhSeedCategories } from '@/services/admin/categories';
@@ -24,6 +24,7 @@ import {
 import {
   formatSyncState,
   productCreatePath,
+  productDetailPath,
   productEditPath,
 } from '../utils';
 
@@ -236,21 +237,12 @@ const ProductList: React.FC = () => {
   const columns: ProColumns<DhProductPublic>[] = [
     ...(access.canPlatform
       ? [
-          {
-            title: '供应商',
-            dataIndex: 'supplier_id',
-            hideInTable: true,
-            order: 100,
-            renderFormItem: () => (
-              <SupplierSelectField
-                value={selectedSupplierId}
-                onChange={(v) => {
-                  setSelectedSupplierId(v);
-                  actionRef.current?.reload();
-                }}
-              />
-            ),
-          } as ProColumns<DhProductPublic>,
+          buildPlatformSupplierSearchColumn<DhProductPublic>({
+            onChange: (v) => {
+              setSelectedSupplierId(v);
+              actionRef.current?.reload();
+            },
+          }),
           {
             title: '供应商',
             dataIndex: 'supplier_name',
@@ -347,13 +339,14 @@ const ProductList: React.FC = () => {
           )}
           <div style={{ minWidth: 0, flex: 1 }}>
             <Typography.Link
-              onClick={() =>
+              onClick={() => {
+                const sid = supplierId ?? record.supplier_id ?? undefined;
                 history.push(
-                  productEditPath(record.id, {
-                    supplierId: supplierId ?? record.supplier_id ?? undefined,
-                  }),
-                )
-              }
+                  access.canWriteSupplierData
+                    ? productEditPath(record.id, { supplierId: sid })
+                    : productDetailPath(record.id, { supplierId: sid }),
+                );
+              }}
               style={{ display: 'block', marginBottom: 4 }}
             >
               <Typography.Paragraph
@@ -443,22 +436,26 @@ const ProductList: React.FC = () => {
         }}
         options={false}
         scroll={{ x: 960 }}
-        toolBarRender={() => [
-          <Button
-            type="primary"
-            key="create"
-            icon={<PlusOutlined />}
-            onClick={() =>
-              history.push(
-                productCreatePath({
-                  supplierId: supplierId,
-                }),
-              )
-            }
-          >
-            {'新建'}
-          </Button>,
-        ]}
+        toolBarRender={() =>
+          access.canWriteSupplierData
+            ? [
+                <Button
+                  type="primary"
+                  key="create"
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    history.push(
+                      productCreatePath({
+                        supplierId: supplierId,
+                      }),
+                    )
+                  }
+                >
+                  {'新建'}
+                </Button>,
+              ]
+            : []
+        }
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,
           showSizeChanger: true,

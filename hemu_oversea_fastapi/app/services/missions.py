@@ -76,20 +76,27 @@ def _get_visible_mission(
     *,
     mission_id: int,
     actor: User,
-    supplier_id: int | None,
+    supplier_id: int | None = None,
 ) -> Mission:
-    mission = db.scalar(
-        select(Mission).where(
-            Mission.id == mission_id,
-            *_visible_filters(db, actor, supplier_id),
-        )
-    )
-    if mission is not None:
-        return mission
-    existing = db.get(Mission, mission_id)
-    if existing is None or existing.is_deleted:
+    """按任务 ID 读取并校验可见性。
+
+    已有 mission_id 时可不传 supplier_id：从任务记录解析供应商后再做作用域校验。
+    若显式传入 supplier_id，须与任务归属一致。
+    """
+    mission = db.get(Mission, mission_id)
+    if mission is None or mission.is_deleted:
         raise not_found("任务不存在")
-    raise forbidden("无权查看该任务")
+
+    scoped_supplier_id = resolve_supplier_id(
+        db,
+        actor,
+        supplier_id if supplier_id is not None else mission.supplier_id,
+    )
+    if mission.supplier_id != scoped_supplier_id:
+        raise forbidden("无权查看该任务")
+    if actor.role == Role.SUPPLIER_STAFF.value and mission.worker_id != actor.id:
+        raise forbidden("无权查看该任务")
+    return mission
 
 
 def _require_supplier_actor(
@@ -533,6 +540,7 @@ def get_fission_data_detail(
     return MissionFissionDataDetailPublic(
         id=row.id,
         mission_id=row.mission_id,
+        supplier_id=row.supplier_id,
         seed_product_id=row.seed_product_id,
         fission_status=row.fission_status,
         update_json=row.update_json or {},

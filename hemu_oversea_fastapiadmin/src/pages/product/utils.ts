@@ -14,8 +14,15 @@ export type ProductPageRouteState = {
   fromId?: number;
 };
 
-export function productDetailPath(id: number) {
-  return `/product/detail/${id}`;
+export function productDetailPath(
+  id: number,
+  options?: { supplierId?: number },
+) {
+  const base = `/product/detail/${id}`;
+  if (options?.supplierId) {
+    return `${base}?supplier_id=${options.supplierId}`;
+  }
+  return base;
 }
 
 export function productEditPath(

@@ -3,7 +3,7 @@ import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useAccess, useModel } from '@umijs/max';
 import { App, Button, Popconfirm, Space } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
-import SupplierSelectField from '@/components/SupplierSelectField';
+import { buildPlatformSupplierSearchColumn } from '@/components/SupplierSelectField';
 import CategorySelectField, {
   formatCategoryPathDisplay,
 } from '@/pages/product/detail/CategorySelectField';
@@ -118,21 +118,12 @@ const SkuAttrTemplatePage: React.FC = () => {
   const columns: ProColumns<SkuAttrTemplateListItemPublic>[] = [
     ...(access.canPlatform
       ? [
-          {
-            title: '供应商',
-            dataIndex: 'supplier_id',
-            hideInTable: true,
-            order: 100,
-            renderFormItem: () => (
-              <SupplierSelectField
-                value={selectedSupplierId}
-                onChange={(v) => {
-                  setSelectedSupplierId(v);
-                  actionRef.current?.reload();
-                }}
-              />
-            ),
-          } as ProColumns<SkuAttrTemplateListItemPublic>,
+          buildPlatformSupplierSearchColumn<SkuAttrTemplateListItemPublic>({
+            onChange: (v) => {
+              setSelectedSupplierId(v);
+              actionRef.current?.reload();
+            },
+          }),
           {
             title: '供应商',
             dataIndex: 'supplier_name',
@@ -196,28 +187,30 @@ const SkuAttrTemplatePage: React.FC = () => {
           <Button type="link" size="small" onClick={() => openView(record)}>
             查看属性
           </Button>
-          <Popconfirm
-            title="确认删除该属性模板？"
-            onConfirm={async () => {
-              try {
-                await deleteSkuAttrTemplate(record.id, {
-                  supplier_id:
-                    resolveRequestSupplierId(
-                      currentUser,
-                      record.supplier_id ?? selectedSupplierId,
-                    ) ?? undefined,
-                });
-                message.success('删除成功');
-                void actionRef.current?.reload();
-              } catch {
-                // 错误已由全局拦截器处理
-              }
-            }}
-          >
-            <Button type="link" size="small" danger>
-              删除
-            </Button>
-          </Popconfirm>
+          {access.canWriteSupplierData ? (
+            <Popconfirm
+              title="确认删除该属性模板？"
+              onConfirm={async () => {
+                try {
+                  await deleteSkuAttrTemplate(record.id, {
+                    supplier_id:
+                      resolveRequestSupplierId(
+                        currentUser,
+                        record.supplier_id ?? selectedSupplierId,
+                      ) ?? undefined,
+                  });
+                  message.success('删除成功');
+                  void actionRef.current?.reload();
+                } catch {
+                  // 错误已由全局拦截器处理
+                }
+              }}
+            >
+              <Button type="link" size="small" danger>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       ),
     },
@@ -233,11 +226,15 @@ const SkuAttrTemplatePage: React.FC = () => {
           labelWidth: 'auto',
           defaultCollapsed: false,
         }}
-        toolBarRender={() => [
-          <Button key="create" type="primary" onClick={openCreate}>
-            新增
-          </Button>,
-        ]}
+        toolBarRender={() =>
+          access.canWriteSupplierData
+            ? [
+                <Button key="create" type="primary" onClick={openCreate}>
+                  新增
+                </Button>,
+              ]
+            : []
+        }
         onReset={() => {
           setSearchCategory(null);
           setSearchCategoryPath(undefined);

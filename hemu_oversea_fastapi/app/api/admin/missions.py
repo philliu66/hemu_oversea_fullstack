@@ -25,6 +25,7 @@ from app.schemas.mission import (
     MissionUpdate,
 )
 from app.services import missions as mission_service
+from app.services.supplier_scope import assert_supplier_data_writable
 
 router = APIRouter(
     prefix="/missions",
@@ -73,6 +74,7 @@ def create_mission(
     current_user: User = Depends(require_perm("mission.fission.create")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionPublic]:
+    assert_supplier_data_writable(current_user)
     return success(
         mission_service.create_mission(
             db,
@@ -91,6 +93,7 @@ def update_mission(
     current_user: User = Depends(require_perm("mission.fission.create")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionPublic]:
+    assert_supplier_data_writable(current_user)
     return success(
         mission_service.update_mission(
             db,
@@ -110,6 +113,7 @@ def mark_mission_finished(
     current_user: User = Depends(require_perm("mission.fission.finish")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionPublic]:
+    assert_supplier_data_writable(current_user)
     return success(
         mission_service.mark_mission_finished(
             db,
@@ -188,6 +192,7 @@ def add_fission_data(
     current_user: User = Depends(require_perm("mission.fission.data")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionFissionDataPublic]:
+    assert_supplier_data_writable(current_user)
     return success(
         mission_service.add_fission_data(
             db,
@@ -210,6 +215,7 @@ def update_fission_data(
     current_user: User = Depends(require_perm("mission.fission.data")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionFissionDataPublic]:
+    assert_supplier_data_writable(current_user)
     return success(
         mission_service.update_fission_data(
             db,
@@ -228,6 +234,7 @@ def delete_fission_data(
     current_user: User = Depends(require_perm("mission.fission.data")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
+    assert_supplier_data_writable(current_user)
     mission_service.delete_fission_data(
         db,
         actor=current_user,
@@ -246,6 +253,7 @@ def mark_fission_data_finished(
     current_user: User = Depends(require_perm("mission.fission.data")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionFissionDataPublic]:
+    assert_supplier_data_writable(current_user)
     return success(
         mission_service.mark_fission_data_finished(
             db,
@@ -262,6 +270,7 @@ def import_fission_data(
     current_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
+    assert_supplier_data_writable(current_user)
     mission_service.reject_placeholder(
         db,
         mission_id=payload.mission_id,
@@ -277,6 +286,7 @@ def execute_mission(
     current_user: User = Depends(require_perm("mission.fission")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
+    assert_supplier_data_writable(current_user)
     return success(
         mission_service.execute_mission(
             db,
