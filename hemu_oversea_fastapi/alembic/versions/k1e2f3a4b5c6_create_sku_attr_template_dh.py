@@ -123,6 +123,8 @@ def upgrade() -> None:
                     {"code": seed["parent_code"]},
                 ).scalar_one()
                 code_to_id[seed["parent_code"]] = parent_id
+        # c6 seeds the live permission catalog, which already includes these
+        # codes on a fresh database. Skip the insert when the row exists.
         perm_id = conn.execute(
             sa.text(
                 """
@@ -130,6 +132,7 @@ def upgrade() -> None:
                     (code, parent_id, type, title, path, scope, sort_order, is_active)
                 VALUES
                     (:code, :parent_id, :type, :title, :path, :scope, :sort_order, true)
+                ON CONFLICT (code) DO NOTHING
                 RETURNING id
                 """
             ),
@@ -142,7 +145,12 @@ def upgrade() -> None:
                 "scope": seed["scope"],
                 "sort_order": seed["sort_order"],
             },
-        ).scalar_one()
+        ).scalar()
+        if perm_id is None:
+            perm_id = conn.execute(
+                sa.text("SELECT id FROM permissions WHERE code = :code"),
+                {"code": seed["code"]},
+            ).scalar_one()
         code_to_id[seed["code"]] = perm_id
 
     for perm_id in code_to_id.values():

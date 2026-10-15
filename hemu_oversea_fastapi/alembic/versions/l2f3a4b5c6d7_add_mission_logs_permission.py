@@ -26,6 +26,8 @@ def upgrade() -> None:
         sa.text("SELECT id FROM permissions WHERE code = :code"),
         {"code": _PARENT_CODE},
     ).scalar_one()
+    # c6 seeds the live permission catalog, which already includes this code
+    # on a fresh database. Reuse the existing row when the insert conflicts.
     perm_id = conn.execute(
         sa.text(
             """
@@ -33,11 +35,17 @@ def upgrade() -> None:
                 (code, parent_id, type, title, path, scope, sort_order, is_active)
             VALUES
                 (:code, :parent_id, 'button', '查看任务日志', NULL, 'supplier', 52, true)
+            ON CONFLICT (code) DO NOTHING
             RETURNING id
             """
         ),
         {"code": _CODE, "parent_id": parent_id},
-    ).scalar_one()
+    ).scalar()
+    if perm_id is None:
+        perm_id = conn.execute(
+            sa.text("SELECT id FROM permissions WHERE code = :code"),
+            {"code": _CODE},
+        ).scalar_one()
     conn.execute(
         sa.text(
             """
