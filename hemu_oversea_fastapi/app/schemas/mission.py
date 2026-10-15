@@ -8,6 +8,10 @@ class MissionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=100, description="任务标题")
     description: str | None = Field(default=None, description="任务描述")
     worker_id: int = Field(ge=1, description="指定人员用户 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略该字段；平台身份必填",
+    )
 
 
 class MissionUpdate(BaseModel):
@@ -15,6 +19,10 @@ class MissionUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=100, description="任务标题")
     description: str | None = Field(default=None, description="任务描述")
     worker_id: int = Field(ge=1, description="指定人员用户 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份建议传入",
+    )
 
 
 class MissionList(BaseModel):
@@ -37,6 +45,10 @@ class MissionDetail(BaseModel):
 
 class MissionMarkFinished(BaseModel):
     id: int = Field(ge=1, description="任务 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份建议传入",
+    )
 
 
 class MissionFissionDataList(BaseModel):
@@ -124,6 +136,7 @@ class MissionExecute(BaseModel):
 class MissionPublic(BaseModel):
     id: int
     supplier_id: int
+    supplier_name: str | None = Field(default=None, description="供应商名称")
     title: str
     description: str | None
     status: str

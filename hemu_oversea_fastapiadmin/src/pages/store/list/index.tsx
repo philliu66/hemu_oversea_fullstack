@@ -1,8 +1,10 @@
 ﻿import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { useAccess, useModel } from '@umijs/max';
 import { App, Button, Popconfirm, Space, Tag } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
+import SupplierSelectField from '@/components/SupplierSelectField';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
   STORE_OAUTH_RESULT_MESSAGE_TYPE,
@@ -20,6 +22,10 @@ import {
 } from '@/services/admin/stores';
 import type { StorePublic, StoreType } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
+import {
+  needsSupplierSelection,
+  resolveRequestSupplierId,
+} from '@/utils/portalScope';
 import { openAuthorizeWindow } from '../openAuthorizeWindow';
 import {
   StoreFormDrawer,
@@ -31,6 +37,7 @@ type StoreTableParams = {
   pageSize?: number;
   keyword?: string;
   store_type?: StoreType | string;
+  supplier_id?: number;
 };
 
 function isOauthStatus(value: number): value is StoreOauthStatusValue {
@@ -43,10 +50,14 @@ function isOauthStatus(value: number): value is StoreOauthStatusValue {
 
 const StoreList: React.FC = () => {
   const { message } = App.useApp();
+  const access = useAccess();
+  const { initialState } = useModel('@@initialState');
+  const currentUser = initialState?.currentUser;
   const actionRef = useRef<ActionType | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<StoreDrawerMode>('create');
   const [activeId, setActiveId] = useState<number>();
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number>();
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -86,6 +97,10 @@ const StoreList: React.FC = () => {
   }, [message]);
 
   const openCreate = () => {
+    if (needsSupplierSelection(currentUser, selectedSupplierId)) {
+      message.warning('请先选择供应商');
+      return;
+    }
     setActiveId(undefined);
     setDrawerMode('create');
     setDrawerOpen(true);
@@ -149,6 +164,33 @@ const StoreList: React.FC = () => {
   };
 
   const columns: ProColumns<StorePublic>[] = [
+    ...(access.canPlatform
+      ? [
+          {
+            title: '供应商',
+            dataIndex: 'supplier_id',
+            hideInTable: true,
+            order: 100,
+            renderFormItem: () => (
+              <SupplierSelectField
+                value={selectedSupplierId}
+                onChange={(v) => {
+                  setSelectedSupplierId(v);
+                  actionRef.current?.reload();
+                }}
+              />
+            ),
+          } as ProColumns<StorePublic>,
+          {
+            title: '供应商',
+            dataIndex: 'supplier_name',
+            search: false,
+            width: 160,
+            ellipsis: true,
+            render: (_, record) => record.supplier_name || '-',
+          } as ProColumns<StorePublic>,
+        ]
+      : []),
     {
       title: '关键词',
       dataIndex: 'keyword',
@@ -301,6 +343,13 @@ const StoreList: React.FC = () => {
           </Button>,
         ]}
         request={async (params) => {
+          const supplierId = resolveRequestSupplierId(
+            currentUser,
+            params.supplier_id ?? selectedSupplierId,
+          );
+          if (needsSupplierSelection(currentUser, supplierId)) {
+            return { data: [], success: true, total: 0 };
+          }
           try {
             const result = await fetchStoreList({
               page: params.current,
@@ -310,6 +359,7 @@ const StoreList: React.FC = () => {
                 typeof params.store_type === 'string' && params.store_type
                   ? (params.store_type as StoreType)
                   : undefined,
+              supplier_id: supplierId,
             });
             return {
               data: result.items,
@@ -331,6 +381,7 @@ const StoreList: React.FC = () => {
         open={drawerOpen}
         mode={drawerMode}
         storeId={activeId}
+        supplierId={resolveRequestSupplierId(currentUser, selectedSupplierId)}
         onClose={closeDrawer}
         onSuccess={() => actionRef.current?.reload()}
         onSwitchToEdit={

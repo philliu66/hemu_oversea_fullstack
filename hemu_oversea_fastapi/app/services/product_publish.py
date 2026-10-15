@@ -15,6 +15,7 @@ from app.models.mission import (
     MissionDataDhFission,
 )
 from app.models.product_dh import ProductDh
+from app.models.store import Store
 from app.models.user import User
 from app.services.dhgate import add_item, get_dhgate_client, get_item_html
 from app.services.dhgate.categories import get_category
@@ -26,6 +27,7 @@ from app.services.dhgate.items import (
 )
 from app.services.dhgate.response import format_dhgate_error_message
 from app.services.missions import _get_visible_mission, _require_supplier_actor
+from app.services.supplier_scope import resolve_supplier_id
 
 
 PUBLISH_TYPE_ADDNEW = "addnew"
@@ -591,6 +593,7 @@ def publish_product(
     publish_type: str,
     mission_data_fission_id: int | None,
     info: dict[str, Any] | None,
+    supplier_id: int | None = None,
 ) -> dict[str, Any]:
     """
     发布商品。
@@ -610,8 +613,18 @@ def publish_product(
             store_id_int = int(store_id)
         except (TypeError, ValueError):
             raise bad_request("info.store_id 无效") from None
-        if actor.supplier_id is None:
-            raise bad_request("当前账号未绑定供应商，无法发布商品")
+        store = db.get(Store, store_id_int)
+        if store is None or store.is_deleted:
+            raise not_found("店铺不存在")
+        if store.supplier_id is None:
+            raise bad_request("店铺未绑定供应商")
+        scoped_supplier_id = resolve_supplier_id(
+            db,
+            actor,
+            supplier_id if supplier_id is not None else store.supplier_id,
+        )
+        if store.supplier_id != scoped_supplier_id:
+            raise forbidden("只能发布到本供应商下的店铺")
         result = _publish_detail_to_store(
             db,
             store_id=store_id_int,
@@ -632,12 +645,17 @@ def publish_product(
     # addfission
     if mission_data_fission_id is None or int(mission_data_fission_id) < 1:
         raise bad_request("type=addfission 时 mission_data_fission_id 必传")
-    supplier_id = _require_supplier_actor(actor)
     row = db.get(MissionDataDhFission, int(mission_data_fission_id))
     if row is None or row.is_deleted:
         raise not_found("裂变任务数据不存在")
-    if row.supplier_id != supplier_id:
+    scoped_supplier_id = _require_supplier_actor(
+        db,
+        actor,
+        supplier_id if supplier_id is not None else row.supplier_id,
+    )
+    if row.supplier_id != scoped_supplier_id:
         raise forbidden("只能操作本供应商的任务数据")
+    supplier_id = scoped_supplier_id
     _get_visible_mission(
         db,
         mission_id=row.mission_id,

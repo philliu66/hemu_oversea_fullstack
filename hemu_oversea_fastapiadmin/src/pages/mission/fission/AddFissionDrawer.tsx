@@ -11,11 +11,13 @@ import { buildFissionUpdateData } from './fissionUpdate';
 export function AddFissionDrawer({
   open,
   missionId,
+  supplierId,
   onClose,
   onAdded,
 }: {
   open: boolean;
   missionId: number;
+  supplierId?: number;
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -232,7 +234,10 @@ export function AddFissionDrawer({
             }}
           >
             <div onSubmit={(event) => event.stopPropagation()}>
-              <SeedProductSelectTable onSelect={handleSelect} />
+              <SeedProductSelectTable
+                onSelect={handleSelect}
+                supplierId={supplierId}
+              />
             </div>
           </StepsForm.StepForm>
           <StepsForm.StepForm
@@ -245,6 +250,7 @@ export function AddFissionDrawer({
                 key={`${selected.id}-${editorNonce}`}
                 ref={editorRef}
                 productId={selected.id}
+                supplierId={supplierId ?? selected.supplier_id ?? undefined}
                 applySkuAttrTemplateOnCategoryChange
                 seedTitleAsItemNamePlaceholder
               />

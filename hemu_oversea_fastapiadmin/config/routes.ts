@@ -130,7 +130,7 @@ export default [
   },
   {
     path: '/template',
-    name: '模版管理',
+    name: '模板管理',
     icon: 'fileText',
     routeId: 'template',
     access: 'canAccessRoute',

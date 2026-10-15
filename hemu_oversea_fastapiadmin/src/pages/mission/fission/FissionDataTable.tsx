@@ -43,9 +43,11 @@ const FISSION_STATUS_LABEL: Record<FissionStatus, string> = {
 
 export function FissionDataTable({
   missionId,
+  supplierId,
   editable = false,
 }: {
   missionId: number;
+  supplierId?: number;
   editable?: boolean;
 }) {
   const { message } = App.useApp();
@@ -217,6 +219,7 @@ export function FissionDataTable({
                   const result = await publishDhProduct({
                     type: 'addfission',
                     mission_data_fission_id: record.id,
+                    supplier_id: supplierId,
                   });
                   message.success(
                     result.item_code
@@ -382,6 +385,7 @@ export function FissionDataTable({
       <AddFissionDrawer
         open={addOpen}
         missionId={missionId}
+        supplierId={supplierId}
         onClose={() => setAddOpen(false)}
         onAdded={() => {
           setAddOpen(false);

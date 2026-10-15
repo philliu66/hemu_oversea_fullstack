@@ -18,15 +18,30 @@ export function productDetailPath(id: number) {
   return `/product/detail/${id}`;
 }
 
-export function productEditPath(id: number) {
-  return `/product/edit/${id}`;
+export function productEditPath(
+  id: number,
+  options?: { supplierId?: number },
+) {
+  const base = `/product/edit/${id}`;
+  if (options?.supplierId) {
+    return `${base}?supplier_id=${options.supplierId}`;
+  }
+  return base;
 }
 
-export function productCreatePath(options?: { from?: number }) {
+export function productCreatePath(options?: {
+  from?: number;
+  supplierId?: number;
+}) {
+  const params = new URLSearchParams();
   if (options?.from) {
-    return `${PRODUCT_CREATE_PATH}?from=${options.from}`;
+    params.set('from', String(options.from));
   }
-  return PRODUCT_CREATE_PATH;
+  if (options?.supplierId) {
+    params.set('supplier_id', String(options.supplierId));
+  }
+  const qs = params.toString();
+  return qs ? `${PRODUCT_CREATE_PATH}?${qs}` : PRODUCT_CREATE_PATH;
 }
 
 export function parseProductId(value?: string | null) {

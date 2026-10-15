@@ -7,7 +7,7 @@ from app.core.deps import (
     get_current_admin_user,
     get_pagination,
     require_admin_user,
-    require_super_admin,
+    require_platform_admin,
 )
 from app.core.roles import Role
 from app.models.user import User
@@ -79,7 +79,7 @@ def list_users(
 @router.post("", status_code=201, response_model=ApiResponse[UserPublic])
 def create_user(
     payload: AdminUserCreate,
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> ApiResponse[UserPublic]:
     user = user_service.create_user(
@@ -119,7 +119,7 @@ def update_user_status(
 def update_user_role(
     user_id: int,
     payload: UserRoleUpdate,
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> ApiResponse[UserPublic]:
     user = user_service.set_user_role(
@@ -137,7 +137,7 @@ def update_user_role(
 def reset_user_password(
     user_id: int,
     payload: AdminPasswordReset,
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
     user_service.reset_user_password(
@@ -152,7 +152,7 @@ def reset_user_password(
 @router.delete("/{user_id}", response_model=ApiResponse[dict])
 def delete_user(
     user_id: int,
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict]:
     user_service.soft_delete_user(db, user_id=user_id, actor=current_user)

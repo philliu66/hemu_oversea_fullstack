@@ -92,6 +92,19 @@ const SupplierList: React.FC = () => {
       search: false,
       ellipsis: true,
     },
+    ...(access.canPlatform
+      ? [
+          {
+            title: '维护管理员',
+            dataIndex: 'created_by_name',
+            search: false,
+            width: 140,
+            ellipsis: true,
+            render: (_: unknown, record: SupplierPublic) =>
+              record.created_by_name || '-',
+          } as ProColumns<SupplierPublic>,
+        ]
+      : []),
     {
       title: '创建时间',
       dataIndex: 'created_at',

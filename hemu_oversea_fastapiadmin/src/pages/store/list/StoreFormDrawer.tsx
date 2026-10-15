@@ -50,6 +50,7 @@ export function StoreFormDrawer({
   open,
   mode,
   storeId,
+  supplierId,
   onClose,
   onSuccess,
   onSwitchToEdit,
@@ -57,6 +58,8 @@ export function StoreFormDrawer({
   open: boolean;
   mode: StoreDrawerMode;
   storeId?: number;
+  /** 平台角色创建店铺时传入选中的供应商 */
+  supplierId?: number;
   onClose: () => void;
   onSuccess: () => void;
   onSwitchToEdit?: () => void;
@@ -179,6 +182,7 @@ export function StoreFormDrawer({
           base_discount: values.baseDiscount,
           account: values.account.trim(),
           password: values.password,
+          supplier_id: supplierId,
         });
         message.success(
           '创建成功',

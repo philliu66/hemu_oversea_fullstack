@@ -1,7 +1,9 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { useAccess, useModel } from '@umijs/max';
 import { App, Button, Popconfirm, Space } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
+import SupplierSelectField from '@/components/SupplierSelectField';
 import CategorySelectField, {
   formatCategoryPathDisplay,
 } from '@/pages/product/detail/CategorySelectField';
@@ -15,17 +17,27 @@ import type {
   DhCategoryPublic,
   SkuAttrTemplateListItemPublic,
 } from '@/types/api';
+import {
+  needsSupplierSelection,
+  resolveRequestSupplierId,
+} from '@/utils/portalScope';
 import SkuAttrTemplateDrawer, {
   type SkuAttrDrawerMode,
 } from './SkuAttrTemplateDrawer';
 
 type TableParams = {
   sku_code?: string;
+  supplier_id?: number;
 };
 
 const SkuAttrTemplatePage: React.FC = () => {
   const { message } = App.useApp();
+  const access = useAccess();
+  const { initialState } = useModel('@@initialState');
+  const currentUser = initialState?.currentUser;
   const actionRef = useRef<ActionType>(null);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number>();
+  const supplierId = resolveRequestSupplierId(currentUser, selectedSupplierId);
 
   const [skuOptions, setSkuOptions] = useState<
     { label: string; value: string }[]
@@ -43,9 +55,17 @@ const SkuAttrTemplatePage: React.FC = () => {
   const [drawerTemplateId, setDrawerTemplateId] = useState<number | null>(null);
 
   useEffect(() => {
+    if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
+      setSkuOptions([]);
+      return;
+    }
     let cancelled = false;
     setSkuOptionsLoading(true);
-    void fetchSkuBaseInfoList({ page: 1, page_size: 5000 })
+    void fetchSkuBaseInfoList({
+      page: 1,
+      page_size: 5000,
+      supplier_id: supplierId,
+    })
       .then((data) => {
         if (cancelled) {
           return;
@@ -72,9 +92,13 @@ const SkuAttrTemplatePage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [message]);
+  }, [currentUser, message, supplierId]);
 
   const openCreate = () => {
+    if (needsSupplierSelection(currentUser, supplierId)) {
+      message.warning('请先选择供应商');
+      return;
+    }
     setDrawerMode('create');
     setDrawerTemplateId(null);
     setDrawerOpen(true);
@@ -92,6 +116,33 @@ const SkuAttrTemplatePage: React.FC = () => {
   };
 
   const columns: ProColumns<SkuAttrTemplateListItemPublic>[] = [
+    ...(access.canPlatform
+      ? [
+          {
+            title: '供应商',
+            dataIndex: 'supplier_id',
+            hideInTable: true,
+            order: 100,
+            renderFormItem: () => (
+              <SupplierSelectField
+                value={selectedSupplierId}
+                onChange={(v) => {
+                  setSelectedSupplierId(v);
+                  actionRef.current?.reload();
+                }}
+              />
+            ),
+          } as ProColumns<SkuAttrTemplateListItemPublic>,
+          {
+            title: '供应商',
+            dataIndex: 'supplier_name',
+            search: false,
+            width: 160,
+            ellipsis: true,
+            render: (_, record) => record.supplier_name || '-',
+          } as ProColumns<SkuAttrTemplateListItemPublic>,
+        ]
+      : []),
     {
       title: '产品型号',
       dataIndex: 'sku_code',
@@ -149,7 +200,13 @@ const SkuAttrTemplatePage: React.FC = () => {
             title="确认删除该属性模板？"
             onConfirm={async () => {
               try {
-                await deleteSkuAttrTemplate(record.id);
+                await deleteSkuAttrTemplate(record.id, {
+                  supplier_id:
+                    resolveRequestSupplierId(
+                      currentUser,
+                      record.supplier_id ?? selectedSupplierId,
+                    ) ?? undefined,
+                });
                 message.success('删除成功');
                 void actionRef.current?.reload();
               } catch {
@@ -186,12 +243,20 @@ const SkuAttrTemplatePage: React.FC = () => {
           setSearchCategoryPath(undefined);
         }}
         request={async (params) => {
+          const scopedSupplierId = resolveRequestSupplierId(
+            currentUser,
+            params.supplier_id ?? selectedSupplierId,
+          );
+          if (needsSupplierSelection(currentUser, scopedSupplierId)) {
+            return { data: [], success: true, total: 0 };
+          }
           try {
             const data = await fetchSkuAttrTemplateList({
               sku_code: params.sku_code,
               cate_pub_id: searchCategory?.cate_pub_id,
               page: params.current,
               page_size: params.pageSize,
+              supplier_id: scopedSupplierId,
             });
             return {
               data: data.items,
@@ -218,6 +283,7 @@ const SkuAttrTemplatePage: React.FC = () => {
         open={drawerOpen}
         mode={drawerMode}
         templateId={drawerTemplateId}
+        supplierId={supplierId}
         skuOptions={skuOptions}
         skuOptionsLoading={skuOptionsLoading}
         onClose={closeDrawer}

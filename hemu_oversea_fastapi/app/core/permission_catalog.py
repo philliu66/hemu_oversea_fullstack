@@ -214,7 +214,7 @@ PERMISSION_SEEDS: list[PermissionSeed] = [
         "code": "template",
         "parent_code": None,
         "type": "menu",
-        "title": "模版管理",
+        "title": "模板管理",
         "path": "/template",
         "scope": "supplier",
         "sort_order": 45,
@@ -306,4 +306,5 @@ DEFAULT_PLATFORM_STAFF_PERMISSION_CODES: frozenset[str] = frozenset(
 DEFAULT_PLATFORM_STAFF_ROLE_NAME = "默认平台员工"
 
 SUPPLIER_POOL_SCOPES: frozenset[str] = frozenset({"supplier", "common"})
-PLATFORM_TREE_SCOPES: frozenset[str] = frozenset({"platform", "common"})
+# 含 supplier：平台员工角色可配置店铺/商品/任务等业务菜单，数据仍按供应商作用域隔离
+PLATFORM_TREE_SCOPES: frozenset[str] = frozenset({"platform", "common", "supplier"})

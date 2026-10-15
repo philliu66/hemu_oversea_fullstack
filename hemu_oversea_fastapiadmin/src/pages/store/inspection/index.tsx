@@ -1,6 +1,6 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useModel } from '@umijs/max';
+import { useAccess, useModel } from '@umijs/max';
 import {
   Alert,
   App,
@@ -13,11 +13,16 @@ import {
   Typography,
 } from 'antd';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import SupplierSelectField from '@/components/SupplierSelectField';
 import {
   fetchStoreInspectionPunish,
   fetchStoreList,
 } from '@/services/admin/stores';
 import type { StoreInspectionPunishPublic, StorePublic } from '@/types/api';
+import {
+  needsSupplierSelection,
+  resolveRequestSupplierId,
+} from '@/utils/portalScope';
 
 const ALL_STORE_VALUE = 'all';
 const DAY_PRESET_3 = 3;
@@ -78,8 +83,11 @@ function buildPunishRows(data: StoreInspectionPunishPublic): PunishRow[] {
 
 const StoreInspection: React.FC = () => {
   const { message } = App.useApp();
+  const access = useAccess();
   const { initialState } = useModel('@@initialState');
-  const supplierId = initialState?.currentUser?.supplier_id;
+  const currentUser = initialState?.currentUser;
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number>();
+  const supplierId = resolveRequestSupplierId(currentUser, selectedSupplierId);
 
   const [stores, setStores] = useState<StorePublic[]>([]);
   const [storesLoading, setStoresLoading] = useState(false);
@@ -107,7 +115,7 @@ const StoreInspection: React.FC = () => {
   }, [customDays, dayPreset]);
 
   const loadStores = useCallback(async () => {
-    if (!supplierId) {
+    if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
       setStores([]);
       return;
     }
@@ -130,10 +138,11 @@ const StoreInspection: React.FC = () => {
     } finally {
       setStoresLoading(false);
     }
-  }, [message, supplierId]);
+  }, [currentUser, message, supplierId]);
 
   const loadPunish = useCallback(async () => {
-    if (!supplierId) {
+    if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
+      message.warning('请先选择供应商');
       return;
     }
     if (!queryDays) {
@@ -167,7 +176,7 @@ const StoreInspection: React.FC = () => {
     } finally {
       setPunishLoading(false);
     }
-  }, [message, queryDays, selectedStore, supplierId]);
+  }, [currentUser, message, queryDays, selectedStore, supplierId]);
 
   useEffect(() => {
     void loadStores();
@@ -293,26 +302,36 @@ const StoreInspection: React.FC = () => {
     [],
   );
 
-  if (!supplierId) {
-    return (
-      <PageContainer
-        title={'店铺巡检'}
-      >
-        <Alert
-          type="warning"
-          showIcon
-          title={'当前账号未绑定供应商，无法查询店铺巡检信息'}
-        />
-      </PageContainer>
-    );
-  }
-
   return (
     <PageContainer
       title={'店铺巡检'}
     >
       <Card loading={storesLoading} style={{ marginBottom: 16 }}>
         <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+          {access.canPlatform ? (
+            <div>
+              <Typography.Text type="secondary" style={{ marginRight: 12 }}>
+                {'供应商'}
+              </Typography.Text>
+              <SupplierSelectField
+                value={selectedSupplierId}
+                style={{ width: 280 }}
+                onChange={(v) => {
+                  setSelectedSupplierId(v);
+                  setSelectedStore(ALL_STORE_VALUE);
+                  setPunishRows([]);
+                  setDateRange(null);
+                }}
+              />
+            </div>
+          ) : null}
+          {needsSupplierSelection(currentUser, supplierId) ? (
+            <Alert
+              type="info"
+              showIcon
+              title={'请先选择供应商后再查询店铺巡检信息'}
+            />
+          ) : (
           <div>
             <Typography.Text type="secondary" style={{ marginRight: 12 }}>
               {'店铺'}
@@ -331,6 +350,7 @@ const StoreInspection: React.FC = () => {
               }}
             />
           </div>
+          )}
           <Space orientation="vertical" size="small" style={{ width: '100%' }}>
             <Space wrap align="center">
               <Typography.Text type="secondary">

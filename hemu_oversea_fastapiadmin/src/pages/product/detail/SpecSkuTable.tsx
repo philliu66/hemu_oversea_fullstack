@@ -1,6 +1,7 @@
 ﻿import { InfoCircleOutlined } from '@ant-design/icons';
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
+import { useModel, useSearchParams } from '@umijs/max';
 import {
   App,
   Button,
@@ -24,11 +25,28 @@ import type {
   DhSkuBaseInfoPublic,
   StoreBaseDiscountPublic,
 } from '@/types/api';
+import { resolveRequestSupplierId } from '@/utils/portalScope';
 import {
   REF_PRICING_CATE_ID,
   collectDistinctSkuSpecModels,
   extractSkuSpecModel,
 } from './CommissionRateHint';
+
+function useScopedSupplierId(propSupplierId?: number | null): number | undefined {
+  const { initialState } = useModel('@@initialState');
+  const [searchParams] = useSearchParams();
+  const queryRaw = Number(searchParams.get('supplier_id'));
+  const fromQuery =
+    Number.isInteger(queryRaw) && queryRaw > 0 ? queryRaw : undefined;
+  const fromProp =
+    typeof propSupplierId === 'number' && propSupplierId > 0
+      ? propSupplierId
+      : undefined;
+  return resolveRequestSupplierId(
+    initialState?.currentUser,
+    fromProp ?? fromQuery,
+  );
+}
 
 const CUSTOM_SPEC_COL = '__custom_spec__';
 
@@ -255,7 +273,7 @@ function SkuRetailPriceHint({
       setError(
         typeof supplierId === 'number' && supplierId > 0
           ? '当前 SKU 编码为空'
-          : '当前账号未绑定供应商，无法查询基础信息',
+          : '未指定供应商，无法查询基础信息',
       );
       return;
     }
@@ -413,7 +431,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
   specSelfDefs,
   itemCode,
   measureUnitLabel,
-  supplierId,
+  supplierId: supplierIdProp,
   storeId,
   commissionUnits,
   storeDiscount,
@@ -421,6 +439,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
   onChange,
 }) => {
   const { message } = App.useApp();
+  const supplierId = useScopedSupplierId(supplierIdProp);
   const list = skuList || [];
   const priceAttrs = priceSelectedAttrs || [];
   const specs = specSelfDefs || [];
@@ -586,7 +605,7 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
 
   const autoSetRetailPrices = async () => {
     if (typeof supplierId !== 'number' || supplierId <= 0) {
-      message.warning('当前账号未绑定供应商，无法自动设置预计收入');
+      message.warning('未指定供应商，无法自动设置预计收入');
       return;
     }
     if (typeof storeId !== 'number' || storeId <= 0) {

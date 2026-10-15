@@ -53,8 +53,16 @@ export type SupplierPublic = {
   phone: string;
   email: string;
   created_by: number | null;
+  created_by_name?: string | null;
   created_at: string;
   updated_at: string;
+};
+
+/** 供应商下拉选项 */
+export type SupplierOption = {
+  id: number;
+  name: string;
+  code: string;
 };
 
 /** 供应商详情（含管理员账号） */
@@ -134,6 +142,7 @@ export type StoreOauthStatus = 0 | 1 | 2;
 export type StorePublic = {
   id: number;
   supplier_id?: number | null;
+  supplier_name?: string | null;
   store_type: StoreType | string;
   name: string;
   identifier: string;
@@ -220,6 +229,7 @@ export type StoreCreateParams = {
   base_discount: number;
   account: string;
   password: string;
+  supplier_id?: number;
 };
 
 /** POST /api/v1/admin/stores/update */
@@ -237,6 +247,8 @@ export type StoreUpdateParams = {
 export type DhCategoryListParams = {
   /** 父类目 cate_pub_id；不传则查一级类目 */
   parent_id?: string | null;
+  /** 种子分类查询时平台身份必填 */
+  supplier_id?: number;
 };
 
 /** 敦煌商品分类（与后端 DhCategoryPublic 对齐） */
@@ -376,6 +388,8 @@ export type DhProductListParams = {
   sort?: DhProductSort;
   page?: number;
   page_size?: number;
+  /** 平台身份必填 */
+  supplier_id?: number;
 };
 
 /** 敦煌商品列表项（与后端 DhProductPublic 对齐） */
@@ -383,6 +397,8 @@ export type DhProductPublic = {
   id: number;
   store_id: number;
   store_name?: string | null;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
   item_code: string;
   site_id: string;
   is_seed: string;
@@ -461,6 +477,7 @@ export type DhSkuBaseInfoListParams = {
   keyword?: string;
   page?: number;
   page_size?: number;
+  supplier_id?: number;
 };
 
 /** SKU 属性模版列表项 */
@@ -470,6 +487,8 @@ export type SkuAttrTemplateListItemPublic = {
   cate_pub_id: string;
   cate_name?: string | null;
   category_id?: number | null;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
   updated_at: string;
 };
 
@@ -477,6 +496,7 @@ export type SkuAttrTemplateListItemPublic = {
 export type SkuAttrTemplatePublic = {
   id: number;
   supplier_id: number;
+  supplier_name?: string | null;
   sku_code: string;
   cate_pub_id: string;
   cate_name?: string | null;
@@ -496,11 +516,13 @@ export type SkuAttrTemplateListParams = {
   cate_pub_id?: string;
   page?: number;
   page_size?: number;
+  supplier_id?: number;
 };
 
 export type SkuAttrTemplateCreateParams = {
   sku_code: string;
   cate_pub_id: string;
+  supplier_id?: number;
   raw_json: {
     attr_list?: DhProductSelectedAttrPublic[];
     [key: string]: unknown;
@@ -515,6 +537,7 @@ export type SkuAttrTemplateUpdateParams = SkuAttrTemplateCreateParams & {
 export type SkuAttrTemplateLookupParams = {
   cate_pub_id: string;
   sku_codes: string[];
+  supplier_id?: number;
 };
 
 export type SkuAttrTemplateLookupItemPublic = {
@@ -560,6 +583,7 @@ export type DhProductPublishParams = {
   type?: DhProductPublishType;
   mission_data_fission_id?: number;
   info?: Record<string, unknown> | null;
+  supplier_id?: number;
 };
 
 export type DhProductPublishPublic = {
@@ -768,6 +792,7 @@ export type FissionStatus =
 export type MissionPublic = {
   id: number;
   supplier_id: number;
+  supplier_name?: string | null;
   title: string;
   description: string | null;
   status: MissionStatus;
@@ -792,6 +817,7 @@ export type MissionCreateParams = {
   title: string;
   description?: string;
   worker_id: number;
+  supplier_id?: number;
 };
 
 export type MissionUpdateParams = {
@@ -799,6 +825,7 @@ export type MissionUpdateParams = {
   title: string;
   description?: string;
   worker_id: number;
+  supplier_id?: number;
 };
 
 export type MissionFissionDataDetailPublic = {

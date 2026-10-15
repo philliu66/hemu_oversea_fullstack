@@ -6,6 +6,7 @@ import type {
   SupplierCreateParams,
   SupplierDetailPublic,
   SupplierListParams,
+  SupplierOption,
   SupplierPublic,
   SupplierUpdateParams,
 } from '@/types/api';
@@ -21,6 +22,26 @@ function requireData<T>(payload: T | null, message: string): T {
     throw new Error(message);
   }
   return payload;
+}
+
+/** POST /api/v1/admin/suppliers/options */
+export async function fetchSupplierOptions(
+  params: { keyword?: string } = {},
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<SupplierOption[]>>(
+    AdminSupplierApi.OPTIONS,
+    {
+      method: 'POST',
+      data: {
+        keyword: params.keyword,
+        page: 1,
+        page_size: 100,
+      },
+      ...options,
+    },
+  );
+  return unwrapApiData<SupplierOption[]>(res) ?? [];
 }
 
 /** POST /api/v1/admin/suppliers/list */
@@ -97,7 +118,7 @@ export async function updateSupplier(
   return requireData(unwrapApiData<SupplierPublic>(res), '更新供应商失败');
 }
 
-/** POST /api/v1/admin/suppliers/delete —— 需超级管理员 */
+/** POST /api/v1/admin/suppliers/delete —— 需平台管理员 */
 export async function deleteSupplier(id: number, options?: RequestOptions) {
   await request<ApiResponse<Record<string, never>>>(AdminSupplierApi.DELETE, {
     method: 'POST',

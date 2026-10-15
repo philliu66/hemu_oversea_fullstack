@@ -39,6 +39,7 @@ export async function fetchSkuAttrTemplateList(
         cate_pub_id: params.cate_pub_id,
         page: params.page ?? 1,
         page_size: params.page_size ?? 10,
+        supplier_id: params.supplier_id,
       },
       ...options,
     },
@@ -52,14 +53,15 @@ export async function fetchSkuAttrTemplateList(
 /** POST /api/v1/admin/templates/dh/sku-attr-templates/detail */
 export async function fetchSkuAttrTemplateDetail(
   id: number,
-  options?: RequestOptions,
+  options?: RequestOptions & { supplier_id?: number },
 ) {
+  const { supplier_id, ...rest } = options ?? {};
   const res = await request<ApiResponse<SkuAttrTemplatePublic>>(
     AdminTemplateApi.SKU_ATTR_DETAIL,
     {
       method: 'POST',
-      data: { id },
-      ...options,
+      data: { id, supplier_id },
+      ...rest,
     },
   );
   return requireData(
@@ -109,14 +111,15 @@ export async function updateSkuAttrTemplate(
 /** POST /api/v1/admin/templates/dh/sku-attr-templates/delete */
 export async function deleteSkuAttrTemplate(
   id: number,
-  options?: RequestOptions,
+  options?: RequestOptions & { supplier_id?: number },
 ) {
+  const { supplier_id, ...rest } = options ?? {};
   await request<ApiResponse<Record<string, never>>>(
     AdminTemplateApi.SKU_ATTR_DELETE,
     {
       method: 'POST',
-      data: { id },
-      ...options,
+      data: { id, supplier_id },
+      ...rest,
     },
   );
 }
@@ -133,6 +136,7 @@ export async function lookupSkuAttrTemplates(
       data: {
         cate_pub_id: params.cate_pub_id,
         sku_codes: params.sku_codes,
+        supplier_id: params.supplier_id,
       },
       ...options,
     },

@@ -72,7 +72,11 @@ const MissionFissionDataPage: React.FC = () => {
       <Spin spinning={loading}>
         {mission ? <MissionInfo mission={mission} /> : null}
         <div style={{ marginTop: 16 }}>
-          <FissionDataTable missionId={missionId} editable />
+          <FissionDataTable
+            missionId={missionId}
+            supplierId={mission?.supplier_id}
+            editable
+          />
         </div>
       </Spin>
     </PageContainer>

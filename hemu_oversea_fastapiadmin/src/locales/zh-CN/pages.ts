@@ -652,7 +652,7 @@ export default {
   'pages.account.password.confirmPlaceholder': '请再次输入新密码',
   'pages.account.password.confirmMismatch': '两次输入的新密码不一致',
   'pages.account.password.success': '修改成功',
-  'pages.account.role.super_admin': '超级管理员',
+  'pages.account.role.platform_admin': '平台管理员',
   'pages.account.role.platform_staff': '平台员工',
   'pages.account.role.supplier_admin': '供应商管理员',
   'pages.account.role.supplier_staff': '供应商员工',

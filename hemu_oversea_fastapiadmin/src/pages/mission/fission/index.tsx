@@ -1,9 +1,10 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, useAccess } from '@umijs/max';
+import { history, useAccess, useModel } from '@umijs/max';
 import { App, Button, Form, Input, Modal, Popconfirm, Select } from 'antd';
 import React, { useRef, useState } from 'react';
+import SupplierSelectField from '@/components/SupplierSelectField';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
   createMission,
@@ -14,6 +15,10 @@ import {
 import { fetchSupplierUserOptions } from '@/services/admin/users';
 import type { MissionPublic, SupplierUserOption } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
+import {
+  needsSupplierSelection,
+  resolveRequestSupplierId,
+} from '@/utils/portalScope';
 import { MissionStatusTag } from './MissionInfo';
 import {
   missionFissionDataPath,
@@ -25,6 +30,7 @@ type MissionTableParams = {
   current?: number;
   pageSize?: number;
   keyword?: string;
+  supplier_id?: number;
 };
 
 type MissionFormValues = {
@@ -36,6 +42,8 @@ type MissionFormValues = {
 const MissionFissionList: React.FC = () => {
   const access = useAccess();
   const { message } = App.useApp();
+  const { initialState } = useModel('@@initialState');
+  const currentUser = initialState?.currentUser;
   const actionRef = useRef<ActionType | null>(null);
   const [form] = Form.useForm<MissionFormValues>();
   const [modalOpen, setModalOpen] = useState(false);
@@ -44,10 +52,18 @@ const MissionFissionList: React.FC = () => {
   );
   const [submitting, setSubmitting] = useState(false);
   const [workers, setWorkers] = useState<SupplierUserOption[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number>();
+  const supplierId = resolveRequestSupplierId(currentUser, selectedSupplierId);
 
-  const loadWorkers = async () => {
+  const loadWorkers = async (scopedSupplierId?: number) => {
+    if (needsSupplierSelection(currentUser, scopedSupplierId)) {
+      setWorkers([]);
+      return;
+    }
     try {
-      const options = await fetchSupplierUserOptions();
+      const options = await fetchSupplierUserOptions({
+        supplier_id: scopedSupplierId,
+      });
       setWorkers(options);
     } catch {
       setWorkers([]);
@@ -55,13 +71,21 @@ const MissionFissionList: React.FC = () => {
   };
 
   const openCreate = async () => {
+    if (needsSupplierSelection(currentUser, supplierId)) {
+      message.warning('请先选择供应商');
+      return;
+    }
     setEditingMission(null);
     form.resetFields();
     setModalOpen(true);
-    await loadWorkers();
+    await loadWorkers(supplierId);
   };
 
   const openEdit = async (record: MissionPublic) => {
+    const scopedSupplierId = resolveRequestSupplierId(
+      currentUser,
+      record.supplier_id ?? selectedSupplierId,
+    );
     setEditingMission(record);
     form.setFieldsValue({
       title: record.title,
@@ -69,7 +93,7 @@ const MissionFissionList: React.FC = () => {
       worker_id: record.worker_id,
     });
     setModalOpen(true);
-    await loadWorkers();
+    await loadWorkers(scopedSupplierId);
   };
 
   const handleSubmit = async () => {
@@ -82,13 +106,22 @@ const MissionFissionList: React.FC = () => {
           title: values.title.trim(),
           description: values.description?.trim() || undefined,
           worker_id: values.worker_id,
+          supplier_id: resolveRequestSupplierId(
+            currentUser,
+            editingMission.supplier_id ?? selectedSupplierId,
+          ),
         });
         message.success('更新成功');
       } else {
+        if (needsSupplierSelection(currentUser, supplierId)) {
+          message.warning('请先选择供应商');
+          return;
+        }
         await createMission({
           title: values.title.trim(),
           description: values.description?.trim() || undefined,
           worker_id: values.worker_id,
+          supplier_id: supplierId,
         });
         message.success('创建成功');
       }
@@ -103,6 +136,33 @@ const MissionFissionList: React.FC = () => {
   };
 
   const columns: ProColumns<MissionPublic>[] = [
+    ...(access.canPlatform
+      ? [
+          {
+            title: '供应商',
+            dataIndex: 'supplier_id',
+            hideInTable: true,
+            order: 100,
+            renderFormItem: () => (
+              <SupplierSelectField
+                value={selectedSupplierId}
+                onChange={(v) => {
+                  setSelectedSupplierId(v);
+                  actionRef.current?.reload();
+                }}
+              />
+            ),
+          } as ProColumns<MissionPublic>,
+          {
+            title: '供应商',
+            dataIndex: 'supplier_name',
+            search: false,
+            width: 160,
+            ellipsis: true,
+            render: (_, record) => record.supplier_name || '-',
+          } as ProColumns<MissionPublic>,
+        ]
+      : []),
     {
       title: '任务标题',
       dataIndex: 'keyword',
@@ -259,10 +319,18 @@ const MissionFissionList: React.FC = () => {
             : []
         }
         request={async (params) => {
+          const scopedSupplierId = resolveRequestSupplierId(
+            currentUser,
+            params.supplier_id ?? selectedSupplierId,
+          );
+          if (needsSupplierSelection(currentUser, scopedSupplierId)) {
+            return { data: [], success: true, total: 0 };
+          }
           const result = await fetchMissionList({
             page: params.current,
             page_size: params.pageSize,
             keyword: params.keyword?.trim() || undefined,
+            supplier_id: scopedSupplierId,
           });
           return {
             data: result.items,

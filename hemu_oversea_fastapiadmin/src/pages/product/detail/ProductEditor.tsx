@@ -7,7 +7,7 @@ import {
   ProFormSelect,
   ProFormText,
 } from '@ant-design/pro-components';
-import { history, useModel } from '@umijs/max';
+import { history, useModel, useSearchParams } from '@umijs/max';
 import {
   App,
   Button,
@@ -71,6 +71,7 @@ import type {
   DhProductSkuPublic,
 } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
+import { resolveRequestSupplierId } from '@/utils/portalScope';
 import CategoryAttrsFields from './CategoryAttrsFields';
 import CategorySelectField, {
   formatCategoryLabel,
@@ -101,7 +102,6 @@ import {
   type ProductFormValues,
 } from './productFormMapping';
 
-const ITEM_NAME_MAX_LENGTH = 140;
 const CHANGED_COLOR = '#cf1322';
 const DH_CUSTOM_ATTR_MAX_COUNT = 20;
 const DH_CUSTOM_ATTR_MAX_LENGTH = 40;
@@ -206,6 +206,8 @@ export type ProductEditorProps = {
    * 用于裂变「手动添加」第二步；baseline 仍保留原标题供 diff。
    */
   seedTitleAsItemNamePlaceholder?: boolean;
+  /** 显式供应商作用域（优先于 URL / 当前用户绑定） */
+  supplierId?: number;
 };
 
 export const ProductEditor = forwardRef<
@@ -223,12 +225,26 @@ export const ProductEditor = forwardRef<
     embedded = false,
     applySkuAttrTemplateOnCategoryChange = false,
     seedTitleAsItemNamePlaceholder = false,
+    supplierId: supplierIdProp,
   },
   ref,
 ) {
   const { message, modal } = App.useApp();
   const { initialState } = useModel('@@initialState');
-  const supplierId = initialState?.currentUser?.supplier_id;
+  const [searchParams] = useSearchParams();
+  const querySupplierIdRaw = Number(searchParams.get('supplier_id'));
+  const querySupplierId =
+    Number.isInteger(querySupplierIdRaw) && querySupplierIdRaw > 0
+      ? querySupplierIdRaw
+      : undefined;
+  const fromProp =
+    typeof supplierIdProp === 'number' && supplierIdProp > 0
+      ? supplierIdProp
+      : undefined;
+  const supplierId = resolveRequestSupplierId(
+    initialState?.currentUser,
+    fromProp ?? querySupplierId,
+  );
   const [itemNamePlaceholder, setItemNamePlaceholder] =
     useState('请输入产品标题');
   const mode: ProductPageMode =
@@ -526,6 +542,7 @@ export const ProductEditor = forwardRef<
                 const lookup = await lookupSkuAttrTemplates({
                   cate_pub_id: selectedCategory.cate_pub_id,
                   sku_codes: baseModels,
+                  supplier_id: supplierId,
                 });
                 const foundItems = (lookup.items || []).filter(
                   (item) => item.found,
@@ -859,14 +876,9 @@ export const ProductEditor = forwardRef<
                 whitespace: true,
                 message: '请输入产品标题',
               },
-              {
-                max: ITEM_NAME_MAX_LENGTH,
-                message: `产品标题最多 ${ITEM_NAME_MAX_LENGTH} 个字符`,
-              },
             ]}
           >
             <Input
-              maxLength={ITEM_NAME_MAX_LENGTH}
               allowClear
               disabled={readOnly}
               style={changedControlStyle(isChanged('item_name'))}

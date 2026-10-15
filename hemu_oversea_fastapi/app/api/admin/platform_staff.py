@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.deps import Pagination, require_admin_user, require_perm
 from app.core.errors import forbidden
-from app.core.roles import Role, normalize_portal_role
+from app.core.roles import Role
 from app.models.user import User
 from app.schemas.common import ApiResponse, PageData, success
 from app.schemas.platform_staff import (
@@ -19,11 +19,9 @@ from app.services import platform_staff as staff_service
 
 
 def _assert_platform(actor: User) -> None:
-    role = normalize_portal_role(actor.role) or actor.role
-    if role not in {
+    if actor.role not in {
         Role.PLATFORM_ADMIN.value,
         Role.PLATFORM_STAFF.value,
-        Role.SUPER_ADMIN.value,
     }:
         raise forbidden()
 

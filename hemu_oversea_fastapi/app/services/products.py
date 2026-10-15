@@ -121,13 +121,19 @@ def _dh_product_state_label(state: str | None) -> str | None:
     return _DH_PRODUCT_STATE_LABELS.get(code, code)
 
 
-def _to_dh_product_public(row: ProductDh) -> DhProductPublic:
+def _to_dh_product_public(
+    row: ProductDh,
+    *,
+    supplier_name: str | None = None,
+) -> DhProductPublic:
     store = row.__dict__.get("store")
     store_name = store.name if store is not None else None
     data = DhProductPublic.model_validate(row)
     return data.model_copy(
         update={
             "store_name": store_name,
+            "supplier_id": row.supplier_id,
+            "supplier_name": supplier_name,
             "main_image_url": _build_dh_main_image_url(row.main_image_url),
             "state": _dh_product_state_label(row.state),
         }
@@ -1099,8 +1105,15 @@ def list_dh_products(
         .limit(pagination.page_size)
     ).unique().all()
 
+    from app.models.supplier import Supplier
+
+    supplier_name = db.scalar(
+        select(Supplier.name).where(Supplier.id == supplier_id)
+    )
     return PageData(
-        items=[_to_dh_product_public(row) for row in rows],
+        items=[
+            _to_dh_product_public(row, supplier_name=supplier_name) for row in rows
+        ],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,

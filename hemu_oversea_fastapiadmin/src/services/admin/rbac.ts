@@ -24,11 +24,7 @@ export type RolePublic = {
 };
 
 function isPlatformIdentity(role?: string) {
-  return (
-    role === 'platform_admin' ||
-    role === 'super_admin' ||
-    role === 'platform_staff'
-  );
+  return role === 'platform_admin' || role === 'platform_staff';
 }
 
 export function rolesApiPrefix(portalRole?: string) {

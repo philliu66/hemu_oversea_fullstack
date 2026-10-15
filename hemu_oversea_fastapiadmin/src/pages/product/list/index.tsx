@@ -1,10 +1,11 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, useModel } from '@umijs/max';
+import { history, useAccess, useModel } from '@umijs/max';
 import { App, Button, Image, Space, Typography } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import SupplierSelectField from '@/components/SupplierSelectField';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import { DH_PRODUCT_STATE_LABEL, DH_PRODUCT_STATES } from '@/constants/product';
 import { fetchDhSeedCategories } from '@/services/admin/categories';
@@ -17,8 +18,12 @@ import type {
 } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
 import {
+  needsSupplierSelection,
+  resolveRequestSupplierId,
+} from '@/utils/portalScope';
+import {
   formatSyncState,
-  PRODUCT_CREATE_PATH,
+  productCreatePath,
   productEditPath,
 } from '../utils';
 
@@ -30,6 +35,7 @@ type ProductTableParams = {
   item_name?: string;
   store_id?: number | string;
   cate_pub_id?: string | string[];
+  supplier_id?: number;
 };
 
 type SeedCategoryOption = DefaultOptionType & {
@@ -91,8 +97,11 @@ function resolveCatePubId(
 
 const ProductList: React.FC = () => {
   const { message } = App.useApp();
+  const access = useAccess();
   const { initialState } = useModel('@@initialState');
-  const supplierId = initialState?.currentUser?.supplier_id;
+  const currentUser = initialState?.currentUser;
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number>();
+  const supplierId = resolveRequestSupplierId(currentUser, selectedSupplierId);
   const actionRef = useRef<ActionType | null>(null);
   const [stores, setStores] = useState<StorePublic[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<SeedCategoryOption[]>(
@@ -100,10 +109,14 @@ const ProductList: React.FC = () => {
   );
 
   useEffect(() => {
+    if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
+      setCategoryOptions([]);
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
-        const items = await fetchDhSeedCategories({});
+        const items = await fetchDhSeedCategories({ supplier_id: supplierId });
         if (!cancelled) {
           setCategoryOptions(items.map(toSeedCategoryOption));
         }
@@ -121,13 +134,16 @@ const ProductList: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [message]);
+  }, [currentUser, message, supplierId]);
 
   const loadCategoryData: CascaderProps<SeedCategoryOption>['loadData'] = (
     selectedOptions,
   ) => {
     const targetOption = selectedOptions[selectedOptions.length - 1];
     if (!targetOption || targetOption.isLeaf || targetOption.children) {
+      return;
+    }
+    if (!supplierId) {
       return;
     }
 
@@ -138,6 +154,7 @@ const ProductList: React.FC = () => {
       try {
         const items = await fetchDhSeedCategories({
           parent_id: String(targetOption.value),
+          supplier_id: supplierId,
         });
         setCategoryOptions((prev) =>
           updateCascaderChildren(
@@ -159,7 +176,7 @@ const ProductList: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!supplierId) {
+    if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
       setStores([]);
       return;
     }
@@ -188,7 +205,7 @@ const ProductList: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [message, supplierId]);
+  }, [currentUser, message, supplierId]);
 
   const storeValueEnum = useMemo(
     () =>
@@ -217,6 +234,33 @@ const ProductList: React.FC = () => {
   );
 
   const columns: ProColumns<DhProductPublic>[] = [
+    ...(access.canPlatform
+      ? [
+          {
+            title: '供应商',
+            dataIndex: 'supplier_id',
+            hideInTable: true,
+            order: 100,
+            renderFormItem: () => (
+              <SupplierSelectField
+                value={selectedSupplierId}
+                onChange={(v) => {
+                  setSelectedSupplierId(v);
+                  actionRef.current?.reload();
+                }}
+              />
+            ),
+          } as ProColumns<DhProductPublic>,
+          {
+            title: '供应商',
+            dataIndex: 'supplier_name',
+            search: false,
+            width: 140,
+            ellipsis: true,
+            render: (_, record) => record.supplier_name || '-',
+          } as ProColumns<DhProductPublic>,
+        ]
+      : []),
     {
       title: '商品编码',
       dataIndex: 'item_code',
@@ -303,7 +347,13 @@ const ProductList: React.FC = () => {
           )}
           <div style={{ minWidth: 0, flex: 1 }}>
             <Typography.Link
-              onClick={() => history.push(productEditPath(record.id))}
+              onClick={() =>
+                history.push(
+                  productEditPath(record.id, {
+                    supplierId: supplierId ?? record.supplier_id ?? undefined,
+                  }),
+                )
+              }
               style={{ display: 'block', marginBottom: 4 }}
             >
               <Typography.Paragraph
@@ -398,7 +448,13 @@ const ProductList: React.FC = () => {
             type="primary"
             key="create"
             icon={<PlusOutlined />}
-            onClick={() => history.push(PRODUCT_CREATE_PATH)}
+            onClick={() =>
+              history.push(
+                productCreatePath({
+                  supplierId: supplierId,
+                }),
+              )
+            }
           >
             {'新建'}
           </Button>,
@@ -410,6 +466,13 @@ const ProductList: React.FC = () => {
         }}
         columns={columns}
         request={async (params) => {
+          const scopedSupplierId = resolveRequestSupplierId(
+            currentUser,
+            params.supplier_id ?? selectedSupplierId,
+          );
+          if (needsSupplierSelection(currentUser, scopedSupplierId)) {
+            return { data: [], success: true, total: 0 };
+          }
           const storeIdRaw = params.store_id;
           const storeId =
             storeIdRaw === undefined || storeIdRaw === null || storeIdRaw === ''
@@ -430,6 +493,7 @@ const ProductList: React.FC = () => {
             sort: 0,
             page: params.current ?? 1,
             page_size: params.pageSize ?? PAGE_SIZE_DEFAULT,
+            supplier_id: scopedSupplierId,
           });
           return {
             data: data.items,

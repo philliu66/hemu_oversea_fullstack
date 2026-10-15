@@ -14,7 +14,6 @@ from app.core.permission_catalog import (
 from app.core.roles import (
     Role,
     is_platform_admin,
-    normalize_portal_role,
 )
 from app.models.permission import (
     BizRole,
@@ -49,7 +48,7 @@ def to_user_public_dict(user: User, db: Session) -> dict:
 
 
 def resolve_permission_codes(db: Session, user: User) -> list[str]:
-    role = normalize_portal_role(user.role) or user.role
+    role = user.role
 
     if is_platform_admin(role):
         rows = db.scalars(

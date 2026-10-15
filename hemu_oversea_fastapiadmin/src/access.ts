@@ -7,8 +7,7 @@ export default function access(
   const { currentUser } = initialState ?? {};
   const role = currentUser?.access || currentUser?.role;
   const codes = new Set(currentUser?.permission_codes ?? []);
-  const isPlatformAdmin =
-    role === 'platform_admin' || role === 'super_admin';
+  const isPlatformAdmin = role === 'platform_admin';
   const isPlatformStaff = role === 'platform_staff';
   const isSupplierAdmin = role === 'supplier_admin';
   const isSupplierStaff = role === 'supplier_staff';
@@ -22,7 +21,6 @@ export default function access(
   return {
     canAdmin: isPlatformAdmin || role === 'admin',
     canPlatform: isPlatformAdmin || isPlatformStaff,
-    canSuperAdmin: isPlatformAdmin,
     canPlatformAdmin: isPlatformAdmin,
     canSupplierAdmin: isSupplierAdmin,
     canSupplier: isSupplierAdmin || isSupplierStaff,

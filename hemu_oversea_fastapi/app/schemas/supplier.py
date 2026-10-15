@@ -57,8 +57,19 @@ class SupplierPublic(BaseModel):
     phone: str
     email: str
     created_by: int | None
+    created_by_name: str | None = Field(
+        default=None, description="维护管理员名称（创建人）"
+    )
     created_at: datetime
     updated_at: datetime
+
+
+class SupplierOption(BaseModel):
+    """供应商下拉选项。"""
+
+    id: int
+    name: str
+    code: str
 
 
 class SupplierDetailPublic(SupplierPublic):

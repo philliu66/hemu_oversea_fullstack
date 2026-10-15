@@ -52,6 +52,8 @@ type SkuAttrTemplateDrawerProps = {
   mode: SkuAttrDrawerMode;
   /** 查看/编辑时的模版 ID */
   templateId?: number | null;
+  /** 平台角色选中的供应商，创建/删除时上送 */
+  supplierId?: number;
   skuOptions: SkuOption[];
   skuOptionsLoading?: boolean;
   onClose: () => void;
@@ -142,6 +144,7 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
   open,
   mode,
   templateId,
+  supplierId,
   skuOptions,
   skuOptionsLoading = false,
   onClose,
@@ -301,7 +304,9 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
     void (async () => {
       setLoading(true);
       try {
-        const detail = await fetchSkuAttrTemplateDetail(templateId);
+        const detail = await fetchSkuAttrTemplateDetail(templateId, {
+          supplier_id: supplierId,
+        });
         if (cancelled) {
           return;
         }
@@ -345,7 +350,16 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [open, mode, templateId, applyCategory, resetForm, message, onClose]);
+  }, [
+    open,
+    mode,
+    templateId,
+    supplierId,
+    applyCategory,
+    resetForm,
+    message,
+    onClose,
+  ]);
 
   const handleCategoryPick = (picked: DhCategoryPublic) => {
     setMissingRequiredAttrIds([]);
@@ -392,6 +406,7 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
   const buildPayload = () => ({
     sku_code: skuCode!,
     cate_pub_id: pickedCategory!.cate_pub_id,
+    supplier_id: supplierId,
     raw_json: {
       attr_list: applyCustomAttrDraftsToAttrList(
         attrList,
@@ -452,7 +467,9 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
               return;
             }
             try {
-              await deleteSkuAttrTemplate(templateId);
+              await deleteSkuAttrTemplate(templateId, {
+                supplier_id: supplierId,
+              });
               message.success('删除成功');
               onSaved();
               onClose();

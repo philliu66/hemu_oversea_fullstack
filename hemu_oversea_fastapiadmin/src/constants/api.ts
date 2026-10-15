@@ -27,6 +27,7 @@ export const AdminUserApi = {
 
 /** 管理端供应商相关路径 */
 export const AdminSupplierApi = {
+  OPTIONS: '/api/v1/admin/suppliers/options',
   LIST: '/api/v1/admin/suppliers/list',
   DETAIL: '/api/v1/admin/suppliers/detail',
   CREATE: '/api/v1/admin/suppliers/create',

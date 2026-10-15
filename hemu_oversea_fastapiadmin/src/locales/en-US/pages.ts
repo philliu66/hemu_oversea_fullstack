@@ -633,7 +633,7 @@ export default {
   'pages.account.password.confirmPlaceholder': 'Confirm new password',
   'pages.account.password.confirmMismatch': 'The two passwords do not match',
   'pages.account.password.success': 'Password updated successfully',
-  'pages.account.role.super_admin': 'Super Admin',
+  'pages.account.role.platform_admin': 'Platform Admin',
   'pages.account.role.platform_staff': 'Platform Staff',
   'pages.account.role.supplier_admin': 'Supplier Admin',
   'pages.account.role.supplier_staff': 'Supplier Staff',

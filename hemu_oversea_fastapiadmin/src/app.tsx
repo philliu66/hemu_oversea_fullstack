@@ -30,6 +30,10 @@ import {
 } from './utils/authToken';
 
 const isDev = process.env.NODE_ENV === 'development';
+/** 对接线上后端（start:dev / UMI_ENV=dev）时隐藏开发辅助入口 */
+const isRemoteDev = process.env.UMI_ENV === 'dev';
+/** 仅本机联调展示：设置抽屉、文档/分支、OpenAPI */
+const showDevChrome = isDev && !isRemoteDev;
 /** 无需登录即可访问的路径（登录页、OAuth 回调等；均为 Umi 路由路径，不含 APP_BASE） */
 const publicPaths = [
   APP_LOGIN_PATH,
@@ -116,6 +120,9 @@ export const layout: RunTimeLayoutConfig = ({
     },
     actionsRender: () => {
       // 暂不使用国际化切换；locale 插件仍保留在 config 中
+      if (!showDevChrome) {
+        return [];
+      }
       return [<DocLink key="doc" />, <VersionDropdown key="version" />];
     },
     avatarProps: {
@@ -161,7 +168,7 @@ export const layout: RunTimeLayoutConfig = ({
         width: '331px',
       },
     ],
-    links: isDev
+    links: showDevChrome
       ? [
           <Link key="openapi" to="/umi/plugin/openapi" target="_blank">
             <LinkOutlined />
@@ -181,24 +188,26 @@ export const layout: RunTimeLayoutConfig = ({
       return (
         <>
           {children}
-          <SettingDrawer
-            disableUrlParams
-            enableDarkTheme
-            collapse={initialState?.settingDrawerOpen}
-            onCollapseChange={(open) => {
-              setInitialState((s) => ({
-                ...s,
-                settingDrawerOpen: open,
-              }));
-            }}
-            settings={initialState?.settings}
-            onSettingChange={(settings) => {
-              setInitialState((s) => ({
-                ...s,
-                settings,
-              }));
-            }}
-          />
+          {showDevChrome ? (
+            <SettingDrawer
+              disableUrlParams
+              enableDarkTheme
+              collapse={initialState?.settingDrawerOpen}
+              onCollapseChange={(open) => {
+                setInitialState((s) => ({
+                  ...s,
+                  settingDrawerOpen: open,
+                }));
+              }}
+              settings={initialState?.settings}
+              onSettingChange={(settings) => {
+                setInitialState((s) => ({
+                  ...s,
+                  settings,
+                }));
+              }}
+            />
+          ) : null}
         </>
       );
     },

@@ -11,14 +11,26 @@ class SkuAttrTemplateList(BaseModel):
     cate_pub_id: str | None = Field(default=None, description="叶子类目敦煌 ID")
     page: int = Field(default=1, ge=1, description="页码")
     page_size: int = Field(default=10, ge=1, le=100, description="每页条数")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
+    )
 
 
 class SkuAttrTemplateDetail(BaseModel):
     id: int = Field(ge=1, description="模版 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
+    )
 
 
 class SkuAttrTemplateDelete(BaseModel):
     id: int = Field(ge=1, description="模版 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
+    )
 
 
 class SkuAttrTemplateCreate(BaseModel):
@@ -26,6 +38,10 @@ class SkuAttrTemplateCreate(BaseModel):
     cate_pub_id: str = Field(min_length=1, description="叶子类目敦煌 ID")
     raw_json: dict[str, Any] = Field(
         description='属性快照，形如 {"attr_list": [...]}'
+    )
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
     )
 
 
@@ -36,6 +52,10 @@ class SkuAttrTemplateUpdate(BaseModel):
     raw_json: dict[str, Any] = Field(
         description='属性快照，形如 {"attr_list": [...]}'
     )
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
+    )
 
 
 class SkuAttrTemplateListItemPublic(BaseModel):
@@ -44,12 +64,15 @@ class SkuAttrTemplateListItemPublic(BaseModel):
     cate_pub_id: str
     cate_name: str | None = None
     category_id: int | None = None
+    supplier_id: int | None = None
+    supplier_name: str | None = None
     updated_at: datetime
 
 
 class SkuAttrTemplatePublic(BaseModel):
     id: int
     supplier_id: int
+    supplier_name: str | None = None
     sku_code: str
     cate_pub_id: str
     cate_name: str | None = None
@@ -70,6 +93,10 @@ class DhSkuBaseInfoList(BaseModel):
         le=5000,
         description="每页条数；下拉全量加载可用较大值",
     )
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
+    )
 
 
 class SkuAttrTemplateLookup(BaseModel):
@@ -78,6 +105,10 @@ class SkuAttrTemplateLookup(BaseModel):
         min_length=1,
         max_length=100,
         description="产品基型号列表（将统一清洗并去变体后缀）",
+    )
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
     )
 
 

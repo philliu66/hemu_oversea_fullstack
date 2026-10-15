@@ -18,6 +18,10 @@ class DhCategoryListRequest(BaseModel):
             "父类目 cate_pub_id；不传或空字符串表示查询一级（根）类目"
         ),
     )
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。种子分类查询时：供应商身份忽略；平台身份必填",
+    )
 
 
 class DhCategorySearchRequest(BaseModel):
@@ -238,6 +242,10 @@ class DhProductListRequest(BaseModel):
     )
     page: int = Field(default=1, ge=1, description="页码，从 1 开始")
     page_size: int = Field(default=10, ge=1, le=100, description="每页条数")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
+    )
 
 
 class DhProductPublic(BaseModel):
@@ -246,6 +254,8 @@ class DhProductPublic(BaseModel):
     id: int
     store_id: int = Field(description="店铺 ID")
     store_name: str | None = Field(default=None, description="店铺名称")
+    supplier_id: int | None = Field(default=None, description="所属供应商 ID")
+    supplier_name: str | None = Field(default=None, description="供应商名称")
     item_code: str = Field(description="商品编码")
     site_id: str = Field(description="站点语言")
     is_seed: str = Field(description="是否种子：1=是，0=否")
@@ -303,6 +313,10 @@ class DhProductPublishRequest(BaseModel):
     info: dict[str, Any] | None = Field(
         default=None,
         description="新商品完整数据；type=addnew 时必传，默认为空",
+    )
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份建议传入",
     )
 
 

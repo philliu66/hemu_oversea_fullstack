@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.core.deps import Pagination
 from app.core.errors import conflict, forbidden, not_found
 from app.core.roles import Role as PortalRole
-from app.core.roles import normalize_portal_role
 from app.models.permission import BizRole, RolePermission, UserRole
 from app.models.user import User
 from app.schemas.common import PageData
@@ -181,18 +180,18 @@ def delete_role(
 
 
 def assert_platform_actor(actor: User) -> None:
-    role = normalize_portal_role(actor.role) or actor.role
-    if role not in {
+    if actor.role not in {
         PortalRole.PLATFORM_ADMIN.value,
         PortalRole.PLATFORM_STAFF.value,
-        PortalRole.SUPER_ADMIN.value,
     }:
         raise forbidden()
 
 
 def assert_supplier_admin_actor(actor: User) -> int:
-    role = normalize_portal_role(actor.role) or actor.role
-    if role != PortalRole.SUPPLIER_ADMIN.value or actor.supplier_id is None:
+    if (
+        actor.role != PortalRole.SUPPLIER_ADMIN.value
+        or actor.supplier_id is None
+    ):
         raise forbidden()
     return actor.supplier_id
 

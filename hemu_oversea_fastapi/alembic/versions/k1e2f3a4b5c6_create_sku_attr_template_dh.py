@@ -22,7 +22,7 @@ _PERMISSIONS = (
         "code": "template",
         "parent_code": None,
         "type": "menu",
-        "title": "模版管理",
+        "title": "模板管理",
         "path": "/template",
         "scope": "supplier",
         "sort_order": 45,

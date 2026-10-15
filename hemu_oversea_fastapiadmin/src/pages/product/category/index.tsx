@@ -1,5 +1,5 @@
 ﻿import { PageContainer } from '@ant-design/pro-components';
-import { App, Card, Spin, Tree } from 'antd';
+import { App, Card, Empty, Spin, Tabs, Tree } from 'antd';
 import type { DataNode, EventDataNode } from 'antd/es/tree';
 import React, { useCallback, useEffect, useState } from 'react';
 import { fetchDhCategories } from '@/services/admin/categories';
@@ -9,6 +9,8 @@ type CategoryTreeNode = DataNode & {
   catePubId: string;
   isLeaf?: boolean;
 };
+
+type PlatformTabKey = 'dhgate' | 'tiktok';
 
 function categoryTitle(item: DhCategoryPublic): string {
   const cn = item.pub_name_cn?.trim();
@@ -54,7 +56,7 @@ function updateTreeData(
   });
 }
 
-const ProductCategory: React.FC = () => {
+const DhgateCategoryTree: React.FC = () => {
   const { message } = App.useApp();
   const [treeData, setTreeData] = useState<CategoryTreeNode[]>([]);
   const [loading, setLoading] = useState(false);
@@ -102,23 +104,46 @@ const ProductCategory: React.FC = () => {
   );
 
   return (
-    <PageContainer
-      title={'商品分类'}
-    >
+    <Spin spinning={loading}>
+      {treeData.length > 0 || loading ? (
+        <Tree<CategoryTreeNode>
+          treeData={treeData}
+          loadData={onLoadData}
+          blockNode
+        />
+      ) : (
+        <div style={{ color: 'rgba(0,0,0,0.45)' }}>
+          {'暂无分类数据'}
+        </div>
+      )}
+    </Spin>
+  );
+};
+
+const ProductCategory: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<PlatformTabKey>('dhgate');
+
+  return (
+    <PageContainer title={'商品分类'}>
       <Card>
-        <Spin spinning={loading}>
-          {treeData.length > 0 || loading ? (
-            <Tree<CategoryTreeNode>
-              treeData={treeData}
-              loadData={onLoadData}
-              blockNode
-            />
-          ) : (
-            <div style={{ color: 'rgba(0,0,0,0.45)' }}>
-              {'暂无分类数据'}
-            </div>
-          )}
-        </Spin>
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) => setActiveTab(key as PlatformTabKey)}
+          items={[
+            {
+              key: 'dhgate',
+              label: '敦煌',
+              children: <DhgateCategoryTree />,
+            },
+            {
+              key: 'tiktok',
+              label: 'TikTok',
+              children: (
+                <Empty description={'TikTok 商品分类暂未接入'} />
+              ),
+            },
+          ]}
+        />
       </Card>
     </PageContainer>
   );

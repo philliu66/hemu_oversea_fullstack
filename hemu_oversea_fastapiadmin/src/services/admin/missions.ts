@@ -54,14 +54,15 @@ export async function fetchMissionList(
 /** POST /api/v1/admin/missions/detail */
 export async function fetchMissionDetail(
   id: number,
-  options?: RequestOptions,
+  options?: RequestOptions & { supplier_id?: number },
 ) {
+  const { supplier_id, ...rest } = options ?? {};
   const res = await request<ApiResponse<MissionPublic>>(
     AdminMissionApi.DETAIL,
     {
       method: 'POST',
-      data: { id },
-      ...options,
+      data: { id, supplier_id },
+      ...rest,
     },
   );
   return requireData(unwrapApiData<MissionPublic>(res), '获取任务详情失败');

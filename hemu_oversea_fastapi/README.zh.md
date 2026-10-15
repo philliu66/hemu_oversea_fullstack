@@ -113,12 +113,12 @@ uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8600
 
 ### 种子账号
 
-启动时仅写入超级管理员（已存在则跳过创建，并按配置同步密码）：
+启动时仅写入平台管理员（已存在则跳过创建，并按配置同步密码）：
 
 
-| 用户名          | 密码                             | 说明                                |
-| ------------ | ------------------------------ | --------------------------------- |
-| `superadmin` | `.env` 中的 `BOOTSTRAP_PASSWORD` | 平台超管，走 `/api/v1/admin/auth/login` |
+| 用户名          | 密码                             | 说明                                      |
+| ------------ | ------------------------------ | --------------------------------------- |
+| `superadmin` | `.env` 中的 `BOOTSTRAP_PASSWORD` | 平台管理员（`platform_admin`），走 `/api/v1/admin/auth/login` |
 
 
 `/docs` 中：login → Authorize 粘贴 **access_token**（不要带 `Bearer` 前缀）→ 再调需登录接口。
@@ -287,7 +287,7 @@ curl -sS http://127.0.0.1:8600/health
 ## 扩展指南
 
 1. **新 App 接口**：`app/api/app/`，`Depends(get_current_app_user)`，在 `api/app/__init__.py` 里 `include_router`。
-2. **新管理端接口**：`app/api/admin/`，`Depends(require_super_admin)` 或 `require_admin_user`，在 `api/admin/__init__.py` 里挂上。
+2. **新管理端接口**：`app/api/admin/`，`Depends(require_platform_admin)` 或 `require_admin_user`，在 `api/admin/__init__.py` 里挂上。
 3. **两端都可调的工具**：规则完全一样且公开 → `app/api/common/`；需登录且两端同权 → `Depends(get_current_account)`。权限或入参不同则拆成 app / admin 两条路由，`services/` 仍共用。
 4. **新表**：`app/models/` 一表一文件，继承 `Base`，再走迁移。
 5. **入参/出参**：`app/schemas/`；密码哈希不要进响应。

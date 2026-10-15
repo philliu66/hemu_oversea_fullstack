@@ -16,7 +16,7 @@ _LEGACY_SEED_USERNAMES = ("admin", "operator", "user")
 
 
 def ensure_seed_users() -> None:
-    """初始化超级管理员 superadmin；密码为 BOOTSTRAP_PASSWORD。已存在则按配置同步密码/角色。"""
+    """初始化平台管理员 superadmin；密码为 BOOTSTRAP_PASSWORD。已存在则按配置同步密码/角色。"""
     db = SessionLocal()
     try:
         _retire_legacy_seeds(db)

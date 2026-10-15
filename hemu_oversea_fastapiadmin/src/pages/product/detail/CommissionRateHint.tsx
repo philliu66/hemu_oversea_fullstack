@@ -1,4 +1,5 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
+import { useModel, useSearchParams } from '@umijs/max';
 import {
   Card,
   Descriptions,
@@ -19,6 +20,7 @@ import type {
   DhSkuBaseInfoPublic,
   StoreBaseDiscountPublic,
 } from '@/types/api';
+import { resolveRequestSupplierId } from '@/utils/portalScope';
 
 /** 参考定价类目暂定固定查询的类目 ID */
 export const REF_PRICING_CATE_ID = '000000';
@@ -325,7 +327,7 @@ function SkuSpecModelTag({
   const loadInfo = async () => {
     if (!canQuery) {
       setInfo(null);
-      setError('当前账号未绑定供应商，无法查询基础信息');
+      setError('未指定供应商，无法查询基础信息');
       return;
     }
     setLoading(true);
@@ -471,7 +473,7 @@ function buildSalesUnitDisplay(params: {
 const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
   categoryPath,
   hasStore = false,
-  supplierId,
+  supplierId: supplierIdProp,
   skuList,
   minWholesaleQty,
   packingQuantity,
@@ -481,6 +483,20 @@ const CommissionRateHint: React.FC<CommissionRateHintProps> = ({
   storeDiscountLoading = false,
   storeDiscount = null,
 }) => {
+  const { initialState } = useModel('@@initialState');
+  const [searchParams] = useSearchParams();
+  const queryRaw = Number(searchParams.get('supplier_id'));
+  const fromQuery =
+    Number.isInteger(queryRaw) && queryRaw > 0 ? queryRaw : undefined;
+  const fromProp =
+    typeof supplierIdProp === 'number' && supplierIdProp > 0
+      ? supplierIdProp
+      : undefined;
+  const supplierId = resolveRequestSupplierId(
+    initialState?.currentUser,
+    fromProp ?? fromQuery,
+  );
+
   const units = useMemo(
     () => sortUnits(commissionData?.unit_list || []),
     [commissionData?.unit_list],

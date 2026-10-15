@@ -55,6 +55,7 @@ export async function fetchDhSeedCategories(
       method: 'POST',
       data: {
         parent_id: params.parent_id ?? null,
+        supplier_id: params.supplier_id,
       },
       ...options,
     },

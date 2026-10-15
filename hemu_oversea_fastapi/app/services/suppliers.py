@@ -12,9 +12,10 @@ from app.core.roles import OrgType, Role
 from app.models.supplier import Supplier
 from app.models.user import User
 from app.schemas.common import PageData
-from app.schemas.supplier import SupplierPublic
+from app.schemas.supplier import SupplierOption, SupplierPublic
 from app.services import users as user_service
 from app.services.auth import revoke_all_sessions
+from app.services.supplier_scope import accessible_supplier_filters
 
 # 6 位供应商编码：大写字母 + 数字
 _CODE_ALPHABET = string.ascii_uppercase + string.digits
@@ -107,13 +108,44 @@ def create_supplier(
     return supplier
 
 
+def to_supplier_public(
+    row: Supplier,
+    *,
+    created_by_name: str | None = None,
+) -> SupplierPublic:
+    return SupplierPublic(
+        id=row.id,
+        code=row.code,
+        name=row.name,
+        phone=row.phone,
+        email=row.email,
+        created_by=row.created_by,
+        created_by_name=created_by_name,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _load_creator_names(
+    db: Session, creator_ids: set[int]
+) -> dict[int, str]:
+    if not creator_ids:
+        return {}
+    rows = db.scalars(select(User).where(User.id.in_(creator_ids))).all()
+    return {
+        user.id: (user.nickname or user.username or str(user.id))
+        for user in rows
+    }
+
+
 def list_suppliers(
     db: Session,
     *,
+    actor: User,
     keyword: str | None,
     pagination: Pagination,
 ) -> PageData[SupplierPublic]:
-    filters = [Supplier.deleted_at.is_(None)]
+    filters = [Supplier.deleted_at.is_(None), *accessible_supplier_filters(actor)]
     if keyword:
         pattern = f"%{keyword}%"
         filters.append(
@@ -129,17 +161,54 @@ def list_suppliers(
     stmt = select(Supplier).where(*filters)
 
     total = db.scalar(count_stmt) or 0
-    rows = db.scalars(
-        stmt.order_by(Supplier.id.desc())
-        .offset(pagination.offset)
-        .limit(pagination.page_size)
-    ).all()
+    rows = list(
+        db.scalars(
+            stmt.order_by(Supplier.id.desc())
+            .offset(pagination.offset)
+            .limit(pagination.page_size)
+        ).all()
+    )
+    creator_names = _load_creator_names(
+        db,
+        {row.created_by for row in rows if row.created_by is not None},
+    )
     return PageData(
-        items=[SupplierPublic.model_validate(row) for row in rows],
+        items=[
+            to_supplier_public(
+                row,
+                created_by_name=(
+                    creator_names.get(row.created_by) if row.created_by else None
+                ),
+            )
+            for row in rows
+        ],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
     )
+
+
+def list_supplier_options(
+    db: Session,
+    *,
+    actor: User,
+    keyword: str | None = None,
+) -> list[SupplierOption]:
+    filters = [Supplier.deleted_at.is_(None), *accessible_supplier_filters(actor)]
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        filters.append(
+            or_(
+                Supplier.name.ilike(pattern),
+                Supplier.code.ilike(pattern),
+            )
+        )
+    rows = db.scalars(
+        select(Supplier).where(*filters).order_by(Supplier.id.desc())
+    ).all()
+    return [
+        SupplierOption(id=row.id, name=row.name, code=row.code) for row in rows
+    ]
 
 
 def get_supplier(db: Session, supplier_id: int) -> Supplier:

@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.deps import require_admin_user
-from app.core.errors import bad_request
 from app.models.user import User
 from app.schemas.common import ApiResponse, success
 from app.schemas.product import (
@@ -22,6 +21,7 @@ from app.schemas.product import (
 )
 from app.services import products as product_service
 from app.services.commission_rates_dh import get_commission_rate_by_cate_id
+from app.services.supplier_scope import resolve_supplier_id
 
 router = APIRouter(
     prefix="/categories",
@@ -68,14 +68,13 @@ def list_dh_seed_categories(
     - 不传 / 传空 parent_id：返回一级类目
     - 传入某 cate_pub_id：返回该类目下仍包含种子商品的直接子类
     - product_count：根类目由 groupby 汇总向上累计，其余类目为下级商品数合计
-    - 仅统计当前账号所属供应商的种子商品
+    - 仅统计作用域内供应商的种子商品（平台需传 supplier_id）
     """
-    if current_user.supplier_id is None:
-        raise bad_request("当前账号未绑定供应商，无法查询种子分类")
+    supplier_id = resolve_supplier_id(db, current_user, payload.supplier_id)
     items = product_service.list_dh_seed_categories_by_parent(
         db,
         parent_id=payload.parent_id,
-        supplier_id=current_user.supplier_id,
+        supplier_id=supplier_id,
     )
     return success(items)
 

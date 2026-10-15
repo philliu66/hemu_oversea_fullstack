@@ -26,6 +26,7 @@ from app.models.mission import (
 )
 from app.models.product_dh import ProductDh
 from app.models.store import Store
+from app.models.supplier import Supplier
 from app.models.user import User
 from app.schemas.common import PageData
 from app.schemas.mission import (
@@ -35,33 +36,35 @@ from app.schemas.mission import (
     MissionPublic,
 )
 from app.services.products import _build_dh_main_image_url
+from app.services.supplier_scope import (
+    SUPPLIER_PORTAL_ROLES as _SUPPLIER_PORTAL_ROLES,
+    resolve_supplier_id,
+)
 
 PLACEHOLDER_MESSAGE = "功能待补充"
 logger = logging.getLogger(__name__)
 
-_PLATFORM_ROLES = {Role.PLATFORM_ADMIN.value, Role.SUPER_ADMIN.value, Role.PLATFORM_STAFF.value}
-_SUPPLIER_PORTAL_ROLES = {Role.SUPPLIER_ADMIN.value, Role.SUPPLIER_STAFF.value}
 _MARKABLE_STATUSES = {MISSION_STATUS_PENDING, MISSION_STATUS_RUNNING}
 _EXECUTABLE_FISSION_STATUSES = {FISSION_STATUS_PENDING, FISSION_STATUS_FAILED}
 _MOCK_BATCH_SECONDS = 10
 
 
-def _scope_supplier_id(actor: User, supplier_id: int | None) -> int:
-    if actor.role in _SUPPLIER_PORTAL_ROLES:
-        if actor.supplier_id is None:
-            raise bad_request("当前账号未绑定供应商")
-        return actor.supplier_id
-    if actor.role in _PLATFORM_ROLES:
-        if supplier_id is None:
-            raise bad_request("请指定供应商")
-        return supplier_id
-    raise forbidden()
+def _scope_supplier_id(
+    db: Session,
+    actor: User,
+    supplier_id: int | None,
+) -> int:
+    return resolve_supplier_id(db, actor, supplier_id)
 
 
-def _visible_filters(actor: User, supplier_id: int | None) -> list:
+def _visible_filters(
+    db: Session,
+    actor: User,
+    supplier_id: int | None,
+) -> list:
     filters = [
         Mission.deleted_at.is_(None),
-        Mission.supplier_id == _scope_supplier_id(actor, supplier_id),
+        Mission.supplier_id == _scope_supplier_id(db, actor, supplier_id),
     ]
     if actor.role == Role.SUPPLIER_STAFF.value:
         filters.append(Mission.worker_id == actor.id)
@@ -78,7 +81,7 @@ def _get_visible_mission(
     mission = db.scalar(
         select(Mission).where(
             Mission.id == mission_id,
-            *_visible_filters(actor, supplier_id),
+            *_visible_filters(db, actor, supplier_id),
         )
     )
     if mission is not None:
@@ -89,12 +92,13 @@ def _get_visible_mission(
     raise forbidden("无权查看该任务")
 
 
-def _require_supplier_actor(actor: User) -> int:
-    if actor.role not in _SUPPLIER_PORTAL_ROLES:
-        raise forbidden("只有供应商账号可以操作")
-    if actor.supplier_id is None:
-        raise bad_request("当前账号未绑定供应商")
-    return actor.supplier_id
+def _require_supplier_actor(
+    db: Session,
+    actor: User,
+    supplier_id: int | None = None,
+) -> int:
+    """供应商账号或平台账号（需传 supplier_id）均可操作。"""
+    return resolve_supplier_id(db, actor, supplier_id)
 
 
 def _require_supplier_admin(actor: User) -> int:
@@ -119,10 +123,12 @@ def _to_public(
     *,
     worker: User | None,
     creator: User | None,
+    supplier_name: str | None = None,
 ) -> MissionPublic:
     return MissionPublic(
         id=mission.id,
         supplier_id=mission.supplier_id,
+        supplier_name=supplier_name,
         title=mission.title,
         description=mission.description,
         status=mission.status,
@@ -144,6 +150,17 @@ def _load_users(db: Session, user_ids: set[int]) -> dict[int, User]:
     return {user.id: user for user in rows}
 
 
+def _load_supplier_names(
+    db: Session, supplier_ids: set[int]
+) -> dict[int, str]:
+    if not supplier_ids:
+        return {}
+    rows = db.scalars(
+        select(Supplier).where(Supplier.id.in_(supplier_ids))
+    ).all()
+    return {row.id: row.name for row in rows}
+
+
 def create_mission(
     db: Session,
     *,
@@ -151,15 +168,18 @@ def create_mission(
     title: str,
     description: str | None,
     worker_id: int,
+    supplier_id: int | None = None,
 ) -> MissionPublic:
-    supplier_id = _require_supplier_actor(actor)
+    scoped_supplier_id = _require_supplier_actor(db, actor, supplier_id)
     cleaned_title = title.strip()
     if not cleaned_title:
         raise bad_request("请填写任务标题")
-    worker = _get_assignable_worker(db, supplier_id=supplier_id, worker_id=worker_id)
+    worker = _get_assignable_worker(
+        db, supplier_id=scoped_supplier_id, worker_id=worker_id
+    )
     cleaned_description = description.strip() if description else ""
     mission = Mission(
-        supplier_id=supplier_id,
+        supplier_id=scoped_supplier_id,
         title=cleaned_title,
         description=cleaned_description or None,
         status=MISSION_STATUS_PENDING,
@@ -180,7 +200,7 @@ def list_missions(
     keyword: str | None,
     pagination: Pagination,
 ) -> PageData[MissionPublic]:
-    filters = _visible_filters(actor, supplier_id)
+    filters = _visible_filters(db, actor, supplier_id)
     if keyword and keyword.strip():
         filters.append(Mission.title.ilike(f"%{keyword.strip()}%"))
 
@@ -197,12 +217,16 @@ def list_missions(
         mission.created_by for mission in missions if mission.created_by is not None
     )
     users = _load_users(db, user_ids)
+    supplier_names = _load_supplier_names(
+        db, {mission.supplier_id for mission in missions}
+    )
     return PageData(
         items=[
             _to_public(
                 mission,
                 worker=users.get(mission.worker_id),
                 creator=users.get(mission.created_by) if mission.created_by else None,
+                supplier_name=supplier_names.get(mission.supplier_id),
             )
             for mission in missions
         ],
@@ -229,10 +253,12 @@ def get_mission(
         db,
         {mission.worker_id, *([mission.created_by] if mission.created_by else [])},
     )
+    supplier_names = _load_supplier_names(db, {mission.supplier_id})
     return _to_public(
         mission,
         worker=users.get(mission.worker_id),
         creator=users.get(mission.created_by) if mission.created_by else None,
+        supplier_name=supplier_names.get(mission.supplier_id),
     )
 
 
@@ -244,20 +270,28 @@ def update_mission(
     title: str,
     description: str | None,
     worker_id: int,
+    supplier_id: int | None = None,
 ) -> MissionPublic:
-    supplier_id = _require_supplier_actor(actor)
+    peek = db.get(Mission, mission_id)
+    if peek is None or peek.is_deleted:
+        raise not_found("任务不存在")
+    scoped_supplier_id = _require_supplier_actor(
+        db, actor, supplier_id if supplier_id is not None else peek.supplier_id
+    )
     mission = _get_visible_mission(
         db,
         mission_id=mission_id,
         actor=actor,
-        supplier_id=supplier_id,
+        supplier_id=scoped_supplier_id,
     )
     if mission.status not in _MARKABLE_STATUSES:
         raise bad_request("仅未开始或进行中的任务可编辑")
     cleaned_title = title.strip()
     if not cleaned_title:
         raise bad_request("请填写任务标题")
-    worker = _get_assignable_worker(db, supplier_id=supplier_id, worker_id=worker_id)
+    worker = _get_assignable_worker(
+        db, supplier_id=scoped_supplier_id, worker_id=worker_id
+    )
     cleaned_description = description.strip() if description else ""
     mission.title = cleaned_title
     mission.description = cleaned_description or None
@@ -280,13 +314,19 @@ def mark_mission_finished(
     *,
     mission_id: int,
     actor: User,
+    supplier_id: int | None = None,
 ) -> MissionPublic:
-    supplier_id = _require_supplier_actor(actor)
+    peek = db.get(Mission, mission_id)
+    if peek is None or peek.is_deleted:
+        raise not_found("任务不存在")
+    scoped_supplier_id = _require_supplier_actor(
+        db, actor, supplier_id if supplier_id is not None else peek.supplier_id
+    )
     mission = _get_visible_mission(
         db,
         mission_id=mission_id,
         actor=actor,
-        supplier_id=supplier_id,
+        supplier_id=scoped_supplier_id,
     )
     if mission.status not in _MARKABLE_STATUSES:
         raise bad_request("当前状态不能标记结束")
@@ -512,7 +552,10 @@ def add_fission_data(
     seed_json: dict | None = None,
 ) -> MissionFissionDataPublic:
     """加入任务。seed_json 冻结种子原文，raw_json 为改完后的正文，update_json 为二者差异。"""
-    supplier_id = _require_supplier_actor(actor)
+    peek = db.get(Mission, mission_id)
+    if peek is None or peek.is_deleted:
+        raise not_found("任务不存在")
+    supplier_id = _require_supplier_actor(db, actor, peek.supplier_id)
     mission = _get_visible_mission(
         db,
         mission_id=mission_id,
@@ -639,7 +682,10 @@ def _get_mutable_fission_row(
     mission_id: int,
     data_id: int,
 ) -> MissionDataDhFission:
-    supplier_id = _require_supplier_actor(actor)
+    peek = db.get(Mission, mission_id)
+    if peek is None or peek.is_deleted:
+        raise not_found("任务不存在")
+    supplier_id = _require_supplier_actor(db, actor, peek.supplier_id)
     mission = _get_visible_mission(
         db,
         mission_id=mission_id,
@@ -727,11 +773,17 @@ def execute_mission(
 
     真实循环调用单次裂变的逻辑后续再替换 `_mock_finish_mission_batch`。
     """
+    peek = db.get(Mission, mission_id)
+    if peek is None or peek.is_deleted:
+        raise not_found("任务不存在")
+    scoped_supplier_id = _require_supplier_actor(
+        db, actor, supplier_id if supplier_id is not None else peek.supplier_id
+    )
     mission = _get_visible_mission(
         db,
         mission_id=mission_id,
         actor=actor,
-        supplier_id=supplier_id,
+        supplier_id=scoped_supplier_id,
     )
     if mission.status == MISSION_STATUS_RUNNING:
         raise bad_request("任务正在执行中")

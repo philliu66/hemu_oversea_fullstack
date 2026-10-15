@@ -33,6 +33,7 @@ export async function fetchSkuBaseInfoList(
         keyword: params.keyword,
         page: params.page ?? 1,
         page_size: params.page_size ?? 5000,
+        supplier_id: params.supplier_id,
       },
       ...options,
     },

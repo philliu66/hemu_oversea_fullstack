@@ -15,6 +15,7 @@ from app.schemas.supplier import (
     SupplierDetail,
     SupplierDetailPublic,
     SupplierList,
+    SupplierOption,
     SupplierPublic,
     SupplierUpdate,
 )
@@ -31,12 +32,32 @@ router = APIRouter(
 @router.post("/list", response_model=ApiResponse[PageData[SupplierPublic]])
 def list_suppliers(
     payload: SupplierList,
+    current_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[PageData[SupplierPublic]]:
     pagination = Pagination(page=payload.page, page_size=payload.page_size)
     return success(
         supplier_service.list_suppliers(
-            db, keyword=payload.keyword, pagination=pagination
+            db,
+            actor=current_user,
+            keyword=payload.keyword,
+            pagination=pagination,
+        )
+    )
+
+
+@router.post("/options", response_model=ApiResponse[list[SupplierOption]])
+def list_supplier_options(
+    payload: SupplierList,
+    current_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[SupplierOption]]:
+    """平台角色下拉：按权限范围返回可选供应商。"""
+    return success(
+        supplier_service.list_supplier_options(
+            db,
+            actor=current_user,
+            keyword=payload.keyword,
         )
     )
 
@@ -73,7 +94,7 @@ def create_supplier(
         permission_codes=payload.permission_codes,
         created_by=current_user.id,
     )
-    return success(SupplierPublic.model_validate(supplier))
+    return success(supplier_service.to_supplier_public(supplier))
 
 
 @router.post("/update", response_model=ApiResponse[SupplierPublic])
@@ -90,7 +111,7 @@ def update_supplier(
         email=payload.email,
         permission_codes=payload.permission_codes,
     )
-    return success(SupplierPublic.model_validate(supplier))
+    return success(supplier_service.to_supplier_public(supplier))
 
 
 @router.post("/delete", response_model=ApiResponse[dict])

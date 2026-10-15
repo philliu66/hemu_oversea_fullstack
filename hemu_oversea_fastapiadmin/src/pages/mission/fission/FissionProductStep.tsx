@@ -24,6 +24,7 @@ export const FissionProductStep = forwardRef<
     applySkuAttrTemplateOnCategoryChange?: boolean;
     /** 产品标题清空并以种子标题为 placeholder（手动添加第二步） */
     seedTitleAsItemNamePlaceholder?: boolean;
+    supplierId?: number;
   }
 >(function FissionProductStep(
   {
@@ -34,6 +35,7 @@ export const FissionProductStep = forwardRef<
     changedAttrList = [],
     applySkuAttrTemplateOnCategoryChange = false,
     seedTitleAsItemNamePlaceholder = false,
+    supplierId,
   },
   ref,
 ) {
@@ -50,6 +52,7 @@ export const FissionProductStep = forwardRef<
         applySkuAttrTemplateOnCategoryChange
       }
       seedTitleAsItemNamePlaceholder={seedTitleAsItemNamePlaceholder}
+      supplierId={supplierId}
     />
   );
 });

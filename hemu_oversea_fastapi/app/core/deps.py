@@ -9,18 +9,13 @@ from app.core.roles import (
     ADMIN_PORTAL_ROLES,
     APP_PORTAL_ROLES,
     Role,
-    normalize_portal_role,
 )
 from app.core.security import Audience, TokenError, decode_token
 from app.models.user import User
 from app.services import permissions as perm_service
 
 _bearer = HTTPBearer(auto_error=False)
-_STAFF_ROLE_VALUES = {
-    normalize_portal_role(role.value) or role.value for role in ADMIN_PORTAL_ROLES
-}
-_STAFF_ROLE_VALUES.add(Role.SUPER_ADMIN.value)
-_STAFF_ROLE_VALUES.add(Role.PLATFORM_ADMIN.value)
+_STAFF_ROLE_VALUES = {role.value for role in ADMIN_PORTAL_ROLES}
 _APP_ROLE_VALUES = {role.value for role in APP_PORTAL_ROLES}
 
 
@@ -75,8 +70,7 @@ def get_current_admin_user(
     db: Session = Depends(get_db),
 ) -> User:
     user = _user_from_access(creds, db, "admin")
-    normalized = normalize_portal_role(user.role) or user.role
-    if normalized not in _STAFF_ROLE_VALUES and user.role not in _STAFF_ROLE_VALUES:
+    if user.role not in _STAFF_ROLE_VALUES:
         raise unauthorized()
     return user
 
@@ -91,15 +85,10 @@ def get_current_account(
 
 def require_roles(*roles: Role):
     """管理端：先确认是 admin token（401），再核对角色（不够则 403）。"""
-    allowed: set[str] = set()
-    for role in roles:
-        allowed.add(role.value)
-        if role == Role.PLATFORM_ADMIN:
-            allowed.add(Role.SUPER_ADMIN.value)
+    allowed = {role.value for role in roles}
 
     def _checker(current_user: User = Depends(get_current_admin_user)) -> User:
-        user_role = normalize_portal_role(current_user.role) or current_user.role
-        if current_user.role not in allowed and user_role not in allowed:
+        if current_user.role not in allowed:
             raise forbidden()
         return current_user
 
@@ -126,7 +115,6 @@ def require_perm(*codes: str, require_all: bool = True):
 
 
 require_platform_admin = require_roles(Role.PLATFORM_ADMIN)
-require_super_admin = require_platform_admin  # 兼容旧名
 require_platform = require_roles(Role.PLATFORM_ADMIN, Role.PLATFORM_STAFF)
 require_supplier_admin = require_roles(Role.SUPPLIER_ADMIN)
 require_supplier = require_roles(Role.SUPPLIER_ADMIN, Role.SUPPLIER_STAFF)

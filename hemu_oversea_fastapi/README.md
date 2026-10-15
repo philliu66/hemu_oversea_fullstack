@@ -109,11 +109,11 @@ Startup seeds the bootstrap user if missing. Wait for `Application startup compl
 
 ### Bootstrap account
 
-On startup the platform super-admin is created/synced (skipped if already present; password synced from config):
+On startup the platform admin is created/synced (skipped if already present; password synced from config):
 
 | Username      | Password                         | Notes                                      |
 | ------------- | -------------------------------- | ------------------------------------------ |
-| `superadmin`  | value of `BOOTSTRAP_PASSWORD`    | Admin login: `/api/v1/admin/auth/login`    |
+| `superadmin`  | value of `BOOTSTRAP_PASSWORD`    | Platform admin (`platform_admin`); login: `/api/v1/admin/auth/login` |
 
 In `/docs`: call login → Authorize with the **access_token** (no `Bearer` prefix) → call protected APIs.
 
@@ -269,7 +269,7 @@ Do not edit already-applied revisions; do not rely on `create_all()` alone. Impo
 ## Extension guide
 
 1. **New App API**: `app/api/app/`, `Depends(get_current_app_user)`, register in `api/app/__init__.py`.
-2. **New admin API**: `app/api/admin/`, `Depends(require_super_admin)` or `require_admin_user`, register in `api/admin/__init__.py`.
+2. **New admin API**: `app/api/admin/`, `Depends(require_platform_admin)` or `require_admin_user`, register in `api/admin/__init__.py`.
 3. **Shared utilities**: identical public rules → `app/api/common/`; shared authenticated → `Depends(get_current_account)`. Different auth/params → split app/admin routes; keep one service.
 4. **New table**: one file under `app/models/`, inherit `Base`, then migrate.
 5. **I/O models**: `app/schemas/`; never return password hashes.

@@ -20,6 +20,10 @@ class StoreCreate(BaseModel):
     )
     account: str = Field(min_length=1, max_length=100, description="店铺账号")
     password: str = Field(min_length=1, max_length=255, description="店铺密码")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
+    )
 
 
 class StoreUpdate(BaseModel):
@@ -122,6 +126,7 @@ class StorePublic(BaseModel):
 
     id: int
     supplier_id: int | None = Field(description="所属供应商 ID")
+    supplier_name: str | None = Field(default=None, description="供应商名称")
     store_type: str
     name: str
     identifier: str
@@ -146,6 +151,7 @@ class StoreDetailPublic(BaseModel):
 
     id: int
     supplier_id: int | None = Field(description="所属供应商 ID")
+    supplier_name: str | None = Field(default=None, description="供应商名称")
     store_type: str
     name: str
     identifier: str

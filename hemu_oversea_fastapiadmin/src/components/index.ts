@@ -19,6 +19,7 @@ export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as OfflineBanner } from './OfflineBanner';
 export { default as PermissionCodePicker } from './PermissionCodePicker';
 export { default as StandardFormRow } from './StandardFormRow';
+export { default as SupplierSelectField } from './SupplierSelectField';
 export { default as TagSelect } from './TagSelect';
 
 export { AvatarDropdown, DocLink, Footer, LangDropdown, VersionDropdown };

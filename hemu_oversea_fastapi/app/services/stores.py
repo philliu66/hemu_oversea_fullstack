@@ -11,6 +11,7 @@ from app.core.store_types import StoreType
 from app.models.aftersale_template_dh import AftersaleTemplateDh
 from app.models.shipping_template_dh import ShippingTemplateDh
 from app.models.store import Store
+from app.models.supplier import Supplier
 from app.schemas.common import PageData
 from app.schemas.store import (
     StoreAftersaleTemplatePublic,
@@ -36,10 +37,15 @@ def _conflict_from_integrity(exc: IntegrityError) -> Exception:
     return conflict("店铺信息冲突")
 
 
-def _to_public(store: Store) -> StorePublic:
+def _to_public(
+    store: Store,
+    *,
+    supplier_name: str | None = None,
+) -> StorePublic:
     return StorePublic(
         id=store.id,
         supplier_id=store.supplier_id,
+        supplier_name=supplier_name,
         store_type=store.store_type,
         name=store.name,
         identifier=store.identifier,
@@ -53,10 +59,15 @@ def _to_public(store: Store) -> StorePublic:
     )
 
 
-def _to_detail_public(store: Store) -> StoreDetailPublic:
+def _to_detail_public(
+    store: Store,
+    *,
+    supplier_name: str | None = None,
+) -> StoreDetailPublic:
     return StoreDetailPublic(
         id=store.id,
         supplier_id=store.supplier_id,
+        supplier_name=supplier_name,
         store_type=store.store_type,
         name=store.name,
         identifier=store.identifier,
@@ -70,6 +81,12 @@ def _to_detail_public(store: Store) -> StoreDetailPublic:
         created_at=store.created_at,
         updated_at=store.updated_at,
     )
+
+
+def _load_supplier_name(db: Session, supplier_id: int | None) -> str | None:
+    if supplier_id is None:
+        return None
+    return db.scalar(select(Supplier.name).where(Supplier.id == supplier_id))
 
 
 def _load_store_with_actors(db: Session, store_id: int) -> Store:
@@ -117,7 +134,11 @@ def create_store(
     except IntegrityError as exc:
         db.rollback()
         raise _conflict_from_integrity(exc) from exc
-    return _to_public(_load_store_with_actors(db, store.id))
+    loaded = _load_store_with_actors(db, store.id)
+    return _to_public(
+        loaded,
+        supplier_name=_load_supplier_name(db, loaded.supplier_id),
+    )
 
 
 def list_stores(
@@ -160,8 +181,9 @@ def list_stores(
         .offset(pagination.offset)
         .limit(pagination.page_size)
     ).unique().all()
+    supplier_name = _load_supplier_name(db, supplier_id)
     return PageData(
-        items=[_to_public(row) for row in rows],
+        items=[_to_public(row, supplier_name=supplier_name) for row in rows],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -173,7 +195,11 @@ def get_store(db: Session, store_id: int) -> Store:
 
 
 def get_store_detail(db: Session, store_id: int) -> StoreDetailPublic:
-    return _to_detail_public(_load_store_with_actors(db, store_id))
+    store = _load_store_with_actors(db, store_id)
+    return _to_detail_public(
+        store,
+        supplier_name=_load_supplier_name(db, store.supplier_id),
+    )
 
 
 def get_store_base_discount(db: Session, store_id: int) -> StoreBaseDiscountPublic:
@@ -218,7 +244,11 @@ def update_store(
     except IntegrityError as exc:
         db.rollback()
         raise _conflict_from_integrity(exc) from exc
-    return _to_public(_load_store_with_actors(db, store.id))
+    loaded = _load_store_with_actors(db, store.id)
+    return _to_public(
+        loaded,
+        supplier_name=_load_supplier_name(db, loaded.supplier_id),
+    )
 
 
 def soft_delete_store(db: Session, *, store_id: int, actor_id: int) -> None:

@@ -1,6 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { useModel } from '@umijs/max';
+import { useModel, useSearchParams } from '@umijs/max';
 import { App, Button, Image, Space, Typography } from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -16,6 +16,10 @@ import type {
   StorePublic,
 } from '@/types/api';
 import { formatDateTime } from '@/utils/datetime';
+import {
+  needsSupplierSelection,
+  resolveRequestSupplierId,
+} from '@/utils/portalScope';
 
 type ProductTableParams = {
   current?: number;
@@ -86,12 +90,27 @@ function resolveCatePubId(
 
 export function SeedProductSelectTable({
   onSelect,
+  supplierId: supplierIdProp,
 }: {
   onSelect: (product: DhProductPublic) => void;
+  /** 任务所属供应商，优先于 URL / 当前用户 */
+  supplierId?: number;
 }) {
   const { message } = App.useApp();
   const { initialState } = useModel('@@initialState');
-  const supplierId = initialState?.currentUser?.supplier_id;
+  const currentUser = initialState?.currentUser;
+  const [searchParams] = useSearchParams();
+  const queryRaw = Number(searchParams.get('supplier_id'));
+  const fromQuery =
+    Number.isInteger(queryRaw) && queryRaw > 0 ? queryRaw : undefined;
+  const fromProp =
+    typeof supplierIdProp === 'number' && supplierIdProp > 0
+      ? supplierIdProp
+      : undefined;
+  const supplierId = resolveRequestSupplierId(
+    currentUser,
+    fromProp ?? fromQuery,
+  );
   const actionRef = useRef<ActionType | null>(null);
   const [stores, setStores] = useState<StorePublic[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<SeedCategoryOption[]>(
@@ -99,10 +118,14 @@ export function SeedProductSelectTable({
   );
 
   useEffect(() => {
+    if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
+      setCategoryOptions([]);
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
-        const items = await fetchDhSeedCategories({});
+        const items = await fetchDhSeedCategories({ supplier_id: supplierId });
         if (!cancelled) {
           setCategoryOptions(items.map(toSeedCategoryOption));
         }
@@ -120,13 +143,16 @@ export function SeedProductSelectTable({
     return () => {
       cancelled = true;
     };
-  }, [message]);
+  }, [currentUser, message, supplierId]);
 
   const loadCategoryData: CascaderProps<SeedCategoryOption>['loadData'] = (
     selectedOptions,
   ) => {
     const targetOption = selectedOptions[selectedOptions.length - 1];
     if (!targetOption || targetOption.isLeaf || targetOption.children) {
+      return;
+    }
+    if (!supplierId) {
       return;
     }
 
@@ -137,6 +163,7 @@ export function SeedProductSelectTable({
       try {
         const items = await fetchDhSeedCategories({
           parent_id: String(targetOption.value),
+          supplier_id: supplierId,
         });
         setCategoryOptions((prev) =>
           updateCascaderChildren(
@@ -158,7 +185,7 @@ export function SeedProductSelectTable({
   };
 
   useEffect(() => {
-    if (!supplierId) {
+    if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
       setStores([]);
       return;
     }
@@ -187,7 +214,7 @@ export function SeedProductSelectTable({
     return () => {
       cancelled = true;
     };
-  }, [message, supplierId]);
+  }, [currentUser, message, supplierId]);
 
   const storeValueEnum = useMemo(
     () =>
@@ -386,6 +413,9 @@ export function SeedProductSelectTable({
         }}
         columns={columns}
         request={async (params) => {
+          if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
+            return { data: [], success: true, total: 0 };
+          }
           const storeIdRaw = params.store_id;
           const storeId =
             storeIdRaw === undefined || storeIdRaw === null || storeIdRaw === ''
@@ -405,6 +435,7 @@ export function SeedProductSelectTable({
             sort: 0,
             page: params.current ?? 1,
             page_size: params.pageSize ?? PAGE_SIZE_DEFAULT,
+            supplier_id: supplierId,
           });
           return {
             data: data.items,

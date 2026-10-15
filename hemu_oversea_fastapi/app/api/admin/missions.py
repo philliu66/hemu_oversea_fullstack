@@ -80,6 +80,7 @@ def create_mission(
             title=payload.title,
             description=payload.description,
             worker_id=payload.worker_id,
+            supplier_id=payload.supplier_id,
         )
     )
 
@@ -98,6 +99,7 @@ def update_mission(
             title=payload.title,
             description=payload.description,
             worker_id=payload.worker_id,
+            supplier_id=payload.supplier_id,
         )
     )
 
@@ -113,6 +115,7 @@ def mark_mission_finished(
             db,
             mission_id=payload.id,
             actor=current_user,
+            supplier_id=payload.supplier_id,
         )
     )
 

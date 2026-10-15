@@ -85,6 +85,8 @@ def _cate_name(row: ProductCategoryDh | None) -> str | None:
 def _to_list_item(
     row: SkuAttrTemplateDh,
     category: ProductCategoryDh | None,
+    *,
+    supplier_name: str | None = None,
 ) -> SkuAttrTemplateListItemPublic:
     return SkuAttrTemplateListItemPublic(
         id=row.id,
@@ -92,6 +94,8 @@ def _to_list_item(
         cate_pub_id=row.cate_pub_id,
         cate_name=_cate_name(category),
         category_id=category.id if category else None,
+        supplier_id=row.supplier_id,
+        supplier_name=supplier_name,
         updated_at=row.updated_at,
     )
 
@@ -99,10 +103,13 @@ def _to_list_item(
 def _to_public(
     row: SkuAttrTemplateDh,
     category: ProductCategoryDh | None,
+    *,
+    supplier_name: str | None = None,
 ) -> SkuAttrTemplatePublic:
     return SkuAttrTemplatePublic(
         id=row.id,
         supplier_id=row.supplier_id,
+        supplier_name=supplier_name,
         sku_code=row.sku_code,
         cate_pub_id=row.cate_pub_id,
         cate_name=_cate_name(category),
@@ -189,8 +196,18 @@ def list_sku_attr_templates(
         ).all():
             categories[cat.cate_pub_id] = cat
 
+    from app.models.supplier import Supplier
+
+    supplier_name = db.scalar(select(Supplier.name).where(Supplier.id == sid))
     return PageData(
-        items=[_to_list_item(row, categories.get(row.cate_pub_id)) for row in rows],
+        items=[
+            _to_list_item(
+                row,
+                categories.get(row.cate_pub_id),
+                supplier_name=supplier_name,
+            )
+            for row in rows
+        ],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,

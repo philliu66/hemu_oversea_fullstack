@@ -1,5 +1,5 @@
 const ACCOUNT_ROLE_LABEL_ZH: Record<string, string> = {
-  super_admin: '超级管理员',
+  platform_admin: '平台管理员',
   platform_staff: '平台员工',
   supplier_admin: '供应商管理员',
   supplier_staff: '供应商员工',

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.deps import require_admin_user, require_perm, require_platform_admin
 from app.core.errors import forbidden
-from app.core.roles import Role, normalize_portal_role
+from app.core.roles import Role
 from app.models.user import User
 from app.schemas.common import ApiResponse, success
 from app.schemas.permission import (
@@ -34,11 +34,9 @@ def supplier_assignable_tree(
     db: Session = Depends(get_db),
 ) -> ApiResponse[list[PermissionTreeNode]]:
     """创建/编辑供应商时勾选权限池用的树。"""
-    role = normalize_portal_role(current_user.role) or current_user.role
-    if role not in {
+    if current_user.role not in {
         Role.PLATFORM_ADMIN.value,
         Role.PLATFORM_STAFF.value,
-        Role.SUPER_ADMIN.value,
     }:
         raise forbidden()
     return success(perm_service.supplier_assignable_permission_tree(db))
