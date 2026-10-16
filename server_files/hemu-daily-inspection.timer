@@ -1,0 +1,22 @@
+# 每天 10:00 触发 hemu-daily-inspection.service。
+# OnCalendar 使用服务器本地时区，部署前用 timedatectl 确认是 Asia/Shanghai。
+# 要改发送时刻，只改下面的 OnCalendar，例如 09:30 写成 *-*-* 09:30:00。
+#
+# 本文件与 .service 一起复制到 /etc/systemd/system/。
+# 复制后在任意目录执行（启用的是 timer，不是 service）：
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hemu-daily-inspection.timer
+#   systemctl list-timers hemu-daily-inspection.timer
+#
+# Persistent=true：若 10:00 时机子是关的，开机后补跑一次。
+
+[Unit]
+Description=Run HeMu daily inspection every day at 10:00
+
+[Timer]
+OnCalendar=*-*-* 10:00:00
+Persistent=true
+Unit=hemu-daily-inspection.service
+
+[Install]
+WantedBy=timers.target

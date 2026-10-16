@@ -1,0 +1,37 @@
+# 每日巡检发信（一次性任务，跑完即退出）。
+#
+# 部署前把下面三处「/你的仓库路径」改成服务器上仓库的实际绝对路径，
+# 并确认 User= 与现有 hemu-oversea-fastapi.service 的运行用户一致（当前为 www）。
+#
+# 复制到服务器（在仓库根目录执行，目标目录固定是 /etc/systemd/system/）：
+#   sudo cp server_files/hemu-daily-inspection.service /etc/systemd/system/
+#   sudo cp server_files/hemu-daily-inspection.timer /etc/systemd/system/
+#
+# 复制后在任意目录执行即可，不依赖当前工作目录：
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hemu-daily-inspection.timer
+#
+# 查看下次触发时间：
+#   systemctl list-timers hemu-daily-inspection.timer
+#
+# 不想等到点、立刻试跑一轮（只跑这一次，不改变每天的计划）：
+#   sudo systemctl start hemu-daily-inspection.service
+#   sudo systemctl status hemu-daily-inspection.service
+#   journalctl -u hemu-daily-inspection.service -n 100 --no-pager
+#
+# 不要对本单元设置 Restart=always，否则失败后会不停重跑并重复发信。
+# 改的是 Python 代码时不用重启本单元；只有改了本文件或 .timer 才需要：
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart hemu-daily-inspection.timer
+
+[Unit]
+Description=HeMu daily store inspection mail
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=www
+WorkingDirectory=/你的仓库路径/hemu_oversea_fastapi
+EnvironmentFile=-/你的仓库路径/hemu_oversea_fastapi/.env
+ExecStart=/你的仓库路径/hemu_oversea_fastapi/.venv/bin/python -m app.jobs.daily_inspection
