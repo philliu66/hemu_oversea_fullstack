@@ -35,6 +35,7 @@ from app.schemas.mission import (
     MissionLogPublic,
     MissionPublic,
 )
+from app.services import operation_logs
 from app.services.products import _build_dh_main_image_url
 from app.services.supplier_scope import (
     SUPPLIER_PORTAL_ROLES as _SUPPLIER_PORTAL_ROLES,
@@ -194,6 +195,20 @@ def create_mission(
         created_by=actor.id,
     )
     db.add(mission)
+    db.flush()
+    operation_logs.record_operation(
+        db,
+        actor=actor,
+        action=operation_logs.ACTION_MISSION_CREATE,
+        resource_type="mission",
+        resource_id=str(mission.id),
+        summary=f"新建任务：{cleaned_title}",
+        detail={
+            "title": cleaned_title,
+            "worker_id": worker.id,
+            "supplier_id": scoped_supplier_id,
+        },
+    )
     db.commit()
     db.refresh(mission)
     return _to_public(mission, worker=worker, creator=actor)

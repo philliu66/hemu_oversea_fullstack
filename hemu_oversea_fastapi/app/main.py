@@ -37,6 +37,7 @@ openapi_tags = [
     {"name": "admin:product", "description": "管理端商品管理"},
     {"name": "admin:categories", "description": "管理端商品分类"},
     {"name": "admin:mission", "description": "管理端任务管理"},
+    {"name": "admin:logs", "description": "管理端登录与操作日志"},
     {"name": "app:auth", "description": "App 端认证"},
     {"name": "app:users", "description": "App 端用户"},
     {"name": "common:ping", "description": "公共探活"},

@@ -23,6 +23,8 @@ from app.models.sku_base_info_dh import SkuBaseInfoDh
 from app.models.store import Store
 from app.models.supplier import Supplier
 from app.models.user import User
+from app.models.user_login_log import UserLoginLog
+from app.models.user_operation_log import UserOperationLog
 
 __all__ = [
     "AftersaleTemplateDh",
@@ -49,5 +51,7 @@ __all__ = [
     "Supplier",
     "SupplierPermission",
     "User",
+    "UserLoginLog",
+    "UserOperationLog",
     "UserRole",
 ]

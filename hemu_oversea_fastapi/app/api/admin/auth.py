@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.deps import get_current_admin_user
+from app.core.request_meta import client_meta
 from app.models.user import User
 from app.schemas.auth import (
     AdminLoginRequest,
@@ -26,11 +27,6 @@ from app.services.captcha import create_captcha, verify_captcha
 router = APIRouter(prefix="/auth", tags=["admin:auth"])
 
 
-def _client_meta(request: Request) -> tuple[str | None, str | None]:
-    ip = request.client.host if request.client else None
-    return ip, request.headers.get("user-agent")
-
-
 @router.post(
     "/auto-login",
     response_model=ApiResponse[AuthLoginResponse],
@@ -42,7 +38,7 @@ def auto_login(
     db: Session = Depends(get_db),
 ) -> ApiResponse[AuthLoginResponse]:
     """仅账号密码登录，跳过图形验证码；返回与 /login 相同。仅供 /docs 联调。"""
-    ip, user_agent = _client_meta(request)
+    ip, user_agent = client_meta(request)
     return success(
         login_for_audience(
             db,
@@ -74,7 +70,7 @@ def login(
         code=payload.captcha_code,
         audience="admin",
     )
-    ip, user_agent = _client_meta(request)
+    ip, user_agent = client_meta(request)
     return success(
         login_for_audience(
             db,
@@ -93,7 +89,7 @@ def refresh(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ApiResponse[TokenPair]:
-    ip, user_agent = _client_meta(request)
+    ip, user_agent = client_meta(request)
     return success(
         refresh_for_audience(
             db,

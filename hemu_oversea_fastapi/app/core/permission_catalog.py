@@ -282,6 +282,24 @@ PERMISSION_SEEDS: list[PermissionSeed] = [
         "scope": "supplier",
         "sort_order": 52,
     },
+    {
+        "code": "logs",
+        "parent_code": None,
+        "type": "menu",
+        "title": "日志管理",
+        "path": "/logs",
+        "scope": "platform",
+        "sort_order": 70,
+    },
+    {
+        "code": "logs.view",
+        "parent_code": "logs",
+        "type": "button",
+        "title": "查看日志",
+        "path": None,
+        "scope": "platform",
+        "sort_order": 71,
+    },
 ]
 
 # 默认平台员工角色应具备的权限码

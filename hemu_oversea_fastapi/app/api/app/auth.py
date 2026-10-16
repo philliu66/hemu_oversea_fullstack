@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.deps import get_current_app_user
+from app.core.request_meta import client_meta
 from app.models.user import User
 from app.schemas.auth import (
     AuthLoginResponse,
@@ -23,11 +24,6 @@ from app.services.auth import (
 from app.services.users import create_user
 
 router = APIRouter(prefix="/auth", tags=["app:auth"])
-
-
-def _client_meta(request: Request) -> tuple[str | None, str | None]:
-    ip = request.client.host if request.client else None
-    return ip, request.headers.get("user-agent")
 
 
 @router.post("/register", status_code=201, response_model=ApiResponse[UserPublic])
@@ -52,7 +48,7 @@ def login(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ApiResponse[AuthLoginResponse]:
-    ip, user_agent = _client_meta(request)
+    ip, user_agent = client_meta(request)
     return success(
         login_for_audience(
             db,
@@ -71,7 +67,7 @@ def refresh(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ApiResponse[TokenPair]:
-    ip, user_agent = _client_meta(request)
+    ip, user_agent = client_meta(request)
     return success(
         refresh_for_audience(
             db,

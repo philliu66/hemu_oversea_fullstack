@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.admin.auth import router as auth_router
 from app.api.admin.categories import router as categories_router
+from app.api.admin.logs import router as logs_router
 from app.api.admin.missions import router as missions_router
 from app.api.admin.permissions import router as permissions_router
 from app.api.admin.platform_roles import router as platform_roles_router
@@ -30,3 +31,4 @@ router.include_router(categories_router)
 router.include_router(missions_router)
 router.include_router(templates_router)
 router.include_router(sku_router)
+router.include_router(logs_router)

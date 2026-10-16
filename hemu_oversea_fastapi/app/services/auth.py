@@ -20,6 +20,7 @@ from app.models.refresh_session import RefreshSession
 from app.models.user import User
 from app.schemas.auth import AuthLoginResponse, TokenPair
 from app.schemas.user import UserPublic
+from app.services import login_logs
 from app.services import permissions as perm_service
 
 APP_ROLES: frozenset[str] = frozenset(role.value for role in APP_PORTAL_ROLES)
@@ -40,7 +41,7 @@ def issue_tokens(
     *,
     ip: str | None = None,
     user_agent: str | None = None,
-) -> TokenPair:
+) -> tuple[TokenPair, str]:
     refresh = create_refresh_token(str(user.id), audience)
     db.add(
         RefreshSession(
@@ -52,10 +53,11 @@ def issue_tokens(
             user_agent=_trim_user_agent(user_agent),
         )
     )
-    return TokenPair(
+    tokens = TokenPair(
         access_token=create_access_token(str(user.id), audience),
         refresh_token=refresh.token,
     )
+    return tokens, refresh.jti
 
 
 def login_for_audience(
@@ -84,8 +86,18 @@ def login_for_audience(
 
     _clear_failures(db, username, audience)
     if audience == "admin":
-        _revoke_all(db, user.id, audience)
-    tokens = issue_tokens(db, user, audience, ip=ip, user_agent=user_agent)
+        _revoke_all(db, user.id, audience, login_reason="kicked")
+    tokens, refresh_jti = issue_tokens(
+        db, user, audience, ip=ip, user_agent=user_agent
+    )
+    login_logs.open_session(
+        db,
+        user=user,
+        audience=audience,
+        refresh_jti=refresh_jti,
+        ip=ip,
+        user_agent=user_agent,
+    )
     db.commit()
     return AuthLoginResponse(
         access_token=tokens.access_token,
@@ -115,7 +127,7 @@ def refresh_for_audience(
 
     now = datetime.now(timezone.utc)
     if session.revoked_at is not None:
-        _revoke_all(db, user_id, audience)
+        _revoke_all(db, user_id, audience, login_reason="kicked")
         db.commit()
         raise unauthorized()
     if _as_utc(session.expires_at) <= now:
@@ -127,8 +139,16 @@ def refresh_for_audience(
     if user.role not in _AUDIENCE_ROLES[audience]:
         raise unauthorized()
 
+    old_jti = payload.jti
     session.revoked_at = now
-    tokens = issue_tokens(db, user, audience, ip=ip, user_agent=user_agent)
+    tokens, new_jti = issue_tokens(db, user, audience, ip=ip, user_agent=user_agent)
+    login_logs.touch_session(
+        db,
+        old_jti=old_jti,
+        new_jti=new_jti,
+        ip=ip,
+        user_agent=user_agent,
+    )
     db.commit()
     return tokens
 
@@ -145,21 +165,24 @@ def logout_for_audience(
         raise unauthorized()
 
     session = db.scalar(select(RefreshSession).where(RefreshSession.jti == payload.jti))
-    if session is None or session.audience != audience:
-        return
-    if session.revoked_at is None:
+    if session is not None and session.audience == audience and session.revoked_at is None:
         session.revoked_at = datetime.now(timezone.utc)
-        db.commit()
+    login_logs.close_by_jti(
+        db,
+        refresh_jti=payload.jti,
+        reason="logout",
+    )
+    db.commit()
 
 
 def logout_all_for_audience(db: Session, *, user_id: int, audience: Audience) -> None:
-    _revoke_all(db, user_id, audience)
+    _revoke_all(db, user_id, audience, login_reason="logout_all")
     db.commit()
 
 
 def revoke_all_sessions(db: Session, user_id: int) -> None:
     """作废该用户所有端的 refresh，不 commit。"""
-    _revoke_all(db, user_id)
+    _revoke_all(db, user_id, login_reason="kicked")
 
 
 def change_password(
@@ -175,7 +198,7 @@ def change_password(
     if old_password == new_password:
         raise bad_request("新密码不能与原密码相同")
     user.hashed_password = hash_password(new_password)
-    _revoke_all(db, user.id)
+    _revoke_all(db, user.id, login_reason="password_change")
     db.commit()
 
 
@@ -219,7 +242,13 @@ def _clear_failures(db: Session, username: str, audience: Audience) -> None:
     )
 
 
-def _revoke_all(db: Session, user_id: int, audience: Audience | None = None) -> None:
+def _revoke_all(
+    db: Session,
+    user_id: int,
+    audience: Audience | None = None,
+    *,
+    login_reason: str = "kicked",
+) -> None:
     now = datetime.now(timezone.utc)
     stmt = (
         update(RefreshSession)
@@ -232,6 +261,12 @@ def _revoke_all(db: Session, user_id: int, audience: Audience | None = None) -> 
     if audience is not None:
         stmt = stmt.where(RefreshSession.audience == audience)
     db.execute(stmt)
+    login_logs.close_open_sessions(
+        db,
+        user_id=user_id,
+        reason=login_reason,
+        audience=audience,
+    )
 
 
 def _trim_user_agent(user_agent: str | None) -> str | None:
