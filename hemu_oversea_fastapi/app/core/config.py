@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     DHGATE_OAUTH_STATE_TTL_MINUTES: int = 10
     DHGATE_TOKEN_REFRESH_BUFFER_MINUTES: int = 5
 
+    # 阿里云 RAM（邮件推送 DirectMail 等共用）
+    ALIYUN_RAM_ACCESS_KEY_ID: str = ""
+    ALIYUN_RAM_ACCESS_KEY_SECRET: str = ""
+
+    # 阿里云邮件推送 DirectMail
+    ALIYUN_DM_ACCOUNT_NAME: str = ""  # 控制台已验证的发信地址
+    ALIYUN_DM_REGION_ID: str = "cn-hangzhou"
+    ALIYUN_DM_ENDPOINT: str = "dm.aliyuncs.com"
+    ALIYUN_DM_ADDRESS_TYPE: int = 1  # 0=随机账号；1=发信地址
+    ALIYUN_DM_REPLY_TO_ADDRESS: bool = True  # 是否启用控制台回信地址
+
     @model_validator(mode="after")
     def assemble_database_url(self) -> Self:
         if self.DATABASE_URL.strip():

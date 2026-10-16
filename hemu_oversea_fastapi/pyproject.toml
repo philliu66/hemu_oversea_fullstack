@@ -5,6 +5,7 @@ description = "HeMu Oversea FastAPI backend"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.19.1",
+    "alibabacloud-dm20151123>=1.11.1",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "openpyxl>=3.1.5",

@@ -10,6 +10,8 @@ import type {
   StoreBaseDiscountPublic,
   StoreCreateParams,
   StoreDetailPublic,
+  StoreInspectionDisputeParams,
+  StoreInspectionDisputePublic,
   StoreInspectionPunishParams,
   StoreInspectionPunishPublic,
   StoreListParams,
@@ -167,6 +169,30 @@ export async function fetchStoreInspectionPunish(
   return requireData(
     unwrapApiData<StoreInspectionPunishPublic>(res),
     '获取店铺巡检处罚信息失败',
+  );
+}
+
+/** POST /api/v1/admin/stores/inspection/dispute */
+export async function fetchStoreInspectionDispute(
+  params: StoreInspectionDisputeParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<StoreInspectionDisputePublic>>(
+    AdminStoreApi.INSPECTION_DISPUTE,
+    {
+      method: 'POST',
+      data: {
+        supplier_id: params.supplier_id,
+        store_id: params.store_id,
+        page_no: params.page_no ?? 1,
+        page_size: params.page_size ?? 100,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<StoreInspectionDisputePublic>(res),
+    '获取店铺巡检纠纷订单失败',
   );
 }
 

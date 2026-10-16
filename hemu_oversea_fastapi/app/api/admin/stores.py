@@ -27,12 +27,18 @@ from app.schemas.store import (
     StoreUpdate,
 )
 from app.schemas.store_inspection import (
+    StoreInspectionDisputePublic,
+    StoreInspectionDisputeRequest,
     StoreInspectionPunishPublic,
     StoreInspectionPunishRequest,
 )
 from app.services import products as product_service
 from app.services import store_oauth, stores as store_service
-from app.services.commerce import summarize_supplier_punish
+from app.services.commerce import (
+    summarize_supplier_dispute_open,
+    summarize_supplier_punish,
+)
+from app.services.dhgate.dispute_labels import enrich_dispute_open_item
 from app.services.supplier_scope import (
     assert_supplier_data_writable,
     resolve_supplier_id,
@@ -200,6 +206,45 @@ def inspect_store_punish(
             items=punish_list,
             start_date=summary.start_date,
             end_date=summary.end_date,
+        )
+    )
+
+
+@router.post(
+    "/inspection/dispute",
+    response_model=ApiResponse[StoreInspectionDisputePublic],
+    summary="店铺巡检：纠纷开启订单汇总",
+)
+def inspect_store_dispute(
+    payload: StoreInspectionDisputeRequest,
+    current_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[StoreInspectionDisputePublic]:
+    """
+    按供应商或单店汇总敦煌「开启中」纠纷订单。
+
+    数据来源：dh.order.disputeopen.list$2.0（v2）。
+    返回前 enrichment：
+    - disputeStatus / orderStatus → 中文文案（保留 *Code）
+    - disputeOpenDate → openTime（yyyy-MM-dd HH:mm:ss）
+    - isWarn → is_high_risk（前端整行 danger，不单独展示列）
+    - country / warnReason / orderTotalPrice：别名归一
+    """
+    supplier_id = resolve_supplier_id(db, current_user, payload.supplier_id)
+    summary = summarize_supplier_dispute_open(
+        db,
+        supplier_id=supplier_id,
+        store_id=payload.store_id,
+        page_no=payload.page_no,
+        page_size=payload.page_size,
+    )
+    items = [
+        enrich_dispute_open_item(item)
+        for item in summary.stores_summary.dispute_open_list
+    ]
+    return success(
+        StoreInspectionDisputePublic(
+            items=items,
         )
     )
 

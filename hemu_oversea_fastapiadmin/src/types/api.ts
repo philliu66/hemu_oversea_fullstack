@@ -89,6 +89,25 @@ export type SupplierCreateParams = {
   permission_codes: string[];
 };
 
+/** 供应商每日巡检设置（与后端 SupplierInspectionSchedulePublic 对齐） */
+export type SupplierInspectionSchedulePublic = {
+  id: number;
+  supplier_id: number;
+  query_days: number;
+  emails: string;
+  created_at: string;
+  updated_at: string;
+  last_sent_at?: string | null;
+  last_send_status?: string | null;
+};
+
+/** POST /api/v1/admin/suppliers/inspection-schedule/save */
+export type SupplierInspectionScheduleSaveParams = {
+  supplier_id?: number;
+  query_days: 3 | 7 | 10;
+  emails: string;
+};
+
 /** POST /api/v1/admin/suppliers/update */
 export type SupplierUpdateParams = {
   id: number;
@@ -219,6 +238,23 @@ export type StoreInspectionPunishPublic = {
   items?: Record<string, unknown>[];
   start_date: string;
   end_date: string;
+};
+
+/** POST /api/v1/admin/stores/inspection/dispute */
+export type StoreInspectionDisputeParams = {
+  supplier_id: number;
+  /** 不传则查该供应商下全部已授权敦煌店铺 */
+  store_id?: number;
+  page_no?: number;
+  page_size?: number;
+};
+
+/** 店铺巡检纠纷开启订单汇总（与后端 StoreInspectionDisputePublic 对齐） */
+export type StoreInspectionDisputePublic = {
+  /** 纠纷列表（序列化别名 list） */
+  list?: Record<string, unknown>[];
+  /** 兼容按字段名序列化 */
+  items?: Record<string, unknown>[];
 };
 
 /** POST /api/v1/admin/stores/create */

@@ -1,4 +1,7 @@
-"""敦煌订单相关 API 封装。"""
+"""敦煌订单相关 API 封装。
+
+文档：https://open.dhgate.com/docs/api （Order API / 2.7）
+"""
 
 from __future__ import annotations
 
@@ -28,4 +31,99 @@ def list_orders(
     """
     raise bad_request(
         "敦煌订单列表接口尚未对接：请在 app/services/dhgate/orders.py 中配置官方 method"
+    )
+
+
+def list_dispute_processing(
+    client: DhgateClient,
+    *,
+    dispute_status: str,
+    page_num: int = 1,
+    page_size: int = 100,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> dict[str, Any]:
+    """
+    获取进行中纠纷订单列表（v1）。
+
+    method: dh.dispute.processing.list
+    version: 1.0
+    必填 disputeStatus；可选 startTime、endTime、pageNum、pageSize。
+
+    返回：
+    - disputeList：进行中纠纷订单列表
+    - total / pageNum / pageSize：总条数与分页信息
+    """
+    status = str(dispute_status or "").strip()
+    if not status:
+        raise bad_request("dispute_status 不能为空")
+    if page_num < 1:
+        raise bad_request("page_num 不能小于 1")
+    if page_size < 1 or page_size > 200:
+        raise bad_request("page_size 须在 1～200 之间")
+
+    params: dict[str, Any] = {
+        "disputeStatus": status,
+        "pageNum": page_num,
+        "pageSize": page_size,
+    }
+    start = str(start_time or "").strip()
+    if start:
+        params["startTime"] = start
+    end = str(end_time or "").strip()
+    if end:
+        params["endTime"] = end
+
+    return client.call(
+        "dh.dispute.processing.list",
+        version="1.0",
+        params=params,
+        http_method="POST",
+    )
+
+
+def list_order_dispute_open(
+    client: DhgateClient,
+    *,
+    page_no: int,
+    page_size: int,
+    dispute_type: str | None = None,
+    buyer_nick_name: str | None = None,
+    order_no: str | None = None,
+) -> dict[str, Any]:
+    """
+    获取 seller 纠纷开启订单列表（v2）。
+
+    method: dh.order.disputeopen.list
+    version: 2.0
+    官方仅支持 POST；必填 pageNo、pageSize。
+
+    返回：
+    - orderDisputeOpenInfos：开启中纠纷订单列表
+    - pages / count：总页数、总条数
+    """
+    if page_no < 1:
+        raise bad_request("page_no 不能小于 1")
+    if page_size < 1 or page_size > 200:
+        raise bad_request("page_size 须在 1～200 之间")
+
+    params: dict[str, Any] = {
+        "pageNo": page_no,
+        "pageSize": page_size,
+    }
+    dtype = str(dispute_type or "").strip()
+    if dtype:
+        params["disputeType"] = dtype
+    nick = str(buyer_nick_name or "").strip()
+    if nick:
+        params["buyerNickName"] = nick
+    ono = str(order_no or "").strip()
+    if ono:
+        params["orderNo"] = ono
+
+    return client.call(
+        "dh.order.disputeopen.list",
+        version="2.0",
+        params=params,
+        http_method="POST",
     )

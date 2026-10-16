@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 
 
 class PunishSummaryTestRequest(BaseModel):
+    """联调：汇总单店/多店处罚信息（平台处罚 + 品牌/其他第三方投诉）。"""
+
     supplier_id: int = Field(description="供应商 ID（必传）")
     store_id: int | None = Field(
         default=None,
@@ -19,12 +21,67 @@ class PunishSummaryTestRequest(BaseModel):
         le=365,
         description="查询天数（含当天；用于推算处罚列表的起止日期）",
     )
-    page_no: int = Field(default=1, ge=1, description="页码，默认 1")
+    page_no: int = Field(default=1, ge=1, description="页码，默认 1（三类处罚共用）")
     page_size: int = Field(
         default=100,
         ge=1,
         le=200,
-        description="每页条数，默认 100",
+        description="每页条数，默认 100（三类处罚共用）",
+    )
+
+
+class DisputeProcessingSummaryTestRequest(BaseModel):
+    """联调 v1：汇总单店/多店进行中纠纷订单（dh.dispute.processing.list$1.0）。"""
+
+    supplier_id: int = Field(description="供应商 ID（必传）")
+    store_id: int | None = Field(
+        default=None,
+        description="店铺 ID（选传；传入则只查该店，不传则查该供应商下全部已授权敦煌店铺）",
+    )
+    dispute_status: str = Field(
+        min_length=1,
+        max_length=64,
+        description="纠纷状态（disputeStatus，官方必填；各店共用）",
+    )
+    page_num: int = Field(
+        default=1,
+        ge=1,
+        description="页码，默认 1（pageNum；与处罚汇总默认页码一致）",
+    )
+    page_size: int = Field(
+        default=100,
+        ge=1,
+        le=200,
+        description="每页条数，默认 100（与处罚汇总接口一致）",
+    )
+    start_time: str | None = Field(
+        default=None,
+        description="开始时间（startTime，可选；各店共用）",
+    )
+    end_time: str | None = Field(
+        default=None,
+        description="结束时间（endTime，可选；各店共用）",
+    )
+
+
+class DisputeOpenSummaryTestRequest(BaseModel):
+    """联调 v2：汇总单店/多店当前开启中的纠纷订单（dh.order.disputeopen.list$2.0）。"""
+
+    supplier_id: int = Field(description="供应商 ID（必传）")
+    store_id: int | None = Field(
+        default=None,
+        description="店铺 ID（选传；传入则只查该店，不传则查该供应商下全部已授权敦煌店铺）",
+    )
+    page_no: int = Field(
+        default=1,
+        ge=1,
+        description="页码，默认 1（与处罚汇总接口一致）",
+    )
+    page_size: int = Field(
+        default=100,
+        ge=1,
+        le=200,
+        description="每页条数，默认 100（与处罚汇总接口一致）",
     )
 
 

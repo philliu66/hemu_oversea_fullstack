@@ -5,6 +5,8 @@ import type {
   PageData,
   SupplierCreateParams,
   SupplierDetailPublic,
+  SupplierInspectionSchedulePublic,
+  SupplierInspectionScheduleSaveParams,
   SupplierListParams,
   SupplierOption,
   SupplierPublic,
@@ -125,4 +127,53 @@ export async function deleteSupplier(id: number, options?: RequestOptions) {
     data: { id },
     ...options,
   });
+}
+
+/** POST /api/v1/admin/suppliers/inspection-schedule/get */
+export async function fetchSupplierInspectionSchedule(
+  params: { supplier_id?: number } = {},
+  options?: RequestOptions,
+) {
+  const res = await request<
+    ApiResponse<SupplierInspectionSchedulePublic | null>
+  >(AdminSupplierApi.INSPECTION_SCHEDULE_GET, {
+    method: 'POST',
+    data: { supplier_id: params.supplier_id },
+    ...options,
+  });
+  return unwrapApiData<SupplierInspectionSchedulePublic | null>(res) ?? null;
+}
+
+/** POST /api/v1/admin/suppliers/inspection-schedule/save */
+export async function saveSupplierInspectionSchedule(
+  params: SupplierInspectionScheduleSaveParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<SupplierInspectionSchedulePublic>>(
+    AdminSupplierApi.INSPECTION_SCHEDULE_SAVE,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<SupplierInspectionSchedulePublic>(res),
+    '保存每日巡检设置失败',
+  );
+}
+
+/** POST /api/v1/admin/suppliers/inspection-schedule/delete */
+export async function deleteSupplierInspectionSchedule(
+  params: { supplier_id?: number } = {},
+  options?: RequestOptions,
+) {
+  await request<ApiResponse<Record<string, never>>>(
+    AdminSupplierApi.INSPECTION_SCHEDULE_DELETE,
+    {
+      method: 'POST',
+      data: { supplier_id: params.supplier_id },
+      ...options,
+    },
+  );
 }

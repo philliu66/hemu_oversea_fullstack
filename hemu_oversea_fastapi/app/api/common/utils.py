@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.errors import bad_request
 from app.schemas.common import ApiResponse, success
+from app.schemas.mail import SendMailPublic, SendMailRequest
 from app.schemas.product import DhMeasuresUnitPublic
 from app.schemas.utils import (
     DhSkuBaseInfoPublic,
@@ -21,6 +22,7 @@ from app.schemas.utils import (
     FileExtractSummaryPublic,
 )
 from app.services import utils_file as utils_file_service
+from app.services.mail import send_email
 from app.services.dhgate import (
     get_dhgate_client,
     tweak_product_image,
@@ -39,6 +41,38 @@ router = APIRouter(
     tags=["common:utils"],
     # dependencies=[Depends(get_current_account)],
 )
+
+
+@router.post(
+    "/sendmail",
+    response_model=ApiResponse[SendMailPublic],
+    summary="发送邮件（阿里云 DirectMail）",
+)
+def send_mail(payload: SendMailRequest) -> ApiResponse[SendMailPublic]:
+    """
+    通用发信工具：通过阿里云邮件推送 SingleSendMail 发送单封邮件。
+
+    - 收件人 `to` 支持字符串（逗号分隔）或字符串列表，最多 100 个
+    - `html` / `text` 至少传一个
+    - 发信地址与 RAM 密钥从环境变量读取，不在请求体中传入
+    """
+    result = send_email(
+        to=payload.to,
+        subject=payload.subject,
+        html=payload.html,
+        text=payload.text,
+        from_alias=payload.from_alias,
+        tag_name=payload.tag_name,
+    )
+    return success(
+        SendMailPublic(
+            ok=result.ok,
+            to=result.to,
+            subject=result.subject,
+            request_id=result.request_id,
+            env_id=result.env_id,
+        )
+    )
 
 
 @router.post(

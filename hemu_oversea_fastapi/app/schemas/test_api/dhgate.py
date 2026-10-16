@@ -25,6 +25,58 @@ class PunishListTestRequest(StoreIdBody):
     page_size: int = Field(default=100, ge=1, le=200, description="每页条数，1～200")
 
 
+class DisputeProcessingListTestRequest(StoreIdBody):
+    """联调 v1：获取进行中纠纷订单列表（dh.dispute.processing.list$1.0）。"""
+
+    dispute_status: str = Field(
+        min_length=1,
+        max_length=64,
+        description="纠纷状态（disputeStatus，官方必填；具体枚举以敦煌文档/实返为准）",
+    )
+    page_num: int = Field(default=1, ge=1, description="页码，从 1 开始（pageNum）")
+    page_size: int = Field(
+        default=20,
+        ge=1,
+        le=200,
+        description="每页条数，1～200（pageSize）",
+    )
+    start_time: str | None = Field(
+        default=None,
+        description="开始时间（startTime，可选；格式以官方为准）",
+    )
+    end_time: str | None = Field(
+        default=None,
+        description="结束时间（endTime，可选；格式以官方为准）",
+    )
+
+
+class OrderDisputeOpenListTestRequest(StoreIdBody):
+    """联调 v2：获取 seller 纠纷开启订单列表（dh.order.disputeopen.list$2.0）。"""
+
+    page_no: int = Field(default=1, ge=1, description="页码，从 1 开始（pageNo）")
+    page_size: int = Field(
+        default=20,
+        ge=1,
+        le=200,
+        description="每页条数，1～200（pageSize）",
+    )
+    dispute_type: str | None = Field(
+        default=None,
+        max_length=64,
+        description="纠纷类型（disputeType，可选；具体枚举以敦煌返回为准）",
+    )
+    buyer_nick_name: str | None = Field(
+        default=None,
+        max_length=128,
+        description="买家昵称（buyerNickName，可选）",
+    )
+    order_no: str | None = Field(
+        default=None,
+        max_length=64,
+        description="订单号（orderNo，可选；用于精确查单笔开启中纠纷）",
+    )
+
+
 class CategoryListTestRequest(StoreIdBody):
     """单店铺递归拉取全部展示类目。"""
 

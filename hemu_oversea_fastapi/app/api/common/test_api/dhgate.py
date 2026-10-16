@@ -32,7 +32,9 @@ from app.schemas.test_api.dhgate import (
     ItemGetTestRequest,
     ItemGroupListTestRequest,
     ItemShelfTestRequest,
+    DisputeProcessingListTestRequest,
     MeasuresListTestRequest,
+    OrderDisputeOpenListTestRequest,
     PunishBrandListTestRequest,
     PunishListTestRequest,
     ShippingTemplateListTestRequest,
@@ -47,8 +49,10 @@ from app.services.dhgate import (
     get_dhgate_client,
     get_item,
     get_item_html,
+    list_dispute_processing,
     list_item_aftersale,
     list_item_groups,
+    list_order_dispute_open,
     list_punish,
     list_punish_brand,
     list_shipping_templates,
@@ -121,6 +125,91 @@ def test_list_punish(
         page_no=payload.page_no,
         page_size=payload.page_size,
         punish_id=payload.punish_id,
+    )
+    return success_with_dhgate_raw(client, data)
+
+
+@router.post(
+    "/dispute/processing/list",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调][v1] dh.dispute.processing.list$1.0（进行中纠纷订单列表）",
+)
+def test_list_dispute_processing(
+    payload: DisputeProcessingListTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    【v1】查询当前卖家「进行中」的纠纷订单列表。
+
+    ## 接口说明
+    - 官方 method：`dh.dispute.processing.list`，version=`1.0`
+    - 必填：`disputeStatus`
+    - 可选：`startTime`、`endTime`、`pageNum`、`pageSize`
+
+    ## 响应解读（result 内为敦煌业务结果，字段与官方一致）
+    - `disputeList`：进行中纠纷订单数组
+    - `total`：总条数
+    - `pageNum` / `pageSize`：分页信息
+
+    ## 联调包装
+    - `result`：上述业务结果
+    - `raw` / `raw_calls`：最近一次及本次全部敦煌原始调用明细
+
+    【v2】同场景另有下方接口：`/order/disputeopen/list`
+    （`dh.order.disputeopen.list$2.0`，返回 `orderDisputeOpenInfos`）。
+    """
+    client = _test_client(db, payload.store_id)
+    data = list_dispute_processing(
+        client,
+        dispute_status=payload.dispute_status,
+        page_num=payload.page_num,
+        page_size=payload.page_size,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+    )
+    return success_with_dhgate_raw(client, data)
+
+
+@router.post(
+    "/order/disputeopen/list",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="[联调][v2] dh.order.disputeopen.list$2.0（纠纷开启订单列表）",
+)
+def test_list_order_dispute_open(
+    payload: OrderDisputeOpenListTestRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict[str, Any]]:
+    """
+    【v2】查询当前卖家「开启中」的纠纷订单列表。
+
+    ## 接口说明
+    - 官方 method：`dh.order.disputeopen.list`，version=`2.0`
+    - 仅支持 POST；必填 `pageNo`、`pageSize`
+    - 可选筛选：`disputeType`、`buyerNickName`、`orderNo`
+    - 本接口无时间范围入参，返回的是当前仍处于开启状态的纠纷
+
+    ## 响应解读（result 内为敦煌业务结果，字段与官方一致）
+    - `orderDisputeOpenInfos`：开启中纠纷订单数组
+    - `count`：总条数
+    - `pages`：总页数
+    - 取到 `orderNo` 后可用 `dh.dispute.detail.get$1.0` 查单笔纠纷详情
+      （类型、原因、金额、处理时限、结果等）
+
+    ## 联调包装
+    - `result`：上述业务结果
+    - `raw` / `raw_calls`：最近一次及本次全部敦煌原始调用明细
+
+    【v1】同场景见上方接口：`/dispute/processing/list`
+    （`dh.dispute.processing.list$1.0`，返回 `disputeList`）。
+    """
+    client = _test_client(db, payload.store_id)
+    data = list_order_dispute_open(
+        client,
+        page_no=payload.page_no,
+        page_size=payload.page_size,
+        dispute_type=payload.dispute_type,
+        buyer_nick_name=payload.buyer_nick_name,
+        order_no=payload.order_no,
     )
     return success_with_dhgate_raw(client, data)
 

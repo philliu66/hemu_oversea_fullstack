@@ -3,6 +3,7 @@ from app.models.base import Base
 from app.models.captcha import Captcha
 from app.models.commission_rate_dh import CommissionRateDh
 from app.models.login_attempt import LoginAttempt
+from app.models.mail_send_log import MailSendLog
 from app.models.measures_unit_dh import MeasuresUnitDh
 from app.models.mission import Mission, MissionDataDhFission, MissionLog
 from app.models.permission import (
@@ -22,6 +23,7 @@ from app.models.sku_attr_template_dh import SkuAttrTemplateDh
 from app.models.sku_base_info_dh import SkuBaseInfoDh
 from app.models.store import Store
 from app.models.supplier import Supplier
+from app.models.supplier_inspection_schedule import SupplierInspectionSchedule
 from app.models.user import User
 from app.models.user_login_log import UserLoginLog
 from app.models.user_operation_log import UserOperationLog
@@ -32,6 +34,7 @@ __all__ = [
     "Captcha",
     "CommissionRateDh",
     "LoginAttempt",
+    "MailSendLog",
     "MeasuresUnitDh",
     "Mission",
     "MissionDataDhFission",
@@ -49,6 +52,7 @@ __all__ = [
     "SkuBaseInfoDh",
     "Store",
     "Supplier",
+    "SupplierInspectionSchedule",
     "SupplierPermission",
     "User",
     "UserLoginLog",

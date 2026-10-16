@@ -1,7 +1,7 @@
 """第三方平台 / 敦煌多店编排 API 联调入口（仅调试，非业务接口）。
 
 - /testAPI/dhgate/*：单店官方接口
-- /testAPI/dhgate/commerce/*：敦煌多店编排（处罚汇总、商品同步、产品分组同步等）
+- /testAPI/dhgate/commerce/*：敦煌多店编排（处罚汇总、纠纷开启汇总、商品同步、产品分组同步等）
 """
 
 from fastapi import APIRouter

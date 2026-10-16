@@ -1,4 +1,10 @@
-"""敦煌多店铺处罚信息汇总。"""
+"""敦煌多店铺处罚信息汇总。
+
+按供应商下单店或多店调用敦煌接口，汇总：
+1. dh.punish.list.get — 平台处罚
+2. dh.punish.brand.list.get thirdType=brand — 品牌商第三方投诉
+3. dh.punish.brand.list.get thirdType=other — 其他第三方投诉
+"""
 
 from __future__ import annotations
 
@@ -35,6 +41,8 @@ class StorePunishCallError:
 
 @dataclass
 class StorePunishResult:
+    """单店三类处罚查询结果。"""
+
     store_id: int
     store_name: str
     store_identifier: str
@@ -46,7 +54,7 @@ class StorePunishResult:
 
 @dataclass
 class StoresPunishSummary:
-    """所有店铺三种处罚列表的合并汇总。"""
+    """所有店铺三类处罚列表的合并汇总。"""
 
     punish_list: list[dict[str, Any]] = field(default_factory=list)
 
@@ -62,6 +70,8 @@ class SupplierPunishSummary:
     stores: list[StorePunishResult] = field(default_factory=list)
     stores_summary: StoresPunishSummary = field(default_factory=StoresPunishSummary)
     errors: list[StoreRunError] = field(default_factory=list)
+    # 联调用：各店敦煌原始调用明细（含 store_id / store_identifier）
+    raw_calls: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _date_range_by_days(query_days: int) -> tuple[str, str]:
@@ -89,6 +99,22 @@ def _safe_call(source: str, fn) -> tuple[dict[str, Any] | None, StorePunishCallE
         return None, StorePunishCallError(source=source, message=str(exc))
 
 
+def _annotate_raw_calls(
+    call_history: list[dict[str, Any]],
+    *,
+    store_id: int,
+    store_identifier: str,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            **item,
+            "store_id": store_id,
+            "store_identifier": store_identifier,
+        }
+        for item in call_history
+    ]
+
+
 def _fetch_store_punish(
     db: Session,
     store: Store,
@@ -97,8 +123,9 @@ def _fetch_store_punish(
     end_date: str,
     page_no: int,
     page_size: int,
-) -> StorePunishResult:
+) -> tuple[StorePunishResult, list[dict[str, Any]]]:
     client = get_dhgate_client(db, store.id)
+    client.clear_call_history()
     result = StorePunishResult(
         store_id=store.id,
         store_name=store.name,
@@ -145,7 +172,12 @@ def _fetch_store_punish(
     if err:
         result.call_errors.append(err)
 
-    return result
+    raw_calls = _annotate_raw_calls(
+        client.call_history,
+        store_id=store.id,
+        store_identifier=store.identifier,
+    )
+    return result, raw_calls
 
 
 def _extract_punish_info_list(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -222,15 +254,18 @@ def summarize_supplier_punish(
     page_size: int = _DEFAULT_PAGE_SIZE,
 ) -> SupplierPunishSummary:
     """
-    汇总处罚信息。
+    汇总单店或多店的处罚信息（不含纠纷订单）。
 
     - supplier_id 必传
     - store_id 选传：传入则只查该店，不传则查该供应商下全部已授权敦煌店铺
+    - page_no / page_size：三类处罚接口共用同一分页（默认 1 / 100）
 
     每个店铺调用：
-    1. dh.punish.list.get（起止日期由 query_days 推算）
-    2. dh.punish.brand.list.get thirdType=brand
-    3. dh.punish.brand.list.get thirdType=other
+    1. dh.punish.list.get（起止日期由 query_days 推算）→ stores[].punish
+    2. dh.punish.brand.list.get thirdType=brand → stores[].punish_brand
+    3. dh.punish.brand.list.get thirdType=other → stores[].punish_other
+
+    stores_summary.punish_list：合并三类处罚的 punishInfoList（附 store_id / store_identifier）
     """
     stores = _resolve_punish_stores(
         db,
@@ -250,16 +285,16 @@ def summarize_supplier_punish(
 
     for store in stores:
         try:
-            summary.stores.append(
-                _fetch_store_punish(
-                    db,
-                    store,
-                    start_date=start_date,
-                    end_date=end_date,
-                    page_no=page_no,
-                    page_size=page_size,
-                )
+            store_result, raw_calls = _fetch_store_punish(
+                db,
+                store,
+                start_date=start_date,
+                end_date=end_date,
+                page_no=page_no,
+                page_size=page_size,
             )
+            summary.stores.append(store_result)
+            summary.raw_calls.extend(raw_calls)
         except AppError as exc:
             summary.errors.append(
                 StoreRunError(

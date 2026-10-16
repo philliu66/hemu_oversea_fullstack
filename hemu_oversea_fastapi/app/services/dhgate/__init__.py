@@ -29,6 +29,7 @@ from app.services.dhgate.items import (
     upshelf_items,
 )
 from app.services.dhgate.logistics import list_shipping_templates
+from app.services.dhgate.orders import list_dispute_processing, list_order_dispute_open
 from app.services.dhgate.oauth import (
     build_frontend_redirect,
     create_authorize_url,
@@ -67,6 +68,8 @@ __all__ = [
     "list_item_aftersale",
     "list_item_groups",
     "list_measures",
+    "list_dispute_processing",
+    "list_order_dispute_open",
     "list_shipping_templates",
     "handle_oauth_callback",
     "list_all_categories",

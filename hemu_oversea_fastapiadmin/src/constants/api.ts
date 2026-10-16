@@ -33,6 +33,10 @@ export const AdminSupplierApi = {
   CREATE: '/api/v1/admin/suppliers/create',
   UPDATE: '/api/v1/admin/suppliers/update',
   DELETE: '/api/v1/admin/suppliers/delete',
+  INSPECTION_SCHEDULE_GET: '/api/v1/admin/suppliers/inspection-schedule/get',
+  INSPECTION_SCHEDULE_SAVE: '/api/v1/admin/suppliers/inspection-schedule/save',
+  INSPECTION_SCHEDULE_DELETE:
+    '/api/v1/admin/suppliers/inspection-schedule/delete',
 } as const;
 
 /** 管理端供应商员工相关路径 */
@@ -54,6 +58,7 @@ export const AdminStoreApi = {
   UPDATE: '/api/v1/admin/stores/update',
   DELETE: '/api/v1/admin/stores/delete',
   INSPECTION_PUNISH: '/api/v1/admin/stores/inspection/punish',
+  INSPECTION_DISPUTE: '/api/v1/admin/stores/inspection/dispute',
   GROUPS: '/api/v1/admin/stores/groups',
   SHIPPING_TEMPLATE_LIST: '/api/v1/admin/stores/shipping-template/list',
   AFTERSALE_TEMPLATE_LIST: '/api/v1/admin/stores/aftersale-template/list',

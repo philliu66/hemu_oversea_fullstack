@@ -707,12 +707,106 @@
 #### dh.order.disputeopen.list$2.0 获取seller纠纷开启订单列表接口
 
 - **作用**：分页查询卖家当前「开启中」的纠纷订单。
-- **主要应用场景**：纠纷待办；客服优先处理队列。
+- **主要应用场景**：纠纷待办；客服优先处理队列；店铺巡检纠纷列表。
 - **关联接口**：取到 `orderNo` 后用 `dh.dispute.detail.get$1.0` 看详情。
-- **关键入参**：`pageNo`、`pageSize`（必填）；`disputeType`、`buyerNickName`、`orderNo`（可选）
-- **返回关键字段**：`orderDisputeOpenInfos`、`pages`、`count`
 - **级别/超时**：A / 20 秒
-- **注意**：仅支持 POST。
+- **注意**：仅支持 POST；无时间范围入参，返回当前仍处于开启状态的纠纷。
+- **接口地址**：`http://api.dhgate.com/dop/router`
+
+**系统入参**
+
+| 参数 | 类型 | 必须 | 说明 |
+| --- | --- | --- | --- |
+| `access_token` | String | 是 | OAuth2 令牌 |
+| `method` | String | 是 | `dh.order.disputeopen.list` |
+| `v` | String | 是 | `2.0` |
+| `timestamp` | String | 是 | 请求时间戳（毫秒，北京时间，允许 ±30 分钟） |
+
+**业务入参**
+
+| 参数 | 类型 | 必须 | 取值说明 | 说明 |
+| --- | --- | --- | --- | --- |
+| `pageNo` | int | 是 | 示例：10 | 第几页（超过总页数返回最后一页） |
+| `pageSize` | int | 是 | 示例：10；范围 1–200 | 每页记录数 |
+| `disputeType` | String | 否 | `1` 协议纠纷；`2` 平台纠纷；`3` 售后纠纷；默认全部 | 纠纷类型 |
+| `buyerNickName` | String | 否 | 示例：zhangsan | 买家昵称 |
+| `orderNo` | String | 否 | 示例：1455953150 | 订单号 |
+
+**响应顶层字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `pages` | int | 总页数 |
+| `count` | int | 总记录数 |
+| `orderDisputeOpenInfos` | `OrderDisputeOpenInfo[]` | 纠纷开启订单列表 |
+
+**`orderDisputeOpenInfos` 元素字段**
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `orderNo` | String | 订单号 |
+| `orderTotalPrice` | Double | 订单总金额 |
+| `country` | String | 收货国家 |
+| `orderStatus` | String | 订单状态（见下方枚举） |
+| `disputeStatus` | String | 纠纷处理状态（见下方枚举；空值表示无售后纠纷） |
+| `disputeOpenDate` | String | **纠纷开启时间**（文档示例 `yyyy-MM-dd HH:mm:ss`；实际常为 Java `Date.toString`，如 `Tue Sep 29 03:52:33 CST 2026`） |
+| `startedDate` | String | **下单日期**（勿与纠纷开启时间混淆） |
+| `payDate` | String | 付款时间 |
+| `buyerConfirmDate` | String | 买家确认收货时间 |
+| `deliveryDeadline` | String | 发货截止时间 |
+| `deliveryDate` | String | 发货时间 |
+| `cancelDate` | String | 交易取消时间 |
+| `inAccountDate` | String | 入账时间 |
+| `buyerNickName` | String | 买家别名 |
+| `buyerId` | String | 买家 ID |
+| `orderRemark` | String | 订单备注 |
+| `isWarn` | Boolean | `true` 需特别注意（高风险/售后纠纷等）；`false`/`null` 正常 |
+| `warnReason` | String | 警告原因（如高风险订单、售后纠纷、信用卡拒付等） |
+
+**`disputeStatus` 枚举**
+
+| 编码 | 含义 |
+| --- | --- |
+| `106001` | 协议纠纷-等待协议达成 |
+| `106003` | 协议纠纷-协议已达成 |
+| `107001` | 平台纠纷开启 |
+| `107002` | 平台纠纷-dhgate审核中 |
+| `107003` | 平台纠纷-裁决方案执行中 |
+| `109001` | 售后纠纷开启 |
+| `109002` | 售后纠纷裁决中 |
+| （空） | 没有售后纠纷 |
+
+**`orderStatus` 枚举**
+
+| 编码 | 含义 |
+| --- | --- |
+| `111000` | 订单取消 |
+| `101003` | 等待买家付款 |
+| `102001` | 买家已付款，等待平台确认 |
+| `103001` | 等待发货 |
+| `105001` | 买家申请退款，等待协商结果 |
+| `105002` | 退款协议已达成 |
+| `105003` | 部分退款后，等待发货 |
+| `105004` | 买家取消退款申请 |
+| `103002` | 已部分发货 |
+| `101009` | 等待买家确认收货 |
+| `106001` | 退款/退货协商中，等待协议达成 |
+| `106002` | 买家投诉到平台 |
+| `106003` | 协议已达成，执行中 |
+| `102006` | 人工确认收货 |
+| `102007` | 超过预定期限，自动确认收货 |
+| `102111` | 交易成功 |
+| `111111` | 交易关闭 |
+
+**业务错误码**
+
+| 错误码 | 消息 |
+| --- | --- |
+| `101` | 卖家id不能为空 |
+| `102` | 输入页码值不能小于1 |
+| `103` | 每页记录数(pageSize)请输入1到200之间的数字 |
+| `104` | 请输入正确的纠纷类型: 1、协议纠纷，2、平台纠纷，3、售后纠纷，默认全部纠纷中订单 |
+| `105` | 无符合查询条件的订单 |
 
 #### dh.order.disputeclose.list$2.0 获取seller纠纷关闭订单列表接口
 
