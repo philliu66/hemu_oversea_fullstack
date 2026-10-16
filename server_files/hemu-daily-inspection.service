@@ -1,11 +1,11 @@
 # 每日巡检发信（一次性任务，跑完即退出）。
 #
-# 部署前把下面三处「/你的仓库路径」改成服务器上仓库的实际绝对路径，
-# 并确认 User= 与现有 hemu-oversea-fastapi.service 的运行用户一致（当前为 www）。
+# 路径已按服务器仓库目录写好。若仓库换位置，改 WorkingDirectory、EnvironmentFile、ExecStart 三处。
+# 确认 User= 与现有 hemu-oversea-fastapi.service 的运行用户一致（当前为 www）。
 #
-# 复制到服务器（在仓库根目录执行，目标目录固定是 /etc/systemd/system/）：
-#   sudo cp server_files/hemu-daily-inspection.service /etc/systemd/system/
-#   sudo cp server_files/hemu-daily-inspection.timer /etc/systemd/system/
+# 复制到 /etc/systemd/system/（在任意目录执行）：
+#   sudo cp /www/project/xhm/projects/hemu_oversea/hemu_oversea_fullstack/server_files/hemu-daily-inspection.service /etc/systemd/system/
+#   sudo cp /www/project/xhm/projects/hemu_oversea/hemu_oversea_fullstack/server_files/hemu-daily-inspection.timer /etc/systemd/system/
 #
 # 复制后在任意目录执行即可，不依赖当前工作目录：
 #   sudo systemctl daemon-reload
@@ -32,6 +32,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=www
-WorkingDirectory=/你的仓库路径/hemu_oversea_fastapi
-EnvironmentFile=-/你的仓库路径/hemu_oversea_fastapi/.env
-ExecStart=/你的仓库路径/hemu_oversea_fastapi/.venv/bin/python -m app.jobs.daily_inspection
+WorkingDirectory=/www/project/xhm/projects/hemu_oversea/hemu_oversea_fullstack/hemu_oversea_fastapi
+EnvironmentFile=-/www/project/xhm/projects/hemu_oversea/hemu_oversea_fullstack/hemu_oversea_fastapi/.env
+ExecStart=/www/project/xhm/projects/hemu_oversea/hemu_oversea_fullstack/hemu_oversea_fastapi/.venv/bin/python -m app.jobs.daily_inspection
