@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from app.core.config import settings
 from app.core.db import SessionLocal
@@ -17,22 +18,31 @@ _LEGACY_SEED_USERNAMES = ("admin", "operator", "user")
 
 def ensure_seed_users() -> None:
     """初始化平台管理员 superadmin；密码为 BOOTSTRAP_PASSWORD。已存在则按配置同步密码/角色。"""
-    db = SessionLocal()
     try:
-        _retire_legacy_seeds(db)
-        _ensure_user(
-            db,
-            username="superadmin",
-            email="superadmin@example.com",
-            password=settings.BOOTSTRAP_PASSWORD,
-            role=Role.PLATFORM_ADMIN,
-            org_type=OrgType.PLATFORM,
-            supplier_id=None,
-            created_by=None,
+        db = SessionLocal()
+        try:
+            _retire_legacy_seeds(db)
+            _ensure_user(
+                db,
+                username="superadmin",
+                email="superadmin@example.com",
+                password=settings.BOOTSTRAP_PASSWORD,
+                role=Role.PLATFORM_ADMIN,
+                org_type=OrgType.PLATFORM,
+                supplier_id=None,
+                created_by=None,
+            )
+            db.commit()
+        finally:
+            db.close()
+    except OperationalError:
+        logger.error(
+            "未连接数据库 %s:%s/%s；请先启动本地 Postgres（docker compose up -d）",
+            settings.POSTGRES_HOST,
+            settings.POSTGRES_PORT,
+            settings.POSTGRES_DB,
         )
-        db.commit()
-    finally:
-        db.close()
+        raise
 
 
 def _retire_legacy_seeds(db) -> None:

@@ -75,6 +75,9 @@ export default {
   'menu.mission.fission': 'Product Fission',
   'menu.mission.fissionData': 'Mission Data',
   'menu.mission.fissionDetail': 'Mission Detail',
+  'menu.mission.hotsale': 'Hot-sell Collection',
+  'menu.mission.hotsaleData': 'Mission Data',
+  'menu.mission.hotsaleDetail': 'Mission Detail',
 
   'pages.mission.list.title': 'Product Fission',
   'pages.mission.action.create': 'New Mission',

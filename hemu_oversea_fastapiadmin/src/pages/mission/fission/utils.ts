@@ -1,4 +1,5 @@
 export const MISSION_FISSION_PATH = '/mission/fission';
+export const MISSION_TYPE_FISSION = 'fission_dh' as const;
 
 export function missionFissionDataPath(id: number) {
   return `/mission/fission/${id}/data`;

@@ -11,6 +11,7 @@ export const REFRESH_TOKEN_KEY = 'hemu_admin_refresh_token';
 /** 管理端认证相关路径 */
 export const AdminAuthApi = {
   CAPTCHA: '/api/v1/admin/auth/captcha',
+  CONFIG: '/api/v1/admin/auth/config',
   LOGIN: '/api/v1/admin/auth/login',
   REFRESH: '/api/v1/admin/auth/refresh',
   LOGOUT: '/api/v1/admin/auth/logout',
@@ -87,6 +88,12 @@ export const AdminMissionApi = {
   FISSION_DATA_MARK_FINISHED:
     '/api/v1/admin/missions/fission-data/mark-finished',
   FISSION_DATA_IMPORT: '/api/v1/admin/missions/fission-data/import',
+  HOTSALE_DATA_LIST: '/api/v1/admin/missions/hotsale-data/list',
+  HOTSALE_DATA_IMPORT: '/api/v1/admin/missions/hotsale-data/import',
+  HOTSALE_DATA_EXTRACT: '/api/v1/admin/missions/hotsale-data/extract',
+  HOTSALE_DATA_DELETE: '/api/v1/admin/missions/hotsale-data/delete',
+  HOTSALE_DATA_MARK_FINISHED:
+    '/api/v1/admin/missions/hotsale-data/mark-finished',
   LOGS_LIST: '/api/v1/admin/missions/logs/list',
   EXECUTE: '/api/v1/admin/missions/execute',
 } as const;
@@ -134,6 +141,7 @@ export const PAGE_SIZE_DEFAULT = 10;
  */
 export const AUTH_WHITELIST = [
   { method: 'GET', path: AdminAuthApi.CAPTCHA },
+  { method: 'GET', path: AdminAuthApi.CONFIG },
   { method: 'POST', path: AdminAuthApi.LOGIN },
   { method: 'POST', path: AdminAuthApi.REFRESH },
   { method: 'POST', path: AdminAuthApi.LOGOUT },

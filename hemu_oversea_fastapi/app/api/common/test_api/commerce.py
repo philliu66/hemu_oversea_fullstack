@@ -1,6 +1,7 @@
 """敦煌多店铺编排联调（仅调试）。
 
 路径：/api/v1/common/testAPI/dhgate/commerce
+OpenAPI 标签：common:testAPI:dhgate:commerce
 用于验证敦煌店铺多店汇总 / 同步逻辑，非正式业务接口。
 """
 
@@ -43,7 +44,7 @@ from app.services.shipping_templates_dh import sync_supplier_shipping_templates_
 
 router = APIRouter(
     prefix="/dhgate/commerce",
-    tags=["common:testAPI:dhgate"],
+    tags=["common:testAPI:dhgate:commerce"],
     # dependencies=[Depends(get_current_account)],
 )
 
@@ -127,21 +128,17 @@ def test_dispute_processing_summary(
 
     ## 每店拉取的数据
     - `dispute_processing` ← `dh.dispute.processing.list$1.0`
-    - 必填 `disputeStatus`；可选 `startTime` / `endTime`
-    - 分页默认 `page_num=1`、`page_size=100`（与处罚汇总一致）
+    - 官方必填 `disputeStatus`；可选 `startTime` / `endTime` / `pageNum` / `pageSize`
+    - 分页默认 `page_num=1`、`page_size=100`
+    - `disputeStatus` 联调可参考：`106001`/`106003`/`107001`/`107002`/`107003`/`109001`/`109002`
+      （含义见单店 `/order/disputeopen/list` 注释）
 
     ## 返回结构（与单店联调一致）
-    - `result`：业务汇总
-      - `stores[]`：各店 `dispute_processing` 与 `call_errors`
-      - `stores_summary.dispute_processing_list`：合并 `disputeList`（附 store_id）
-      - `errors`：整店级失败
-    - `raw`：最近一次敦煌原始响应（含 status）
-    - `raw_calls`：本次全部调用明细（含 store_id / store_identifier）
+    - `result`：业务汇总（stores / stores_summary / errors）
+    - `raw` / `raw_calls`：敦煌原始响应与调用明细
 
-    单店【v1】联调见 `/testAPI/dhgate/dispute/processing/list`。
-
-    【v2】同场景另有下方接口：`/order/disputeopen/summary`
-    （`dh.order.disputeopen.list$2.0`）。
+    单店【v1】：`/testAPI/dhgate/dispute/processing/list`。
+    【v2】：`/order/disputeopen/summary`。
     """
     summary = summarize_supplier_dispute_processing(
         db,
@@ -173,9 +170,11 @@ def test_dispute_open_summary(
     - 传 `store_id`：仅查该店（须属于该供应商且已授权）
     - 不传 `store_id`：查该供应商下全部已授权敦煌店铺
 
-    ## 每店拉取的数据（page_no / page_size 默认 1 / 100，与处罚汇总一致）
+    ## 每店拉取的数据（page_no / page_size 默认 1 / 100）
     - `dispute_open` ← `dh.order.disputeopen.list$2.0`
-    - 官方无时间范围入参，返回当前仍处于开启状态的纠纷
+    - 官方必填：`pageNo`、`pageSize`；可选 `disputeType`/`buyerNickName`/`orderNo`
+      （本汇总当前只传分页；筛选请用单店联调）
+    - 官方无时间范围入参；`disputeType` 可选值：`1` 协议 / `2` 平台 / `3` 售后
 
     ## 返回结构（与单店联调一致）
     - `result`：业务汇总
@@ -211,12 +210,18 @@ def test_sync_product_groups(
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict[str, Any]]:
     """
-    按供应商查询所属已授权敦煌店铺，逐店调用 dh.item.group.list 并写入 product_group_dh。
+    按供应商查询所属已授权敦煌店铺，逐店调用 `dh.item.group.list$2.0` 并写入 product_group_dh。
 
-    - 每入库一条立即 commit；同店已存在的 group_id 跳过
-    - containChildGroup=true，子分组扁平化，parent_group_id 记录层级
-    - 每条记录带 supplier_id、store_id
+    ## 官方（每店）
+    - method：`dh.item.group.list`，version=`2.0`
+    - 本编排固定：`containChildGroup=true`，分页拉全量；结果扁平化写入
+
+    ## 入库行为（本地）
+    - 每入库一条立即 commit；同店已存在的 `group_id` 跳过
+    - 子分组扁平化，`parent_group_id` 记录层级；每条带 `supplier_id`、`store_id`
     - 单店失败不中断其余店铺
+
+    单店联调：`/testAPI/dhgate/item/group/list`。
     """
     result = sync_supplier_product_groups_dh(
         db,
@@ -235,11 +240,17 @@ def test_sync_shipping_templates(
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict[str, Any]]:
     """
-    按供应商查询所属已授权敦煌店铺，逐店调用 dh.shipping.template.list 并写入 shipping_template_dh。
+    按供应商查询所属已授权敦煌店铺，逐店调用 `dh.shipping.template.list$2.0` 并写入 shipping_template_dh。
 
-    - 每入库一条立即 commit；同店已存在的 shipping_temp_id 跳过
-    - 每条记录带 supplier_id、store_id
-    - 单店失败不中断其余店铺
+    ## 官方（每店）
+    - method：`dh.shipping.template.list`，version=`2.0`，**无业务入参**
+    - 返回 `shippingModelList`；模板 ID → 发布入参 `shippingModelId`
+
+    ## 入库行为（本地）
+    - 每入库一条立即 commit；同店已存在的 `shipping_temp_id` 跳过
+    - 每条带 `supplier_id`、`store_id`；单店失败不中断其余店铺
+
+    单店联调：`/testAPI/dhgate/shipping/template/list`。
     """
     result = sync_supplier_shipping_templates_dh(
         db,
@@ -258,11 +269,17 @@ def test_sync_aftersale_templates(
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict[str, Any]]:
     """
-    按供应商查询所属已授权敦煌店铺，逐店调用 dh.item.aftersale.list 并写入 aftersale_template_dh。
+    按供应商查询所属已授权敦煌店铺，逐店调用 `dh.item.aftersale.list$2.0` 并写入 aftersale_template_dh。
 
-    - 每入库一条立即 commit；同店已存在的 after_sale_template_id 跳过
-    - 每条记录带 supplier_id、store_id
-    - 单店失败不中断其余店铺
+    ## 官方（每店）
+    - method：`dh.item.aftersale.list`，version=`2.0`，**无业务入参**
+    - 返回售后模板列表；模板 ID → 发布入参 `afterSaleTemplateId`（3C 类目常需）
+
+    ## 入库行为（本地）
+    - 每入库一条立即 commit；同店已存在的 `after_sale_template_id` 跳过
+    - 每条带 `supplier_id`、`store_id`；单店失败不中断其余店铺
+
+    单店联调：`/testAPI/dhgate/item/aftersale/list`。
     """
     result = sync_supplier_aftersale_templates_dh(
         db,

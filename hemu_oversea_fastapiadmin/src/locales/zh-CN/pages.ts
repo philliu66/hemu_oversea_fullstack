@@ -96,6 +96,9 @@ export default {
   'menu.mission.fission': '商品裂变',
   'menu.mission.fissionData': '设置任务数据',
   'menu.mission.fissionDetail': '任务详情',
+  'menu.mission.hotsale': '热卖采集',
+  'menu.mission.hotsaleData': '设置任务数据',
+  'menu.mission.hotsaleDetail': '任务详情',
 
   'pages.mission.list.title': '商品裂变',
   'pages.mission.action.create': '新建任务',

@@ -15,6 +15,13 @@ from app.services.dhgate.album import (
     upload_product_image,
 )
 from app.services.dhgate.client import DhgateCallRecord, DhgateClient
+from app.services.dhgate.data import (
+    get_wis_core_info,
+    get_wis_detail_page,
+    get_wis_keywordtop10_info,
+    list_seller_ad_order_report,
+    list_seller_ad_prod_report,
+)
 from app.services.dhgate.items import (
     add_item,
     apply_package_weight_to_detail,
@@ -65,11 +72,16 @@ __all__ = [
     "fission_add_item",
     "get_item",
     "get_item_html",
+    "get_wis_core_info",
+    "get_wis_detail_page",
+    "get_wis_keywordtop10_info",
     "list_item_aftersale",
     "list_item_groups",
     "list_measures",
     "list_dispute_processing",
     "list_order_dispute_open",
+    "list_seller_ad_order_report",
+    "list_seller_ad_prod_report",
     "list_shipping_templates",
     "handle_oauth_callback",
     "list_all_categories",

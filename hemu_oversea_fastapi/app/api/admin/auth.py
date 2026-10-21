@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
@@ -15,6 +17,7 @@ from app.schemas.auth import (
     TokenPair,
 )
 from app.schemas.common import ApiResponse, success
+from app.services.app_config import get_config_map
 from app.services.auth import (
     change_password,
     login_for_audience,
@@ -55,6 +58,22 @@ def auto_login(
 def get_captcha(db: Session = Depends(get_db)) -> ApiResponse[CaptchaResponse]:
     """管理端登录页获取图形验证码（4 位字母或数字）。"""
     return success(create_captcha(db, audience="admin"))
+
+
+@router.get(
+    "/config",
+    response_model=ApiResponse[dict[str, Any]],
+    summary="获取系统配置",
+)
+def get_system_config(db: Session = Depends(get_db)) -> ApiResponse[dict[str, Any]]:
+    """
+    查询 `config` 表全部配置，返回扁平对象，例如：
+    `{"app_name": "合木跨境FAST系统", "max_retry": 3}`。
+
+    无需登录（与 captcha 相同），便于登录页读取系统名称等展示项。
+    value 保持 JSONB 原类型（字符串 / 数字 / 对象 / 数组）。
+    """
+    return success(get_config_map(db))
 
 
 @router.post("/login", response_model=ApiResponse[AuthLoginResponse])

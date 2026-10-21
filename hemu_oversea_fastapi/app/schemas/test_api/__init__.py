@@ -15,6 +15,10 @@ from app.schemas.test_api.dhgate import (
     OrderDisputeOpenListTestRequest,
     PunishBrandListTestRequest,
     PunishListTestRequest,
+    SellerAdReportTestRequest,
+    WisCoreInfoTestRequest,
+    WisDetailPageTestRequest,
+    WisKeywordTop10TestRequest,
 )
 
 __all__ = [
@@ -32,4 +36,8 @@ __all__ = [
     "PunishBrandListTestRequest",
     "PunishListTestRequest",
     "PunishSummaryTestRequest",
+    "SellerAdReportTestRequest",
+    "WisCoreInfoTestRequest",
+    "WisDetailPageTestRequest",
+    "WisKeywordTop10TestRequest",
 ]

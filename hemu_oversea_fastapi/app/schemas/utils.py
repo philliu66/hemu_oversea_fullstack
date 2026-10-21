@@ -1,6 +1,7 @@
 """全局工具类接口相关请求 / 响应。"""
 
 from decimal import Decimal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -181,4 +182,58 @@ class DhSkuBaseInfoPublic(BaseModel):
     )
     min_wholesale_qty: int | None = Field(
         default=None, description="起订量（Excel 起批量 DH）"
+    )
+
+
+# ---------- 敦煌商品详情页 RSC 联调（common:utils） ----------
+
+DhgateProductPageReason = Literal[
+    "ok",
+    "invalid_url",
+    "not_found",
+    "blocked",
+    "parse_failed",
+    "upstream_error",
+]
+
+
+class DhgateProductPageFetchRequest(BaseModel):
+    """传入敦煌商品详情页链接，拉取并解析 RSC Flight。"""
+
+    url: str = Field(
+        min_length=1,
+        description=(
+            "敦煌商品详情页完整链接，例如 "
+            "https://www.dhgate.com/product/{slug}/{itemcode}.html"
+        ),
+    )
+
+
+class DhgateProductPageFetchPublic(BaseModel):
+    """联调响应：解析字段 + 完整 Flight 原文 + 耗时/通道诊断。"""
+
+    ok: bool = Field(description="是否解析出有效商品主字段")
+    reason: DhgateProductPageReason = Field(description="结果分类")
+    message: str | None = Field(default=None, description="说明")
+    url: str = Field(description="实际请求的商品链接")
+    channel: Literal["rsc", "html-fallback"] | None = Field(
+        default=None,
+        description="取数通道：rsc=请求头 RSC:1；html-fallback=从 HTML 还原",
+    )
+    http_status: int | None = Field(default=None, description="上游 HTTP 状态码")
+    elapsed_ms: float = Field(description="接口用时（毫秒，含上游请求）")
+    content_type: str | None = Field(
+        default=None,
+        description="上游 Content-Type（联调诊断用）",
+    )
+    parsed: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "解析后的结构化数据：标题/价格/展示类目与发布类目/店铺/"
+            "销量展示/起订与单位/重量体积/最近修改等"
+        ),
+    )
+    raw: str | None = Field(
+        default=None,
+        description="完整 Flight 原文（仅本联调接口返回；业务接口不返回）",
     )

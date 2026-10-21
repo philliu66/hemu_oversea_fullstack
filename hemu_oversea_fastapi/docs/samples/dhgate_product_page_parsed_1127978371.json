@@ -1,0 +1,61 @@
+{
+  "item_code": "1127978371",
+  "product_id": "8aaa0865a090bf5201a0e61acf4c0d5f",
+  "title": "Light Luxury Mens Shoes 2026s New Mesh Breathable Fashion Outdoor Shoes Thick Sole Height Increasing Casual Versatile Sneakers Large Sizes 39 to 45",
+  "suspicious_title": false,
+  "seo_name": "light-luxury-mens-shoes-2026s-new-mesh-breathable",
+  "canonical": "product/light-luxury-mens-shoes-2026s-new-mesh-breathable/1127978371.html",
+  "category": {
+    "name": "Outdoor Shoes&Sandals",
+    "id": "024072",
+    "pub_id": "024037"
+  },
+  "sales": {
+    "display": "35",
+    "num": 0
+  },
+  "order": {
+    "min_order": "1",
+    "max_sale_qty": "100000",
+    "unit": "Pair",
+    "unit_plural": "Pairs"
+  },
+  "package": {
+    "weight_kg": 1,
+    "length": 20,
+    "width": 20,
+    "height": 10
+  },
+  "last_modify_date": "20/10/2026",
+  "shop": {
+    "name": "dhshoesil",
+    "id": "2c90937092084a5d019208596d230aa8",
+    "seq": 22022422,
+    "url": "https://www.dhgate.com/store/22022422",
+    "address": "China",
+    "year": 1,
+    "grade": "N"
+  },
+  "price": {
+    "currency": "USD",
+    "single_price": 20.49,
+    "single_original": 70.65,
+    "from_price": 19.56,
+    "ladder": [
+      {
+        "qty_from": 1,
+        "qty_to": 14,
+        "original_price": 70.65,
+        "discount_price": 20.49,
+        "has_promo": true
+      },
+      {
+        "qty_from": 15,
+        "qty_to": 1000000,
+        "original_price": 67.45,
+        "discount_price": 19.56,
+        "has_promo": true
+      }
+    ]
+  }
+}

@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+# connect_timeout：秒；本地 Postgres 未启动时尽快失败，避免 lifespan 长时间卡住
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 5},
+)
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,

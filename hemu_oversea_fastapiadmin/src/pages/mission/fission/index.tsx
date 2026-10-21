@@ -21,6 +21,7 @@ import {
 } from '@/utils/portalScope';
 import { MissionStatusTag } from './MissionInfo';
 import {
+  MISSION_TYPE_FISSION,
   missionFissionDataPath,
   missionFissionDetailPath,
   personLabel,
@@ -122,6 +123,7 @@ const MissionFissionList: React.FC = () => {
           description: values.description?.trim() || undefined,
           worker_id: values.worker_id,
           supplier_id: supplierId,
+          type: MISSION_TYPE_FISSION,
         });
         message.success('创建成功');
       }
@@ -324,6 +326,7 @@ const MissionFissionList: React.FC = () => {
             page_size: params.pageSize,
             keyword: params.keyword?.trim() || undefined,
             supplier_id: scopedSupplierId,
+            type: MISSION_TYPE_FISSION,
           });
           return {
             data: result.items,

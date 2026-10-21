@@ -13,6 +13,8 @@ from app.schemas.utils import (
     DhSkuBaseInfoPublic,
     DhSkuBaseInfoRequest,
     DhgateImgInfoPublic,
+    DhgateProductPageFetchPublic,
+    DhgateProductPageFetchRequest,
     DhgateTweakImgPublic,
     DhgateUpdateProductFromFilePublic,
     DhgateUpdateProductPublic,
@@ -28,6 +30,7 @@ from app.services.dhgate import (
     tweak_product_image,
     upload_product_image,
 )
+from app.services.dhgate.product_page import fetch_product_page
 from app.services.measures_units_dh import list_measures_units_dh
 from app.services.product_package_weight import execute_dhgate_product_updates
 from app.services.sku_base_infos_dh import (
@@ -480,3 +483,25 @@ def get_dhgate_sku_base_info(
             sku_code=payload.sku_code,
         )
     )
+
+
+@router.post(
+    "/dhgate/product-page",
+    response_model=ApiResponse[DhgateProductPageFetchPublic],
+    summary="联调：按链接获取敦煌商品详情（RSC）",
+)
+def fetch_dhgate_product_page(
+    payload: DhgateProductPageFetchRequest,
+) -> ApiResponse[DhgateProductPageFetchPublic]:
+    """
+    传入敦煌商品详情页 URL，单次 HTTP GET（`RSC: 1`）取 Flight 并解析高价值字段。
+
+    返回：
+    - `parsed`：标题/价格/类目/店铺/销量/起订/包装/最近修改等
+    - `raw`：完整 Flight 原文（仅本联调接口；业务提取接口不返回）
+    - `elapsed_ms` / `channel` / `content_type` 等诊断字段
+
+    无需店铺授权；仅供联调，勿对 `blocked` 自动重试。
+    """
+    data = fetch_product_page(payload.url, include_raw=True)
+    return success(DhgateProductPageFetchPublic.model_validate(data))

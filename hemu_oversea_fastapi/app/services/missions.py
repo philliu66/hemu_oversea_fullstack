@@ -1,27 +1,40 @@
 import copy
 import logging
+import re
 import threading
 import time
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from typing import Any
+from urllib.parse import unquote
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, aliased, defer
 
 from app.core.db import SessionLocal
 from app.core.deps import Pagination
-from app.core.errors import bad_request, forbidden, not_found
+from app.core.errors import AppError, bad_request, forbidden, not_found
 from app.core.roles import Role
 from app.models.mission import (
     FISSION_STATUS_FAILED,
     FISSION_STATUS_MARKED_FINISHED,
     FISSION_STATUS_PENDING,
     FISSION_STATUS_SUCCESS,
+    FISSION_STATUSES,
+    HOTSALE_STATUS_MARKED_FINISHED,
+    HOTSALE_STATUS_PENDING,
+    HOTSALE_STATUS_SUCCESS,
+    HOTSALE_STATUSES,
+    MISSION_TYPE_FISSION_DH,
+    MISSION_TYPE_HOTSALE_DH,
+    MISSION_TYPES,
     MISSION_STATUS_FINISHED,
     MISSION_STATUS_MARKED_FINISHED,
     MISSION_STATUS_PENDING,
     MISSION_STATUS_RUNNING,
     Mission,
     MissionDataDhFission,
+    MissionDataDhHotsale,
     MissionLog,
 )
 from app.models.product_dh import ProductDh
@@ -32,10 +45,16 @@ from app.schemas.common import PageData
 from app.schemas.mission import (
     MissionFissionDataDetailPublic,
     MissionFissionDataPublic,
+    MissionHotsaleDataExtractFailItem,
+    MissionHotsaleDataExtractResult,
+    MissionHotsaleDataImportResult,
+    MissionHotsaleDataPublic,
     MissionLogPublic,
     MissionPublic,
 )
 from app.services import operation_logs
+from app.services import permissions as perm_service
+from app.services.dhgate.product_page import fetch_product_page
 from app.services.products import _build_dh_main_image_url
 from app.services.supplier_scope import (
     SUPPLIER_PORTAL_ROLES as _SUPPLIER_PORTAL_ROLES,
@@ -46,6 +65,37 @@ PLACEHOLDER_MESSAGE = "功能待补充"
 logger = logging.getLogger(__name__)
 
 _MARKABLE_STATUSES = {MISSION_STATUS_PENDING, MISSION_STATUS_RUNNING}
+
+# 任务类型 → 菜单/按钮权限码前缀
+_MISSION_TYPE_PERM = {
+    MISSION_TYPE_FISSION_DH: "mission.fission",
+    MISSION_TYPE_HOTSALE_DH: "mission.hotsale",
+}
+
+
+def normalize_mission_type(mission_type: str) -> str:
+    cleaned = (mission_type or "").strip()
+    if cleaned not in MISSION_TYPES:
+        raise bad_request(
+            f"无效的任务类型：{mission_type}，允许：{', '.join(sorted(MISSION_TYPES))}"
+        )
+    return cleaned
+
+
+def assert_mission_type_perm(
+    db: Session,
+    actor: User,
+    mission_type: str,
+    *,
+    suffix: str = "",
+) -> str:
+    """校验当前用户是否拥有该任务类型对应权限（platform_admin 放行）。"""
+    normalized = normalize_mission_type(mission_type)
+    prefix = _MISSION_TYPE_PERM[normalized]
+    code = f"{prefix}.{suffix}" if suffix else prefix
+    if not perm_service.user_has_permissions(db, actor, code):
+        raise forbidden("无操作权限")
+    return normalized
 _EXECUTABLE_FISSION_STATUSES = {FISSION_STATUS_PENDING, FISSION_STATUS_FAILED}
 _MOCK_BATCH_SECONDS = 10
 
@@ -137,6 +187,7 @@ def _to_public(
         id=mission.id,
         supplier_id=mission.supplier_id,
         supplier_name=supplier_name,
+        type=mission.type,  # type: ignore[arg-type]
         title=mission.title,
         description=mission.description,
         status=mission.status,
@@ -176,8 +227,12 @@ def create_mission(
     title: str,
     description: str | None,
     worker_id: int,
+    mission_type: str,
     supplier_id: int | None = None,
 ) -> MissionPublic:
+    normalized_type = assert_mission_type_perm(
+        db, actor, mission_type, suffix="create"
+    )
     scoped_supplier_id = _require_supplier_actor(db, actor, supplier_id)
     cleaned_title = title.strip()
     if not cleaned_title:
@@ -188,6 +243,7 @@ def create_mission(
     cleaned_description = description.strip() if description else ""
     mission = Mission(
         supplier_id=scoped_supplier_id,
+        type=normalized_type,
         title=cleaned_title,
         description=cleaned_description or None,
         status=MISSION_STATUS_PENDING,
@@ -205,6 +261,7 @@ def create_mission(
         summary=f"新建任务：{cleaned_title}",
         detail={
             "title": cleaned_title,
+            "type": normalized_type,
             "worker_id": worker.id,
             "supplier_id": scoped_supplier_id,
         },
@@ -220,9 +277,12 @@ def list_missions(
     actor: User,
     supplier_id: int | None,
     keyword: str | None,
+    mission_type: str,
     pagination: Pagination,
 ) -> PageData[MissionPublic]:
+    normalized_type = assert_mission_type_perm(db, actor, mission_type)
     filters = _visible_filters(db, actor, supplier_id)
+    filters.append(Mission.type == normalized_type)
     if keyword and keyword.strip():
         filters.append(Mission.title.ilike(f"%{keyword.strip()}%"))
 
@@ -271,6 +331,7 @@ def get_mission(
         actor=actor,
         supplier_id=supplier_id,
     )
+    assert_mission_type_perm(db, actor, mission.type)
     users = _load_users(
         db,
         {mission.worker_id, *([mission.created_by] if mission.created_by else [])},
@@ -297,6 +358,7 @@ def update_mission(
     peek = db.get(Mission, mission_id)
     if peek is None or peek.is_deleted:
         raise not_found("任务不存在")
+    assert_mission_type_perm(db, actor, peek.type, suffix="create")
     scoped_supplier_id = _require_supplier_actor(
         db, actor, supplier_id if supplier_id is not None else peek.supplier_id
     )
@@ -341,6 +403,7 @@ def mark_mission_finished(
     peek = db.get(Mission, mission_id)
     if peek is None or peek.is_deleted:
         raise not_found("任务不存在")
+    assert_mission_type_perm(db, actor, peek.type, suffix="finish")
     scoped_supplier_id = _require_supplier_actor(
         db, actor, supplier_id if supplier_id is not None else peek.supplier_id
     )
@@ -441,6 +504,8 @@ def list_fission_data(
     actor: User,
     supplier_id: int | None,
     pagination: Pagination,
+    keyword: str | None = None,
+    fission_status: str | None = None,
 ) -> PageData[MissionFissionDataPublic]:
     _get_visible_mission(
         db,
@@ -452,12 +517,33 @@ def list_fission_data(
         MissionDataDhFission.deleted_at.is_(None),
         MissionDataDhFission.mission_id == mission_id,
     ]
-    total = (
-        db.scalar(
-            select(func.count()).select_from(MissionDataDhFission).where(*filters)
+
+    kw = (keyword or "").strip()
+    if kw:
+        pattern = f"%{kw}%"
+        filters.append(
+            or_(
+                MissionDataDhFission.item_name.ilike(pattern),
+                MissionDataDhFission.item_code.ilike(pattern),
+                ProductDh.item_code.ilike(pattern),
+            )
         )
-        or 0
-    )
+
+    status = (fission_status or "").strip()
+    if status and status != "all":
+        if status not in FISSION_STATUSES:
+            raise bad_request(
+                f"无效的裂变状态：{status}，允许：{', '.join(sorted(FISSION_STATUSES))}"
+            )
+        filters.append(MissionDataDhFission.fission_status == status)
+
+    count_stmt = select(func.count()).select_from(MissionDataDhFission)
+    if kw:
+        count_stmt = count_stmt.outerjoin(
+            ProductDh, ProductDh.id == MissionDataDhFission.seed_product_id
+        )
+    total = db.scalar(count_stmt.where(*filters)) or 0
+
     rows = db.execute(
         select(MissionDataDhFission, Store.name, ProductDh.item_code)
         .options(
@@ -730,19 +816,22 @@ def delete_fission_data(
     *,
     actor: User,
     mission_id: int,
-    data_id: int,
-) -> None:
-    """软删除一条尚未裂变成功的任务数据。"""
-    row = _get_mutable_fission_row(
-        db,
-        actor=actor,
-        mission_id=mission_id,
-        data_id=data_id,
-    )
-    if row.fission_status == FISSION_STATUS_SUCCESS:
-        raise bad_request("裂变成功的数据不能删除")
-    row.deleted_at = datetime.now(timezone.utc)
+    data_ids: list[int],
+) -> dict:
+    """软删除尚未裂变成功的任务数据（支持单条或多条）。"""
+    now = datetime.now(timezone.utc)
+    for data_id in data_ids:
+        row = _get_mutable_fission_row(
+            db,
+            actor=actor,
+            mission_id=mission_id,
+            data_id=data_id,
+        )
+        if row.fission_status == FISSION_STATUS_SUCCESS:
+            raise bad_request(f"裂变成功的数据不能删除（id={data_id}）")
+        row.deleted_at = now
     db.commit()
+    return {"count": len(data_ids)}
 
 
 def mark_fission_data_finished(
@@ -750,22 +839,32 @@ def mark_fission_data_finished(
     *,
     actor: User,
     mission_id: int,
-    data_id: int,
-) -> MissionFissionDataPublic:
-    """把尚未裂变成功的任务数据标记结束，只改裂变状态。"""
-    row = _get_mutable_fission_row(
-        db,
-        actor=actor,
-        mission_id=mission_id,
-        data_id=data_id,
-    )
-    if row.fission_status == FISSION_STATUS_SUCCESS:
-        raise bad_request("裂变成功的数据不能标记结束")
-    if row.fission_status != FISSION_STATUS_MARKED_FINISHED:
-        row.fission_status = FISSION_STATUS_MARKED_FINISHED
+    data_ids: list[int],
+) -> list[MissionFissionDataPublic]:
+    """把尚未裂变成功的任务数据标记结束（支持单条或多条）。"""
+    results: list[MissionFissionDataPublic] = []
+    dirty = False
+    for data_id in data_ids:
+        row = _get_mutable_fission_row(
+            db,
+            actor=actor,
+            mission_id=mission_id,
+            data_id=data_id,
+        )
+        if row.fission_status == FISSION_STATUS_SUCCESS:
+            raise bad_request(f"裂变成功的数据不能标记结束（id={data_id}）")
+        if row.fission_status != FISSION_STATUS_MARKED_FINISHED:
+            row.fission_status = FISSION_STATUS_MARKED_FINISHED
+            dirty = True
+        results.append(MissionFissionDataPublic.model_validate(row))
+    if dirty:
         db.commit()
-        db.refresh(row)
-    return MissionFissionDataPublic.model_validate(row)
+        for i, data_id in enumerate(data_ids):
+            row = db.get(MissionDataDhFission, data_id)
+            if row is not None:
+                db.refresh(row)
+                results[i] = MissionFissionDataPublic.model_validate(row)
+    return results
 
 
 def reject_placeholder(
@@ -906,3 +1005,630 @@ def _mock_finish_mission_batch(
             db.rollback()
     finally:
         db.close()
+
+
+_ITEM_CODE_FROM_URL = re.compile(r"/(\d+)(?:\.html)+", re.IGNORECASE)
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _normalize_dh_url(value: Any) -> str | None:
+    text = _optional_str(value)
+    if not text:
+        return None
+    if text.startswith("//"):
+        return f"https:{text}"
+    return text
+
+
+def _extract_item_code_from_product_url(product_url: str | None) -> str | None:
+    if not product_url:
+        return None
+    matched = _ITEM_CODE_FROM_URL.search(unquote(product_url))
+    return matched.group(1) if matched else None
+
+
+def list_hotsale_data(
+    db: Session,
+    *,
+    mission_id: int,
+    actor: User,
+    supplier_id: int | None,
+    pagination: Pagination,
+    keyword: str | None = None,
+    collect_status: str | None = None,
+) -> PageData[MissionHotsaleDataPublic]:
+    mission = _get_visible_mission(
+        db,
+        mission_id=mission_id,
+        actor=actor,
+        supplier_id=supplier_id,
+    )
+    if mission.type != MISSION_TYPE_HOTSALE_DH:
+        raise bad_request("该任务不是热卖采集类型")
+
+    filters = [
+        MissionDataDhHotsale.deleted_at.is_(None),
+        MissionDataDhHotsale.mission_id == mission_id,
+    ]
+
+    kw = (keyword or "").strip()
+    if kw:
+        pattern = f"%{kw}%"
+        filters.append(
+            or_(
+                MissionDataDhHotsale.product_name.ilike(pattern),
+                MissionDataDhHotsale.product_name_short.ilike(pattern),
+                MissionDataDhHotsale.item_code.ilike(pattern),
+                MissionDataDhHotsale.store_name.ilike(pattern),
+            )
+        )
+
+    status = (collect_status or "").strip()
+    if status and status != "all":
+        if status not in HOTSALE_STATUSES:
+            raise bad_request(
+                f"无效的采集状态：{status}，允许：{', '.join(sorted(HOTSALE_STATUSES))}"
+            )
+        filters.append(MissionDataDhHotsale.collect_status == status)
+
+    total = (
+        db.scalar(
+            select(func.count()).select_from(MissionDataDhHotsale).where(*filters)
+        )
+        or 0
+    )
+    rows = db.scalars(
+        select(MissionDataDhHotsale)
+        .options(defer(MissionDataDhHotsale.parse_raw_json))
+        .where(*filters)
+        .order_by(
+            MissionDataDhHotsale.rank_no.asc().nullslast(),
+            MissionDataDhHotsale.id.desc(),
+        )
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
+    ).all()
+    return PageData(
+        items=[MissionHotsaleDataPublic.model_validate(row) for row in rows],
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+
+
+def import_hotsale_capture(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    payload: dict[str, Any],
+    supplier_id: int | None = None,
+) -> MissionHotsaleDataImportResult:
+    """将扩展回传的热卖榜响应解析入库；新行默认 collect_status=pending。"""
+    mission = _get_visible_mission(
+        db,
+        mission_id=mission_id,
+        actor=actor,
+        supplier_id=supplier_id,
+    )
+    if mission.type != MISSION_TYPE_HOTSALE_DH:
+        raise bad_request("该任务不是热卖采集类型")
+    assert_mission_type_perm(db, actor, MISSION_TYPE_HOTSALE_DH, suffix="data")
+
+    if not isinstance(payload, dict):
+        raise bad_request("采集数据格式无效")
+
+    # currentCategory 仅作回传提示，不写入 cate_name（类目由详情提取填充）
+    list_cate_tip = _optional_str(payload.get("currentCategory"))
+    page_info = payload.get("pageInfoOfProductRank")
+    if not isinstance(page_info, dict):
+        raise bad_request("采集数据缺少 pageInfoOfProductRank")
+    result_list = page_info.get("result")
+    if not isinstance(result_list, list) or not result_list:
+        raise bad_request("采集数据 result 为空")
+
+    created = 0
+    updated = 0
+    for raw in result_list:
+        if not isinstance(raw, dict):
+            continue
+        product_url = _normalize_dh_url(raw.get("productUrl"))
+        item_code = _extract_item_code_from_product_url(product_url)
+        product_name_short = _optional_str(raw.get("productName"))
+        main_image_url = _normalize_dh_url(raw.get("imageUrl"))
+        deal = _optional_str(raw.get("deal"))
+        deal_amount = _optional_str(raw.get("dealAmount"))
+        deal_persons = _optional_str(raw.get("dealPersons"))
+        rank_raw = raw.get("rankNo")
+        rank_no: int | None
+        try:
+            rank_no = int(rank_raw) if rank_raw is not None else None
+        except (TypeError, ValueError):
+            rank_no = None
+
+        existing: MissionDataDhHotsale | None = None
+        if item_code:
+            existing = db.scalars(
+                select(MissionDataDhHotsale).where(
+                    MissionDataDhHotsale.deleted_at.is_(None),
+                    MissionDataDhHotsale.mission_id == mission_id,
+                    MissionDataDhHotsale.item_code == item_code,
+                )
+            ).first()
+
+        if existing is not None:
+            existing.product_url = product_url
+            existing.product_name_short = product_name_short
+            # product_name / cate_* / 店铺价格等留给详情提取，导入时不覆盖
+            existing.main_image_url = main_image_url
+            existing.deal = deal
+            existing.deal_amount = deal_amount
+            existing.deal_persons = deal_persons
+            existing.rank_no = rank_no
+            existing.updated_by = actor.id
+            updated += 1
+        else:
+            db.add(
+                MissionDataDhHotsale(
+                    mission_id=mission.id,
+                    supplier_id=mission.supplier_id,
+                    item_code=item_code,
+                    product_url=product_url,
+                    product_name_short=product_name_short,
+                    product_name=None,
+                    main_image_url=main_image_url,
+                    cate_name=None,
+                    deal=deal,
+                    deal_amount=deal_amount,
+                    deal_persons=deal_persons,
+                    collect_status=HOTSALE_STATUS_PENDING,
+                    rank_no=rank_no,
+                    created_by=actor.id,
+                    updated_by=actor.id,
+                )
+            )
+            created += 1
+
+    # 开始采集回传有新增时：未开始 → 进行中
+    if created > 0 and mission.status == MISSION_STATUS_PENDING:
+        mission.status = MISSION_STATUS_RUNNING
+
+    db.commit()
+    return MissionHotsaleDataImportResult(
+        created=created,
+        updated=updated,
+        total=created + updated,
+        cate_name=list_cate_tip,
+    )
+
+
+def _parse_sales_num_from_display(value: Any) -> int | None:
+    """将销量展示文案（如 '142' / '1,234'）转为 int。"""
+    text = _optional_str(value)
+    if not text:
+        return None
+    cleaned = text.replace(",", "").replace(" ", "")
+    matched = re.match(r"^(\d+)", cleaned)
+    if matched:
+        try:
+            return int(matched.group(1))
+        except ValueError:
+            return None
+    try:
+        return int(Decimal(cleaned))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _parse_price_decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _parse_store_id(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _apply_hotsale_parsed_fields(
+    row: MissionDataDhHotsale,
+    parsed: dict[str, Any],
+) -> None:
+    """把商品详情解析结果写入行内业务字段，并保存完整 parsed JSON。"""
+    row.parse_raw_json = parsed
+
+    title = _optional_str(parsed.get("title"))
+    if title:
+        row.product_name = title[:512]
+
+    item_code = _optional_str(parsed.get("item_code"))
+    if item_code and not row.item_code:
+        row.item_code = item_code[:64]
+
+    category = parsed.get("category")
+    if isinstance(category, dict):
+        cate_name = _optional_str(category.get("name"))
+        if cate_name:
+            row.cate_name = cate_name[:128]
+        cate_id = _optional_str(category.get("id")) or _optional_str(
+            category.get("pub_id")
+        )
+        if cate_id:
+            row.cate_id = cate_id[:64]
+
+    shop = parsed.get("shop")
+    if isinstance(shop, dict):
+        store_name = _optional_str(shop.get("name"))
+        if store_name:
+            row.store_name = store_name[:256]
+        store_id = _parse_store_id(shop.get("seq"))
+        if store_id is not None:
+            row.store_id = store_id
+
+    price_block = parsed.get("price")
+    if isinstance(price_block, dict):
+        price = _parse_price_decimal(price_block.get("single_price"))
+        if price is not None:
+            row.price = price
+
+    sales = parsed.get("sales")
+    if isinstance(sales, dict):
+        sales_num = _parse_sales_num_from_display(sales.get("display"))
+        if sales_num is not None:
+            row.sales_num = sales_num
+
+    last_modify = _optional_str(parsed.get("last_modify_date"))
+    if last_modify:
+        row.last_modify_date = last_modify[:64]
+
+
+def _get_mutable_hotsale_row(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    data_id: int,
+) -> MissionDataDhHotsale:
+    peek = db.get(Mission, mission_id)
+    if peek is None or peek.is_deleted:
+        raise not_found("任务不存在")
+    supplier_id = _require_supplier_actor(db, actor, peek.supplier_id)
+    mission = _get_visible_mission(
+        db,
+        mission_id=mission_id,
+        actor=actor,
+        supplier_id=supplier_id,
+    )
+    if mission.type != MISSION_TYPE_HOTSALE_DH:
+        raise bad_request("该任务不是热卖采集类型")
+    # 热卖 running=进行中（可继续采集/提取）；仅结束态不可改数据
+    if mission.status in {MISSION_STATUS_MARKED_FINISHED, MISSION_STATUS_FINISHED}:
+        raise bad_request("任务已结束，不能再修改数据")
+    row = db.get(MissionDataDhHotsale, data_id)
+    if row is None or row.is_deleted or row.mission_id != mission.id:
+        raise not_found("任务数据不存在")
+    return row
+
+
+def delete_hotsale_data(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    data_ids: list[int],
+) -> dict:
+    """软删除尚未采集完成的热卖任务数据（支持单条或多条）。"""
+    now = datetime.now(timezone.utc)
+    for data_id in data_ids:
+        row = _get_mutable_hotsale_row(
+            db,
+            actor=actor,
+            mission_id=mission_id,
+            data_id=data_id,
+        )
+        if row.collect_status == HOTSALE_STATUS_SUCCESS:
+            raise bad_request(f"已完成的数据不能删除（id={data_id}）")
+        row.deleted_at = now
+        row.updated_by = actor.id
+    db.commit()
+    return {"count": len(data_ids)}
+
+
+def mark_hotsale_data_finished(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int,
+    data_ids: list[int],
+) -> list[MissionHotsaleDataPublic]:
+    """把尚未采集完成的任务数据标记结束（支持单条或多条）。"""
+    results: list[MissionHotsaleDataPublic] = []
+    dirty = False
+    for data_id in data_ids:
+        row = _get_mutable_hotsale_row(
+            db,
+            actor=actor,
+            mission_id=mission_id,
+            data_id=data_id,
+        )
+        if row.collect_status == HOTSALE_STATUS_SUCCESS:
+            raise bad_request(f"已完成的数据不能标记结束（id={data_id}）")
+        if row.collect_status != HOTSALE_STATUS_MARKED_FINISHED:
+            row.collect_status = HOTSALE_STATUS_MARKED_FINISHED
+            row.updated_by = actor.id
+            dirty = True
+        results.append(MissionHotsaleDataPublic.model_validate(row))
+    if dirty:
+        db.commit()
+        for i, data_id in enumerate(data_ids):
+            row = db.get(MissionDataDhHotsale, data_id)
+            if row is not None:
+                db.refresh(row)
+                results[i] = MissionHotsaleDataPublic.model_validate(row)
+    return results
+
+
+def _assert_hotsale_mission_writable(mission: Mission) -> None:
+    if mission.type != MISSION_TYPE_HOTSALE_DH:
+        raise bad_request("该任务不是热卖采集类型")
+    # 热卖 running=进行中（采集有新增后进入）；可继续提取，仅结束态不可写
+    if mission.status in {MISSION_STATUS_MARKED_FINISHED, MISSION_STATUS_FINISHED}:
+        raise bad_request("任务已结束，不能再提取数据")
+
+
+def _hotsale_pending_left(db: Session, *, mission_id: int) -> int:
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(MissionDataDhHotsale)
+            .where(
+                MissionDataDhHotsale.deleted_at.is_(None),
+                MissionDataDhHotsale.mission_id == mission_id,
+                MissionDataDhHotsale.collect_status == HOTSALE_STATUS_PENDING,
+            )
+        )
+        or 0
+    )
+
+
+def _maybe_finish_hotsale_mission(db: Session, *, mission: Mission) -> bool:
+    """若任务下无进行中数据，则将任务标为 finished。返回是否已同步变更。
+
+    注意：工程 Session 为 autoflush=False，调用前必须先 flush，
+    否则 COUNT 仍会看到未刷盘的 pending，导致任务状态无法推进。
+    """
+    if mission.status in {MISSION_STATUS_FINISHED, MISSION_STATUS_MARKED_FINISHED}:
+        return False
+    db.flush()
+    if _hotsale_pending_left(db, mission_id=mission.id) > 0:
+        return False
+    mission.status = MISSION_STATUS_FINISHED
+    return True
+
+
+def extract_hotsale_product_pages(
+    db: Session,
+    *,
+    actor: User,
+    mission_id: int | None = None,
+    mission_data_ids: list[int] | None = None,
+    supplier_id: int | None = None,
+) -> MissionHotsaleDataExtractResult:
+    """按任务数据 ID 或任务 ID 拉取商品详情页并入库。
+
+    - mission_data_ids：指定数据（须为 pending）
+    - mission_id：该任务下全部 pending（跳过已完成 / 标记结束）
+    成功时写入 parse_raw_json，并将 collect_status 置为 success。
+    按 mission_id 批量时，全部完成后同步任务状态为 finished。
+    """
+    assert_mission_type_perm(db, actor, MISSION_TYPE_HOTSALE_DH, suffix="data")
+
+    by_mission = mission_id is not None
+    fails: list[MissionHotsaleDataExtractFailItem] = []
+    success_count = 0
+    skipped_count = 0
+    target_mission: Mission | None = None
+    rows: list[MissionDataDhHotsale] = []
+
+    if by_mission:
+        peek = db.get(Mission, mission_id)
+        if peek is None or peek.is_deleted:
+            raise not_found("任务不存在")
+        scoped = _require_supplier_actor(
+            db,
+            actor,
+            supplier_id if supplier_id is not None else peek.supplier_id,
+        )
+        target_mission = _get_visible_mission(
+            db,
+            mission_id=mission_id,  # type: ignore[arg-type]
+            actor=actor,
+            supplier_id=scoped,
+        )
+        _assert_hotsale_mission_writable(target_mission)
+        rows = list(
+            db.scalars(
+                select(MissionDataDhHotsale)
+                .where(
+                    MissionDataDhHotsale.deleted_at.is_(None),
+                    MissionDataDhHotsale.mission_id == target_mission.id,
+                    MissionDataDhHotsale.collect_status == HOTSALE_STATUS_PENDING,
+                )
+                .order_by(
+                    MissionDataDhHotsale.rank_no.asc().nullslast(),
+                    MissionDataDhHotsale.id.asc(),
+                )
+            ).all()
+        )
+    else:
+        ids = list(mission_data_ids or [])
+        if not ids:
+            raise bad_request("请至少选择一条任务数据")
+        loaded: list[MissionDataDhHotsale] = []
+        for data_id in ids:
+            row = db.get(MissionDataDhHotsale, data_id)
+            if row is None or row.is_deleted:
+                fails.append(
+                    MissionHotsaleDataExtractFailItem(
+                        id=data_id,
+                        product_url=None,
+                        reason="任务数据不存在",
+                    )
+                )
+                continue
+            loaded.append(row)
+        if not loaded and fails:
+            return MissionHotsaleDataExtractResult(
+                success_count=0,
+                fail_count=len(fails),
+                skipped_count=0,
+                fails=fails,
+                mission_id=None,
+                mission_finished=False,
+            )
+
+        mission_ids = {r.mission_id for r in loaded}
+        if len(mission_ids) > 1:
+            raise bad_request("一次只能提取同一任务下的数据")
+        mid = next(iter(mission_ids))
+        peek = db.get(Mission, mid)
+        if peek is None or peek.is_deleted:
+            raise not_found("任务不存在")
+        scoped = _require_supplier_actor(
+            db,
+            actor,
+            supplier_id if supplier_id is not None else peek.supplier_id,
+        )
+        target_mission = _get_visible_mission(
+            db,
+            mission_id=mid,
+            actor=actor,
+            supplier_id=scoped,
+        )
+        _assert_hotsale_mission_writable(target_mission)
+
+        for row in loaded:
+            if row.collect_status == HOTSALE_STATUS_SUCCESS:
+                fails.append(
+                    MissionHotsaleDataExtractFailItem(
+                        id=row.id,
+                        product_url=row.product_url,
+                        reason="已完成，不能重复提取",
+                    )
+                )
+                continue
+            if row.collect_status == HOTSALE_STATUS_MARKED_FINISHED:
+                fails.append(
+                    MissionHotsaleDataExtractFailItem(
+                        id=row.id,
+                        product_url=row.product_url,
+                        reason="已标记结束，不能提取",
+                    )
+                )
+                continue
+            if row.collect_status != HOTSALE_STATUS_PENDING:
+                fails.append(
+                    MissionHotsaleDataExtractFailItem(
+                        id=row.id,
+                        product_url=row.product_url,
+                        reason=f"状态不可提取：{row.collect_status}",
+                    )
+                )
+                continue
+            rows.append(row)
+
+    if by_mission and not rows:
+        # 无可提取的进行中数据：仍检查是否应同步任务状态
+        assert target_mission is not None
+        mission_finished = _maybe_finish_hotsale_mission(db, mission=target_mission)
+        if mission_finished:
+            db.commit()
+        return MissionHotsaleDataExtractResult(
+            success_count=0,
+            fail_count=0,
+            skipped_count=0,
+            fails=[],
+            mission_id=target_mission.id,
+            mission_finished=mission_finished,
+        )
+
+    for row in rows:
+        url = (row.product_url or "").strip()
+        if not url:
+            fails.append(
+                MissionHotsaleDataExtractFailItem(
+                    id=row.id,
+                    product_url=row.product_url,
+                    reason="缺少商品链接",
+                )
+            )
+            continue
+        try:
+            result = fetch_product_page(url)
+        except AppError as exc:
+            fails.append(
+                MissionHotsaleDataExtractFailItem(
+                    id=row.id,
+                    product_url=url,
+                    reason=exc.message or "请求失败",
+                )
+            )
+            continue
+        except Exception as exc:
+            fails.append(
+                MissionHotsaleDataExtractFailItem(
+                    id=row.id,
+                    product_url=url,
+                    reason=f"请求异常：{exc}",
+                )
+            )
+            continue
+
+        if not result.get("ok") or not isinstance(result.get("parsed"), dict):
+            reason = result.get("message") or result.get("reason") or "解析失败"
+            fails.append(
+                MissionHotsaleDataExtractFailItem(
+                    id=row.id,
+                    product_url=url,
+                    reason=str(reason),
+                )
+            )
+            continue
+
+        parsed: dict[str, Any] = result["parsed"]
+        _apply_hotsale_parsed_fields(row, parsed)
+        row.collect_status = HOTSALE_STATUS_SUCCESS
+        row.updated_by = actor.id
+        success_count += 1
+
+    # 任务提取（by_mission）或按 ID 提取完最后一批后：无 pending 则同步任务为已完成
+    mission_finished = False
+    if target_mission is not None and (by_mission or success_count > 0):
+        mission_finished = _maybe_finish_hotsale_mission(db, mission=target_mission)
+
+    if success_count > 0 or mission_finished:
+        db.commit()
+
+    assert target_mission is not None
+    return MissionHotsaleDataExtractResult(
+        success_count=success_count,
+        fail_count=len(fails),
+        skipped_count=skipped_count,
+        fails=fails,
+        mission_id=target_mission.id,
+        mission_finished=mission_finished,
+    )

@@ -825,10 +825,14 @@ export type FissionStatus =
   | 'failed'
   | 'marked_finished';
 
+/** 任务类型：列表筛选用；编辑/详情表单不展示 */
+export type MissionType = 'fission_dh' | 'hotsale_dh';
+
 export type MissionPublic = {
   id: number;
   supplier_id: number;
   supplier_name?: string | null;
+  type: MissionType;
   title: string;
   description: string | null;
   status: MissionStatus;
@@ -843,6 +847,8 @@ export type MissionPublic = {
 };
 
 export type MissionListParams = {
+  /** 必填：按菜单入口传入 fission_dh / hotsale_dh */
+  type: MissionType;
   supplier_id?: number;
   keyword?: string;
   page?: number;
@@ -853,6 +859,8 @@ export type MissionCreateParams = {
   title: string;
   description?: string;
   worker_id: number;
+  /** 必填：由前端入口传入，创建后不可改 */
+  type: MissionType;
   supplier_id?: number;
 };
 
@@ -926,4 +934,59 @@ export type MissionLogPublic = {
   fail_count: number;
   remark: string | null;
   created_at: string;
+};
+
+/** 热卖采集任务数据状态：进行中 / 已完成 / 标记结束 */
+export type HotsaleCollectStatus =
+  | 'pending'
+  | 'success'
+  | 'marked_finished';
+
+export type MissionHotsaleDataPublic = {
+  id: number;
+  mission_id: number;
+  supplier_id: number;
+  item_code: string | null;
+  product_url: string | null;
+  product_name_short: string | null;
+  product_name: string | null;
+  main_image_url: string | null;
+  cate_name: string | null;
+  cate_id: string | null;
+  store_name: string | null;
+  store_id: number | null;
+  price: number | string | null;
+  sales_num: number | null;
+  last_modify_date: string | null;
+  deal: string | null;
+  deal_amount: string | null;
+  deal_persons: string | null;
+  collect_status: HotsaleCollectStatus | string;
+  rank_no: number | null;
+  created_by: number | null;
+  updated_by: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MissionHotsaleDataImportResult = {
+  created: number;
+  updated: number;
+  total: number;
+  cate_name: string | null;
+};
+
+export type MissionHotsaleDataExtractFailItem = {
+  id: number;
+  product_url: string | null;
+  reason: string;
+};
+
+export type MissionHotsaleDataExtractResult = {
+  success_count: number;
+  fail_count: number;
+  skipped_count: number;
+  fails: MissionHotsaleDataExtractFailItem[];
+  mission_id: number | null;
+  mission_finished: boolean;
 };

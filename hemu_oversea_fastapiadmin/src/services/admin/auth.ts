@@ -37,6 +37,21 @@ export async function getAdminCaptcha() {
   return data;
 }
 
+/** 系统配置扁平对象，对应后端 config 表 { key: value } */
+export type SystemConfigMap = Record<string, unknown>;
+
+/** GET /api/v1/admin/auth/config —— 无需登录 */
+export async function getAdminSystemConfig(options?: {
+  skipErrorHandler?: boolean;
+}): Promise<SystemConfigMap> {
+  const res = await request<ApiResponse<SystemConfigMap>>(AdminAuthApi.CONFIG, {
+    method: 'GET',
+    ...(options || {}),
+  });
+  const data = unwrapApiData<SystemConfigMap>(res);
+  return data && typeof data === 'object' ? data : {};
+}
+
 /**
  * POST /api/v1/admin/auth/login
  * body: username + 明文 password + captcha_id + captcha_code

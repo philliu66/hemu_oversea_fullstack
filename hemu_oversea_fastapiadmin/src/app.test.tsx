@@ -4,6 +4,7 @@ const {
   mockReplace,
   mockHistory,
   mockGetAdminCurrentUser,
+  mockGetAdminSystemConfig,
   mockTryRefreshTokens,
   mockClearTokens,
   mockGetAccessToken,
@@ -21,6 +22,7 @@ const {
       replace,
     },
     mockGetAdminCurrentUser: vi.fn(),
+    mockGetAdminSystemConfig: vi.fn(),
     mockTryRefreshTokens: vi.fn(),
     mockClearTokens: vi.fn(),
     mockGetAccessToken: vi.fn(),
@@ -35,6 +37,8 @@ vi.mock('@umijs/max', () => ({
 
 vi.mock('@/services/admin/auth', () => ({
   getAdminCurrentUser: (...args: unknown[]) => mockGetAdminCurrentUser(...args),
+  getAdminSystemConfig: (...args: unknown[]) =>
+    mockGetAdminSystemConfig(...args),
 }));
 
 vi.mock('./utils/authRefresh', () => ({
@@ -93,6 +97,7 @@ describe('app getInitialState', () => {
     mockGetAccessToken.mockReturnValue('access-token');
     mockGetRefreshToken.mockReturnValue('refresh-token');
     mockTryRefreshTokens.mockResolvedValue(false);
+    mockGetAdminSystemConfig.mockResolvedValue({ name: '合木跨境FAST系统' });
   });
 
   it('should fetch currentUser when not on login page', async () => {
@@ -105,10 +110,12 @@ describe('app getInitialState', () => {
     const state = await getInitialState();
 
     expect(mockGetAdminCurrentUser).toHaveBeenCalled();
+    expect(mockGetAdminSystemConfig).toHaveBeenCalled();
     expect(state.currentUser).toEqual({
       name: 'Test User',
       access: 'admin',
     });
+    expect(state.config).toEqual({ name: '合木跨境FAST系统' });
     expect(state.settingDrawerOpen).toBe(false);
     expect(state.fetchUserInfo).toBeDefined();
   });
@@ -161,7 +168,9 @@ describe('app getInitialState', () => {
     const state = await getInitialState();
 
     expect(mockGetAdminCurrentUser).not.toHaveBeenCalled();
+    expect(mockGetAdminSystemConfig).toHaveBeenCalled();
     expect(state.currentUser).toBeUndefined();
+    expect(state.config).toEqual({ name: '合木跨境FAST系统' });
     expect(state.fetchUserInfo).toBeDefined();
   });
 

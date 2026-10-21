@@ -7,6 +7,9 @@ import type {
   MissionFissionDataDetailPublic,
   MissionFissionDataPublic,
   MissionFissionDataUpdateParams,
+  MissionHotsaleDataExtractResult,
+  MissionHotsaleDataImportResult,
+  MissionHotsaleDataPublic,
   MissionListParams,
   MissionLogPublic,
   MissionPublic,
@@ -37,6 +40,7 @@ export async function fetchMissionList(
     {
       method: 'POST',
       data: {
+        type: params.type,
         keyword: params.keyword,
         supplier_id: params.supplier_id,
         page: params.page ?? 1,
@@ -115,7 +119,13 @@ export async function markMissionFinished(id: number, options?: RequestOptions) 
 
 /** POST /api/v1/admin/missions/fission-data/list */
 export async function fetchMissionFissionDataList(
-  params: { mission_id: number; page?: number; page_size?: number },
+  params: {
+    mission_id: number;
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+    fission_status?: string;
+  },
   options?: RequestOptions,
 ) {
   const res = await request<ApiResponse<PageData<MissionFissionDataPublic>>>(
@@ -126,6 +136,8 @@ export async function fetchMissionFissionDataList(
         mission_id: params.mission_id,
         page: params.page ?? 1,
         page_size: params.page_size ?? 10,
+        keyword: params.keyword,
+        fission_status: params.fission_status,
       },
       ...options,
     },
@@ -193,12 +205,12 @@ export async function updateMissionFissionData(
   );
 }
 
-/** POST /api/v1/admin/missions/fission-data/delete */
+/** POST /api/v1/admin/missions/fission-data/delete —— id 支持单个或数组 */
 export async function deleteMissionFissionData(
-  params: { id: number; mission_id: number },
+  params: { id: number | number[]; mission_id: number },
   options?: RequestOptions,
 ) {
-  const res = await request<ApiResponse<Record<string, never>>>(
+  const res = await request<ApiResponse<{ count?: number }>>(
     AdminMissionApi.FISSION_DATA_DELETE,
     {
       method: 'POST',
@@ -209,12 +221,12 @@ export async function deleteMissionFissionData(
   return unwrapApiData(res);
 }
 
-/** POST /api/v1/admin/missions/fission-data/mark-finished */
+/** POST /api/v1/admin/missions/fission-data/mark-finished —— id 支持单个或数组 */
 export async function markMissionFissionDataFinished(
-  params: { id: number; mission_id: number },
+  params: { id: number | number[]; mission_id: number },
   options?: RequestOptions,
 ) {
-  const res = await request<ApiResponse<MissionFissionDataPublic>>(
+  const res = await request<ApiResponse<MissionFissionDataPublic[]>>(
     AdminMissionApi.FISSION_DATA_MARK_FINISHED,
     {
       method: 'POST',
@@ -223,7 +235,7 @@ export async function markMissionFissionDataFinished(
     },
   );
   return requireData(
-    unwrapApiData<MissionFissionDataPublic>(res),
+    unwrapApiData<MissionFissionDataPublic[]>(res),
     '标记结束失败',
   );
 }
@@ -265,4 +277,113 @@ export async function executeMission(missionId: number, options?: RequestOptions
     ...options,
   });
   return requireData(unwrapApiData(res), '提交执行失败');
+}
+
+/** POST /api/v1/admin/missions/hotsale-data/list */
+export async function fetchMissionHotsaleDataList(
+  params: {
+    mission_id: number;
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+    collect_status?: string;
+  },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<PageData<MissionHotsaleDataPublic>>>(
+    AdminMissionApi.HOTSALE_DATA_LIST,
+    {
+      method: 'POST',
+      data: {
+        mission_id: params.mission_id,
+        page: params.page ?? 1,
+        page_size: params.page_size ?? 10,
+        keyword: params.keyword,
+        collect_status: params.collect_status,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<PageData<MissionHotsaleDataPublic>>(res),
+    '获取热卖任务数据失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/hotsale-data/import —— 扩展回传入库 */
+export async function importMissionHotsaleData(
+  params: { mission_id: number; payload: Record<string, unknown> },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionHotsaleDataImportResult>>(
+    AdminMissionApi.HOTSALE_DATA_IMPORT,
+    {
+      method: 'POST',
+      data: {
+        mission_id: params.mission_id,
+        payload: params.payload,
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<MissionHotsaleDataImportResult>(res),
+    '热卖数据采集入库失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/hotsale-data/extract —— mission_id 或 mission_data_ids 二选一 */
+export async function extractMissionHotsaleData(
+  params:
+    | { mission_id: number; supplier_id?: number }
+    | { mission_data_ids: number[]; supplier_id?: number },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionHotsaleDataExtractResult>>(
+    AdminMissionApi.HOTSALE_DATA_EXTRACT,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<MissionHotsaleDataExtractResult>(res),
+    '热卖产品信息提取失败',
+  );
+}
+
+/** POST /api/v1/admin/missions/hotsale-data/delete —— id 支持单个或数组 */
+export async function deleteMissionHotsaleData(
+  params: { id: number | number[]; mission_id: number },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<{ count?: number }>>(
+    AdminMissionApi.HOTSALE_DATA_DELETE,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return unwrapApiData(res);
+}
+
+/** POST /api/v1/admin/missions/hotsale-data/mark-finished —— id 支持单个或数组 */
+export async function markMissionHotsaleDataFinished(
+  params: { id: number | number[]; mission_id: number },
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<MissionHotsaleDataPublic[]>>(
+    AdminMissionApi.HOTSALE_DATA_MARK_FINISHED,
+    {
+      method: 'POST',
+      data: params,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<MissionHotsaleDataPublic[]>(res),
+    '标记结束失败',
+  );
 }

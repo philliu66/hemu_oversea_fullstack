@@ -1,13 +1,22 @@
 from datetime import datetime
-from typing import Any
+from decimal import Decimal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+MissionType = Literal["fission_dh", "hotsale_dh"]
 
 
 class MissionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=100, description="任务标题")
     description: str | None = Field(default=None, description="任务描述")
     worker_id: int = Field(ge=1, description="指定人员用户 ID")
+    type: MissionType = Field(
+        description=(
+            "任务类型（由前端入口传入，不可编辑）。"
+            "fission_dh=商品裂变；hotsale_dh=热卖采集"
+        ),
+    )
     supplier_id: int | None = Field(
         default=None,
         description="供应商 ID。供应商身份忽略该字段；平台身份必填",
@@ -26,6 +35,9 @@ class MissionUpdate(BaseModel):
 
 
 class MissionList(BaseModel):
+    type: MissionType = Field(
+        description="任务类型筛选：fission_dh / hotsale_dh（按菜单入口传入）",
+    )
     supplier_id: int | None = Field(
         default=None,
         description="供应商 ID。供应商身份忽略该字段；平台身份必填",
@@ -56,6 +68,17 @@ class MissionFissionDataList(BaseModel):
     supplier_id: int | None = Field(
         default=None,
         description="供应商 ID。供应商身份忽略该字段；平台身份必填",
+    )
+    keyword: str | None = Field(
+        default=None,
+        description="搜索内容：按商品标题 / 原商品编码 / 新商品编码模糊匹配；空=不限",
+    )
+    fission_status: str | None = Field(
+        default=None,
+        description=(
+            "裂变状态筛选：pending=待裂变；success=成功；failed=失败；"
+            "marked_finished=标记结束；空或 all=全部"
+        ),
     )
     page: int = Field(default=1, ge=1, description="页码，从 1 开始")
     page_size: int = Field(default=10, ge=1, le=100, description="每页条数")
@@ -110,8 +133,30 @@ class MissionFissionDataUpdate(BaseModel):
 
 
 class MissionFissionDataOperate(BaseModel):
-    id: int = Field(ge=1, description="任务数据 ID")
+    """删除 / 标记结束：id 支持单个或数组。"""
+
+    id: int | list[int] = Field(description="任务数据 ID，单个或数组")
     mission_id: int = Field(ge=1, description="任务 ID")
+
+    @model_validator(mode="after")
+    def _require_ids(self) -> "MissionFissionDataOperate":
+        ids = self.resolved_ids()
+        if not ids:
+            raise ValueError("请至少选择一条任务数据")
+        if any(i < 1 for i in ids):
+            raise ValueError("任务数据 ID 无效")
+        return self
+
+    def resolved_ids(self) -> list[int]:
+        """归一化为去重后的 ID 列表（保持顺序）。"""
+        raw = [self.id] if isinstance(self.id, int) else list(self.id)
+        seen: set[int] = set()
+        out: list[int] = []
+        for i in raw:
+            if i not in seen:
+                seen.add(i)
+                out.append(i)
+        return out
 
 
 class MissionFissionDataImport(BaseModel):
@@ -138,6 +183,9 @@ class MissionPublic(BaseModel):
     id: int
     supplier_id: int
     supplier_name: str | None = Field(default=None, description="供应商名称")
+    type: MissionType = Field(
+        description="任务类型：fission_dh / hotsale_dh（列表筛选用，表单不展示）",
+    )
     title: str
     description: str | None
     status: str
@@ -193,3 +241,172 @@ class MissionLogPublic(BaseModel):
     fail_count: int
     remark: str | None
     created_at: datetime
+
+
+class MissionHotsaleDataList(BaseModel):
+    mission_id: int = Field(ge=1, description="任务 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略该字段；平台身份必填",
+    )
+    keyword: str | None = Field(
+        default=None,
+        description="搜索内容：按产品名称 / 产品简称 / 商品编码 / 店铺名称模糊匹配；空=不限",
+    )
+    collect_status: str | None = Field(
+        default=None,
+        description=(
+            "任务数据状态筛选：pending=进行中；success=已完成；"
+            "marked_finished=标记结束；空或 all=全部"
+        ),
+    )
+    page: int = Field(default=1, ge=1, description="页码，从 1 开始")
+    page_size: int = Field(default=10, ge=1, le=100, description="每页条数")
+
+
+class MissionHotsaleDataImport(BaseModel):
+    """扩展回传的热卖榜接口响应整包入库。"""
+
+    mission_id: int = Field(ge=1, description="任务 ID")
+    payload: dict[str, Any] = Field(
+        description="扩展 SYNC_CONFIRM 的原始接口响应（含 currentCategory / pageInfoOfProductRank）",
+    )
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份建议传入",
+    )
+
+
+class MissionHotsaleDataOperate(BaseModel):
+    """删除 / 标记结束：id 支持单个或数组。"""
+
+    id: int | list[int] = Field(description="任务数据 ID，单个或数组")
+    mission_id: int = Field(ge=1, description="任务 ID")
+
+    @model_validator(mode="after")
+    def _require_ids(self) -> "MissionHotsaleDataOperate":
+        ids = self.resolved_ids()
+        if not ids:
+            raise ValueError("请至少选择一条任务数据")
+        if any(i < 1 for i in ids):
+            raise ValueError("任务数据 ID 无效")
+        return self
+
+    def resolved_ids(self) -> list[int]:
+        """归一化为去重后的 ID 列表（保持顺序）。"""
+        raw = [self.id] if isinstance(self.id, int) else list(self.id)
+        seen: set[int] = set()
+        out: list[int] = []
+        for i in raw:
+            if i not in seen:
+                seen.add(i)
+                out.append(i)
+        return out
+
+
+class MissionHotsaleDataImportResult(BaseModel):
+    created: int = Field(description="新插入条数")
+    updated: int = Field(description="按 item_code 更新条数")
+    total: int = Field(description="本次处理条数")
+    cate_name: str | None = Field(default=None, description="品类名称")
+
+
+class MissionHotsaleDataExtract(BaseModel):
+    """热卖产品信息提取。二选一：
+
+    - mission_data_ids：指定任务数据 ID（单个时长度为 1）
+    - mission_id：批量提取该任务下所有进行中（pending）的任务数据
+    """
+
+    mission_data_ids: list[int] | None = Field(
+        default=None,
+        description="任务数据 ID 数组（单个时长度为 1）",
+    )
+    mission_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="任务 ID：批量提取该任务下所有进行中数据（跳过已完成/标记结束）",
+    )
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份建议传入",
+    )
+
+    @model_validator(mode="after")
+    def _require_one_mode(self) -> "MissionHotsaleDataExtract":
+        has_mission = self.mission_id is not None
+        ids = self.resolved_data_ids()
+        has_ids = bool(ids)
+        if has_mission == has_ids:
+            raise ValueError("请传 mission_id 或 mission_data_ids 二者之一")
+        if has_ids and any(i < 1 for i in ids):
+            raise ValueError("任务数据 ID 无效")
+        return self
+
+    def resolved_data_ids(self) -> list[int]:
+        """归一化为去重后的任务数据 ID 列表（保持顺序）。"""
+        if not self.mission_data_ids:
+            return []
+        seen: set[int] = set()
+        out: list[int] = []
+        for i in self.mission_data_ids:
+            if i not in seen:
+                seen.add(i)
+                out.append(i)
+        return out
+
+
+class MissionHotsaleDataExtractFailItem(BaseModel):
+    id: int = Field(description="任务数据 ID")
+    product_url: str | None = Field(default=None, description="商品链接")
+    reason: str = Field(description="失败原因")
+
+
+class MissionHotsaleDataExtractResult(BaseModel):
+    success_count: int = Field(description="成功条数")
+    fail_count: int = Field(description="失败条数")
+    skipped_count: int = Field(
+        default=0,
+        description="跳过条数（批量模式下非进行中，或不具备提取条件）",
+    )
+    fails: list[MissionHotsaleDataExtractFailItem] = Field(
+        default_factory=list,
+        description="失败明细，供前端提示",
+    )
+    mission_id: int | None = Field(
+        default=None,
+        description="关联任务 ID（按任务批量或由数据反推）",
+    )
+    mission_finished: bool = Field(
+        default=False,
+        description="按任务批量时，若全部数据已完成则同步将任务标为 finished",
+    )
+
+
+class MissionHotsaleDataPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    mission_id: int
+    supplier_id: int
+    item_code: str | None = None
+    product_url: str | None = None
+    product_name_short: str | None = None
+    product_name: str | None = None
+    main_image_url: str | None = None
+    cate_name: str | None = None
+    cate_id: str | None = None
+    store_name: str | None = None
+    store_id: int | None = None
+    price: Decimal | None = None
+    sales_num: int | None = None
+    last_modify_date: str | None = None
+    deal: str | None = None
+    deal_amount: str | None = None
+    deal_persons: str | None = None
+    collect_status: str
+    rank_no: int | None = None
+    created_by: int | None = None
+    updated_by: int | None = None
+    created_at: datetime
+    updated_at: datetime

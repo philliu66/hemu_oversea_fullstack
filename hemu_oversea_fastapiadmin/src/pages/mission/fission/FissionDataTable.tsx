@@ -9,7 +9,8 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
+import type { Key } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import {
   deleteMissionFissionData,
@@ -25,6 +26,8 @@ import { ViewFissionDrawer } from './ViewFissionDrawer';
 type FissionTableParams = {
   current?: number;
   pageSize?: number;
+  keyword?: string;
+  fission_status?: string;
 };
 
 const FISSION_COLOR: Record<FissionStatus, string> = {
@@ -58,6 +61,62 @@ export function FissionDataTable({
   const [editOpen, setEditOpen] = useState(false);
   const [editDataId, setEditDataId] = useState<number>();
   const [publishingId, setPublishingId] = useState<number>();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const [batchLoading, setBatchLoading] = useState(false);
+
+  const clearSelection = useCallback(() => {
+    setSelectedRowKeys([]);
+  }, []);
+
+  const resolveSelectedIds = useCallback(() => {
+    return selectedRowKeys
+      .map((k) => Number(k))
+      .filter((n) => Number.isFinite(n) && n > 0);
+  }, [selectedRowKeys]);
+
+  const handleBatchMarkFinished = useCallback(async () => {
+    const ids = resolveSelectedIds();
+    if (!ids.length) {
+      message.warning('请先选择任务数据');
+      return;
+    }
+    setBatchLoading(true);
+    try {
+      await markMissionFissionDataFinished({
+        id: ids,
+        mission_id: missionId,
+      });
+      message.success(`已标记结束 ${ids.length} 条`);
+      clearSelection();
+      actionRef.current?.reload();
+    } catch {
+      // 错误已由全局拦截器处理
+    } finally {
+      setBatchLoading(false);
+    }
+  }, [clearSelection, message, missionId, resolveSelectedIds]);
+
+  const handleBatchDelete = useCallback(async () => {
+    const ids = resolveSelectedIds();
+    if (!ids.length) {
+      message.warning('请先选择任务数据');
+      return;
+    }
+    setBatchLoading(true);
+    try {
+      await deleteMissionFissionData({
+        id: ids,
+        mission_id: missionId,
+      });
+      message.success(`已删除 ${ids.length} 条`);
+      clearSelection();
+      actionRef.current?.reload();
+    } catch {
+      // 错误已由全局拦截器处理
+    } finally {
+      setBatchLoading(false);
+    }
+  }, [clearSelection, message, missionId, resolveSelectedIds]);
 
   const statusLabel = (status: FissionStatus) =>
     FISSION_STATUS_LABEL[status] ?? status;
@@ -93,6 +152,15 @@ export function FissionDataTable({
   };
 
   const columns: ProColumns<MissionFissionDataPublic>[] = [
+    {
+      title: '搜索内容',
+      dataIndex: 'keyword',
+      hideInTable: true,
+      fieldProps: {
+        placeholder: '商品标题 / 原商品编码 / 新商品编码',
+        allowClear: true,
+      },
+    },
     {
       title: '商品',
       dataIndex: 'product',
@@ -157,7 +225,18 @@ export function FissionDataTable({
     {
       title: '裂变状态',
       dataIndex: 'fission_status',
-      search: false,
+      valueType: 'select',
+      initialValue: 'all',
+      fieldProps: {
+        allowClear: false,
+      },
+      valueEnum: {
+        all: { text: '全部' },
+        pending: { text: '待裂变' },
+        success: { text: '成功' },
+        failed: { text: '失败' },
+        marked_finished: { text: '标记结束' },
+      },
       width: 200,
       render: (_, record) => {
         const msg = (record.fission_msg || '').trim();
@@ -331,13 +410,48 @@ export function FissionDataTable({
       <ProTable<MissionFissionDataPublic, FissionTableParams>
         actionRef={actionRef}
         rowKey="id"
-        search={false}
+        search={{ labelWidth: 'auto' }}
         scroll={{ x: 1140 }}
         headerTitle={'任务数据'}
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,
           showSizeChanger: true,
         }}
+        rowSelection={
+          editable
+            ? {
+                selectedRowKeys,
+                onChange: setSelectedRowKeys,
+                getCheckboxProps: (record) => ({
+                  // 裂变成功不可删/不可标记结束
+                  disabled: record.fission_status === 'success',
+                }),
+              }
+            : undefined
+        }
+        tableAlertOptionRender={() =>
+          editable ? (
+            <Space size={16}>
+              <Popconfirm
+                title={`确认将选中的 ${selectedRowKeys.length} 条标记结束？`}
+                disabled={!selectedRowKeys.length || batchLoading}
+                onConfirm={() => void handleBatchMarkFinished()}
+              >
+                <a>批量标记结束</a>
+              </Popconfirm>
+              <Popconfirm
+                title={`确认删除选中的 ${selectedRowKeys.length} 条？`}
+                disabled={!selectedRowKeys.length || batchLoading}
+                onConfirm={() => void handleBatchDelete()}
+              >
+                <a>批量删除</a>
+              </Popconfirm>
+              <a onClick={clearSelection}>取消选择</a>
+            </Space>
+          ) : (
+            false
+          )
+        }
         toolBarRender={
           editable
             ? () => [
@@ -349,10 +463,16 @@ export function FissionDataTable({
             : false
         }
         request={async (params) => {
+          const keyword = params.keyword?.trim() || undefined;
+          const statusRaw = (params.fission_status || '').trim();
+          const fission_status =
+            !statusRaw || statusRaw === 'all' ? undefined : statusRaw;
           const result = await fetchMissionFissionDataList({
             mission_id: missionId,
             page: params.current,
             page_size: params.pageSize,
+            keyword,
+            fission_status,
           });
           return {
             data: result.items,

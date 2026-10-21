@@ -19,7 +19,11 @@ import {
 import AvatarName from '@/components/RightContent/AvatarName';
 import { buildSystemTitle } from '@/constants/brand';
 import { APP_LOGIN_PATH } from '@/constants/deploy';
-import { getAdminCurrentUser } from '@/services/admin/auth';
+import {
+  getAdminCurrentUser,
+  getAdminSystemConfig,
+  type SystemConfigMap,
+} from '@/services/admin/auth';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
 import { tryRefreshTokens } from './utils/authRefresh';
@@ -42,16 +46,20 @@ const publicPaths = [
   '/callback',
 ];
 
-/**
- * @see https://umijs.org/docs/api/runtime-config#getinitialstate
- * */
-export async function getInitialState(): Promise<{
+export type InitialStateType = {
   settings?: Partial<LayoutSettings>;
   currentUser?: API.CurrentUser;
   loading?: boolean;
   fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
   settingDrawerOpen?: boolean;
-}> {
+  /** 系统配置 { key: value }，来自 GET /auth/config */
+  config?: SystemConfigMap;
+};
+
+/**
+ * @see https://umijs.org/docs/api/runtime-config#getinitialstate
+ * */
+export async function getInitialState(): Promise<InitialStateType> {
   const fetchUserInfo = async () => {
     if (!getAccessToken() && !getRefreshToken()) {
       return undefined;
@@ -76,10 +84,22 @@ export async function getInitialState(): Promise<{
       return undefined;
     }
   };
-  // 如果不是登录页面，执行
+
+  const fetchSystemConfig = async (): Promise<SystemConfigMap> => {
+    try {
+      return await getAdminSystemConfig({ skipErrorHandler: true });
+    } catch {
+      return {};
+    }
+  };
+
+  // 登录页也需要配置（如系统名称）；与用户信息并行拉取
   const { location } = history;
   if (!publicPaths.includes(location.pathname)) {
-    const currentUser = await fetchUserInfo();
+    const [currentUser, config] = await Promise.all([
+      fetchUserInfo(),
+      fetchSystemConfig(),
+    ]);
     if (!currentUser) {
       history.replace(
         `${APP_LOGIN_PATH}?redirect=${encodeURIComponent(
@@ -90,12 +110,16 @@ export async function getInitialState(): Promise<{
     return {
       fetchUserInfo,
       currentUser,
+      config,
       settings: defaultSettings as Partial<LayoutSettings>,
       settingDrawerOpen: false,
     };
   }
+
+  const config = await fetchSystemConfig();
   return {
     fetchUserInfo,
+    config,
     settings: defaultSettings as Partial<LayoutSettings>,
     settingDrawerOpen: false,
   };

@@ -1,11 +1,17 @@
 from app.models.aftersale_template_dh import AftersaleTemplateDh
+from app.models.app_config import AppConfig
 from app.models.base import Base
 from app.models.captcha import Captcha
 from app.models.commission_rate_dh import CommissionRateDh
 from app.models.login_attempt import LoginAttempt
 from app.models.mail_send_log import MailSendLog
 from app.models.measures_unit_dh import MeasuresUnitDh
-from app.models.mission import Mission, MissionDataDhFission, MissionLog
+from app.models.mission import (
+    Mission,
+    MissionDataDhFission,
+    MissionDataDhHotsale,
+    MissionLog,
+)
 from app.models.permission import (
     BizRole,
     Permission,
@@ -30,6 +36,7 @@ from app.models.user_operation_log import UserOperationLog
 
 __all__ = [
     "AftersaleTemplateDh",
+    "AppConfig",
     "Base",
     "Captcha",
     "CommissionRateDh",
@@ -38,7 +45,7 @@ __all__ = [
     "MeasuresUnitDh",
     "Mission",
     "MissionDataDhFission",
-    "MissionLog",
+    "MissionDataDhHotsale",
     "BizRole",
     "Permission",
     "ProductCategoryDh",
