@@ -409,10 +409,12 @@ def extract_hotsale_data(
     拉取敦煌商品详情页并解析入库（写入 `parse_raw_json`，状态置为已完成）。
 
     参数二选一：
-    - `mission_data_ids`：指定任务数据 ID 数组（单个时长度为 1）
-    - `mission_id`：批量处理该任务下全部进行中数据（跳过已完成 / 标记结束）；
-      若全部完成后同步将任务状态标为 finished
+    - `mission_data_ids`：指定任务数据 ID 数组（单个时长度为 1；须为 pending / failed）
+    - `mission_id`：批量处理该任务下全部 pending / failed 数据（跳过已完成 / 标记结束）
 
+    任务已完成 / 标记结束后仍可手动再提取失败或进行中数据。
+    提取结束后按未闭环（pending/failed）同步任务为 running/finished（人工标记结束除外），
+    并在结果中带回 `mission_status`。
     返回成功数、失败数与失败明细，供前端提示。
     """
     assert_supplier_data_writable(current_user)

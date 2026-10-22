@@ -936,10 +936,11 @@ export type MissionLogPublic = {
   created_at: string;
 };
 
-/** 热卖采集任务数据状态：进行中 / 已完成 / 标记结束 */
+/** 热卖采集任务数据状态：进行中 / 已完成 / 失败 / 标记结束 */
 export type HotsaleCollectStatus =
   | 'pending'
   | 'success'
+  | 'failed'
   | 'marked_finished';
 
 export type MissionHotsaleDataPublic = {
@@ -962,6 +963,7 @@ export type MissionHotsaleDataPublic = {
   deal_amount: string | null;
   deal_persons: string | null;
   collect_status: HotsaleCollectStatus | string;
+  collect_msg: string | null;
   rank_no: number | null;
   created_by: number | null;
   updated_by: number | null;
@@ -974,6 +976,7 @@ export type MissionHotsaleDataImportResult = {
   updated: number;
   total: number;
   cate_name: string | null;
+  mission_status: string;
 };
 
 export type MissionHotsaleDataExtractFailItem = {
@@ -989,4 +992,5 @@ export type MissionHotsaleDataExtractResult = {
   fails: MissionHotsaleDataExtractFailItem[];
   mission_id: number | null;
   mission_finished: boolean;
+  mission_status?: string | null;
 };

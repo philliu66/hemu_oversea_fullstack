@@ -1,5 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import {
   App,
   Button,
@@ -10,6 +11,7 @@ import {
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -53,12 +55,14 @@ type TableParams = {
 const COLLECT_STATUS_COLOR: Record<HotsaleCollectStatus, string> = {
   pending: 'processing',
   success: 'success',
+  failed: 'error',
   marked_finished: 'warning',
 };
 
 const COLLECT_STATUS_LABEL: Record<HotsaleCollectStatus, string> = {
   pending: '进行中',
   success: '已完成',
+  failed: '失败',
   marked_finished: '标记结束',
 };
 
@@ -95,10 +99,19 @@ function renderProductLink(
 export function HotsaleDataTable({
   missionId,
   editable = false,
+  onImported,
+  onExtracted,
 }: {
   missionId: number;
   supplierId?: number;
   editable?: boolean;
+  /** 采集入库成功后回调（用于刷新任务状态等） */
+  onImported?: (result: {
+    created: number;
+    mission_status: string;
+  }) => void;
+  /** 提取完成后回调（用于按 mission_status 刷新任务信息） */
+  onExtracted?: (result: MissionHotsaleDataExtractResult) => void;
 }) {
   const { message, modal } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
@@ -122,7 +135,9 @@ export function HotsaleDataTable({
     (result: MissionHotsaleDataExtractResult) => {
       const total = result.success_count + result.fail_count;
       let text = `共计提取 ${total} 条，成功 ${result.success_count} 条，失败 ${result.fail_count} 条`;
-      if (result.mission_finished) {
+      if (result.mission_status === 'running') {
+        text += '；任务进行中';
+      } else if (result.mission_finished || result.mission_status === 'finished') {
         text += '；任务已全部完成';
       }
       if (result.fail_count > 0 && result.success_count > 0) {
@@ -150,6 +165,7 @@ export function HotsaleDataTable({
       try {
         const result = await extractMissionHotsaleData(params);
         tipExtractResult(result);
+        onExtracted?.(result);
         clearSelection();
         actionRef.current?.reload();
       } catch {
@@ -159,7 +175,7 @@ export function HotsaleDataTable({
         setExtracting(false);
       }
     },
-    [clearSelection, tipExtractResult],
+    [clearSelection, onExtracted, tipExtractResult],
   );
 
   const handleBatchMarkFinished = useCallback(async () => {
@@ -240,6 +256,10 @@ export function HotsaleDataTable({
             okText: '知道了',
           });
           actionRef.current?.reload();
+          onImported?.({
+            created: result.created,
+            mission_status: result.mission_status,
+          });
         } catch (err) {
           message.error(
             err instanceof Error ? err.message : '热卖数据采集入库失败',
@@ -247,7 +267,7 @@ export function HotsaleDataTable({
         }
       })();
     });
-  }, [message, missionId, modal]);
+  }, [message, missionId, modal, onImported]);
 
   const sendStartToExtension = useCallback(
     async (payload: HotsellStartPayload, successText: string) => {
@@ -375,6 +395,7 @@ export function HotsaleDataTable({
         all: { text: '全部' },
         pending: { text: '进行中' },
         success: { text: '已完成' },
+        failed: { text: '失败' },
         marked_finished: { text: '标记结束' },
       },
     },
@@ -389,22 +410,26 @@ export function HotsaleDataTable({
       dataIndex: 'item_code',
       width: 130,
       search: false,
-      render: (_, record) => (
-        <div style={{ lineHeight: 1.5 }}>
-          <div>{(record.item_code || '').trim() || '-'}</div>
-          <div style={{ marginTop: 4 }}>
-            <Tag
-              color={
-                COLLECT_STATUS_COLOR[
-                  record.collect_status as HotsaleCollectStatus
-                ] ?? 'default'
-              }
-            >
-              {statusLabel(record.collect_status)}
-            </Tag>
+      render: (_, record) => {
+        const status = record.collect_status as HotsaleCollectStatus;
+        const failMsg =
+          status === 'failed' ? (record.collect_msg || '').trim() : '';
+        return (
+          <div style={{ lineHeight: 1.5 }}>
+            <div>{(record.item_code || '').trim() || '-'}</div>
+            <div style={{ marginTop: 4 }}>
+              <Tag color={COLLECT_STATUS_COLOR[status] ?? 'default'}>
+                <span>{statusLabel(record.collect_status)}</span>
+                {failMsg ? (
+                  <Tooltip title={failMsg}>
+                    <InfoCircleOutlined style={{ marginLeft: 4 }} />
+                  </Tooltip>
+                ) : null}
+              </Tag>
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: '主图',
@@ -436,19 +461,11 @@ export function HotsaleDataTable({
           return '-';
         }
         return (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'flex-start',
-              gap: 4,
-              maxWidth: '100%',
-            }}
-          >
-            <span style={{ minWidth: 0, flex: 1 }}>
-              {renderProductLink(name, record.product_url)}
-            </span>
+          <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {renderProductLink(name, record.product_url)}
             <Typography.Text
               copyable={{ text: name, tooltips: ['复制', '已复制'] }}
+              style={{ marginLeft: 4 }}
             />
           </span>
         );
@@ -470,18 +487,44 @@ export function HotsaleDataTable({
     {
       title: '类目',
       dataIndex: 'cate_name',
-      width: 120,
       search: false,
-      ellipsis: true,
-      render: (_, record) => record.cate_name || '-',
+      ellipsis: false,
+      render: (_, record) => {
+        const text = (record.cate_name || '').trim();
+        if (!text) {
+          return '-';
+        }
+        return (
+          <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {text}
+            <Typography.Text
+              copyable={{ text, tooltips: ['复制', '已复制'] }}
+              style={{ marginLeft: 4 }}
+            />
+          </span>
+        );
+      },
     },
     {
       title: '店铺名称',
       dataIndex: 'store_name',
-      width: 140,
       search: false,
-      ellipsis: true,
-      render: (_, record) => record.store_name || '-',
+      ellipsis: false,
+      render: (_, record) => {
+        const text = (record.store_name || '').trim();
+        if (!text) {
+          return '-';
+        }
+        return (
+          <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {text}
+            <Typography.Text
+              copyable={{ text, tooltips: ['复制', '已复制'] }}
+              style={{ marginLeft: 4 }}
+            />
+          </span>
+        );
+      },
     },
     {
       title: '操作',
@@ -503,7 +546,11 @@ export function HotsaleDataTable({
 
         const actions: React.ReactNode[] = [];
 
-        if (editable && record.collect_status === 'pending') {
+        if (
+          editable &&
+          (record.collect_status === 'pending' ||
+            record.collect_status === 'failed')
+        ) {
           actions.push(
             <Button
               key="extract-one"
@@ -708,13 +755,7 @@ export function HotsaleDataTable({
       columns={columns}
       locale={{
         emptyText: (
-          <Empty
-            description={
-              editable
-                ? '暂无任务数据（可通过「开始采集」由插件回传；无手动添加）'
-                : '暂无任务数据'
-            }
-          />
+          <Empty description="暂无任务数据" />
         ),
       }}
     />

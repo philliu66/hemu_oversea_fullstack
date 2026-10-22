@@ -256,7 +256,7 @@ class MissionHotsaleDataList(BaseModel):
     collect_status: str | None = Field(
         default=None,
         description=(
-            "任务数据状态筛选：pending=进行中；success=已完成；"
+            "任务数据状态筛选：pending=进行中；success=已完成；failed=失败；"
             "marked_finished=标记结束；空或 all=全部"
         ),
     )
@@ -309,23 +309,26 @@ class MissionHotsaleDataImportResult(BaseModel):
     updated: int = Field(description="按 item_code 更新条数")
     total: int = Field(description="本次处理条数")
     cate_name: str | None = Field(default=None, description="品类名称")
+    mission_status: str = Field(
+        description="入库后同步的任务状态：有未闭环则为 running，否则 finished（人工标记结束除外）",
+    )
 
 
 class MissionHotsaleDataExtract(BaseModel):
     """热卖产品信息提取。二选一：
 
     - mission_data_ids：指定任务数据 ID（单个时长度为 1）
-    - mission_id：批量提取该任务下所有进行中（pending）的任务数据
+    - mission_id：批量提取该任务下所有 pending / failed 的任务数据
     """
 
     mission_data_ids: list[int] | None = Field(
         default=None,
-        description="任务数据 ID 数组（单个时长度为 1）",
+        description="任务数据 ID 数组（单个时长度为 1；须为 pending / failed）",
     )
     mission_id: int | None = Field(
         default=None,
         ge=1,
-        description="任务 ID：批量提取该任务下所有进行中数据（跳过已完成/标记结束）",
+        description="任务 ID：批量提取该任务下所有 pending / failed 数据（跳过已完成/标记结束）",
     )
     supplier_id: int | None = Field(
         default=None,
@@ -379,7 +382,11 @@ class MissionHotsaleDataExtractResult(BaseModel):
     )
     mission_finished: bool = Field(
         default=False,
-        description="按任务批量时，若全部数据已完成则同步将任务标为 finished",
+        description="同步后任务是否为已完成（finished）",
+    )
+    mission_status: str | None = Field(
+        default=None,
+        description="同步后的任务状态；有未闭环(pending/failed)为 running，否则 finished（人工标记结束除外）",
     )
 
 
@@ -405,6 +412,7 @@ class MissionHotsaleDataPublic(BaseModel):
     deal_amount: str | None = None
     deal_persons: str | None = None
     collect_status: str
+    collect_msg: str | None = None
     rank_no: int | None = None
     created_by: int | None = None
     updated_by: int | None = None

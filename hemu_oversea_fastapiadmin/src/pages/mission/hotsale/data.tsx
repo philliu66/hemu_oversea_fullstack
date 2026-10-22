@@ -1,7 +1,7 @@
 import { PageContainer } from '@ant-design/pro-components';
 import { history, useAccess, useParams } from '@umijs/max';
 import { App, Card, Spin } from 'antd';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { fetchMissionDetail } from '@/services/admin/missions';
 import type { MissionPublic } from '@/types/api';
 import { MissionInfo } from '../fission/MissionInfo';
@@ -19,6 +19,19 @@ const MissionHotsaleDataPage: React.FC = () => {
   const canViewData =
     access.can('mission.hotsale.data') || access.canPlatform;
   const canWriteData = access.canWriteSupplierData;
+
+  const reloadMission = useCallback(() => {
+    if (!missionId) {
+      return;
+    }
+    fetchMissionDetail(missionId)
+      .then((detail) => {
+        setMission(detail);
+      })
+      .catch(() => {
+        // 刷新失败不打断当前页
+      });
+  }, [missionId]);
 
   useEffect(() => {
     if (!canViewData) {
@@ -75,6 +88,16 @@ const MissionHotsaleDataPage: React.FC = () => {
             missionId={missionId}
             supplierId={mission?.supplier_id}
             editable={canWriteData}
+            onImported={(result) => {
+              if (result.created > 0 || result.mission_status) {
+                reloadMission();
+              }
+            }}
+            onExtracted={(result) => {
+              if (result.mission_status) {
+                reloadMission();
+              }
+            }}
           />
         </div>
       </Spin>

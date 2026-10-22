@@ -76,9 +76,17 @@ alwaysApply: true
 | 状态 | 含义 | 何时进入 |
 | --- | --- | --- |
 | `pending` | 未开始 | 新建任务默认 |
-| `running` | 进行中 | 调用热卖入库（开始采集回传）且**有新数据新增**（`created > 0`） |
-| `finished` | 已完成 | 详情提取后任务下无 `pending` 数据时同步 |
-| `marked_finished` | 标记结束 | 人工标记结束 |
+| `running` | 进行中 | 存在未闭环任务数据（`pending` / `failed`）时由入库/提取同步；含从 `finished` 因失败重试或新采集拉回 |
+| `finished` | 已完成 | 无未闭环数据（无 `pending` 且无 `failed`）时由入库/提取/详情加载同步 |
+| `marked_finished` | 标记结束 | 人工标记结束；**自动同步不会改写此状态** |
 
 - 热卖的 `running` 表示业务进行中，**不**像裂变执行中那样锁定写操作；进行中仍可继续采集回传、提取、删改未完成数据。
-- 仅更新、无新增时不改变任务状态。
+- 入库、提取、进入任务详情/设置任务数据（`get_mission`）共用同一套同步：未闭环 > 0 → `running`，否则 → `finished`；`marked_finished` 保持不动。
+- 任务处于 `finished` / `marked_finished` 时，**仍允许**对 `pending` / `failed` 任务数据手动再提取（单个或批量）；提取后按上条规则同步（人工标记结束除外）。
+
+### 热卖任务数据状态（`mission_data_dh_hotsale.collect_status`）
+
+与裂变 `fission_status` 对齐：`pending` / `success` / `failed` / `marked_finished`。
+
+- 提取失败时置为 `failed`，原因写入 `collect_msg`；成功时清空 `collect_msg`。
+- `pending` / `failed` 为未闭环，可再次提取；列表失败标签旁信息图标悬停展示 `collect_msg`。

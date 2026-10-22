@@ -33,14 +33,16 @@ FISSION_STATUSES = frozenset(
     }
 )
 
-# 热卖采集任务数据状态（进行中 / 已完成 / 标记结束）
+# 热卖采集任务数据状态（进行中 / 已完成 / 失败 / 标记结束）
 HOTSALE_STATUS_PENDING = "pending"
 HOTSALE_STATUS_SUCCESS = "success"
+HOTSALE_STATUS_FAILED = "failed"
 HOTSALE_STATUS_MARKED_FINISHED = "marked_finished"
 HOTSALE_STATUSES = frozenset(
     {
         HOTSALE_STATUS_PENDING,
         HOTSALE_STATUS_SUCCESS,
+        HOTSALE_STATUS_FAILED,
         HOTSALE_STATUS_MARKED_FINISHED,
     }
 )
@@ -324,7 +326,12 @@ class MissionDataDhHotsale(Base):
         String(16),
         nullable=False,
         server_default=HOTSALE_STATUS_PENDING,
-        comment="采集状态：pending=进行中；success=已完成；marked_finished=标记结束",
+        comment="采集状态：pending/success/failed/marked_finished",
+    )
+    collect_msg: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="采集信息反馈；失败时写入原因",
     )
     rank_no: Mapped[int | None] = mapped_column(
         Integer,

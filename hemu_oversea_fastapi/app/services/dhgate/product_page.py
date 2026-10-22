@@ -23,6 +23,14 @@ UA = (
 )
 
 BLOCK_MARKS = ("TCaptcha", "captcha", "访问验证", "安全验证", "punish")
+# 仅用强信号做提前判定。正常商品页也会预加载 not-found chunk、布局里嵌
+# 「404: This page could not be found.」和 notFound 槽位，那些弱特征会误伤在售商品。
+NOT_FOUND_STRONG_MARK = "NEXT_NOT_FOUND"
+# 解析不到商品字段后再用：真正下架页的主内容常带 type=notfound
+NOT_FOUND_SOFT_MARKS = (
+    '"type":"notfound"',
+    'type\\":\\"notfound\\"',
+)
 ALLOWED_HOSTS = frozenset({"www.dhgate.com", "dhgate.com"})
 _FETCH_TIMEOUT = 20.0
 
@@ -254,6 +262,18 @@ def _is_eo_bot_challenge(body: str) -> bool:
     return "EO_Bot_Ssid" in head and "self.__next_f.push" not in body
 
 
+def _is_product_not_found_strong(body: str) -> bool:
+    """强信号：Next 软 404 digest，正常商品页不会出现。"""
+    return bool(body) and NOT_FOUND_STRONG_MARK in body
+
+
+def _is_product_not_found_soft(body: str) -> bool:
+    """弱信号：仅在已确认解析不到商品字段时使用，避免误伤在售页。"""
+    if not body:
+        return False
+    return any(mark in body for mark in NOT_FOUND_SOFT_MARKS)
+
+
 def _http_get_rsc(url: str) -> tuple[int, str, str]:
     """
     拉取商品页。优先 curl（TLS 指纹更接近浏览器，不易触发 EO_Bot）；
@@ -358,9 +378,12 @@ def fetch_product_page(url: str, *, include_raw: bool = False) -> dict[str, Any]
     if include_raw:
         result["content_type"] = content_type
 
-    if status_code == 404:
+    if status_code == 404 or _is_product_not_found_strong(body):
         result["reason"] = "not_found"
         result["message"] = "商品不存在或已下架"
+        # 联调接口：下架页 body 同样带回，便于核对 soft 404 特征
+        if include_raw:
+            result["raw"] = body
         return result
 
     if any(mark in body[:4000] for mark in BLOCK_MARKS):
@@ -386,16 +409,26 @@ def fetch_product_page(url: str, *, include_raw: bool = False) -> dict[str, Any]
         result["raw"] = flight
 
     if not flight.strip():
-        result["reason"] = "parse_failed"
-        result["message"] = "未获取到 Flight 数据（可能页面改版）"
+        # Flight 为空时：若伴有下架弱信号，归为 not_found
+        if _is_product_not_found_soft(body):
+            result["reason"] = "not_found"
+            result["message"] = "商品不存在或已下架"
+        else:
+            result["reason"] = "parse_failed"
+            result["message"] = "未获取到 Flight 数据（可能页面改版）"
         return result
 
     parsed = parse_flight(flight)
     result["parsed"] = parsed
 
     if not parsed.get("item_code") or not parsed.get("title"):
-        result["reason"] = "parse_failed"
-        result["message"] = "解析失败：缺少 itemCode 或 productName"
+        # 在售页能解析出商品字段；解析失败再看弱信号，避免把布局里的 notFound 槽位当下架
+        if _is_product_not_found_soft(body):
+            result["reason"] = "not_found"
+            result["message"] = "商品不存在或已下架"
+        else:
+            result["reason"] = "parse_failed"
+            result["message"] = "解析失败：缺少 itemCode 或 productName"
         return result
 
     result["ok"] = True

@@ -21,6 +21,7 @@ from app.models.mission import (
     FISSION_STATUS_PENDING,
     FISSION_STATUS_SUCCESS,
     FISSION_STATUSES,
+    HOTSALE_STATUS_FAILED,
     HOTSALE_STATUS_MARKED_FINISHED,
     HOTSALE_STATUS_PENDING,
     HOTSALE_STATUS_SUCCESS,
@@ -97,6 +98,7 @@ def assert_mission_type_perm(
         raise forbidden("无操作权限")
     return normalized
 _EXECUTABLE_FISSION_STATUSES = {FISSION_STATUS_PENDING, FISSION_STATUS_FAILED}
+_EXECUTABLE_HOTSALE_STATUSES = {HOTSALE_STATUS_PENDING, HOTSALE_STATUS_FAILED}
 _MOCK_BATCH_SECONDS = 10
 
 
@@ -332,6 +334,11 @@ def get_mission(
         supplier_id=supplier_id,
     )
     assert_mission_type_perm(db, actor, mission.type)
+    # 热卖：进入详情/设置数据页时按未闭环数据同步任务状态
+    if mission.type == MISSION_TYPE_HOTSALE_DH:
+        if _sync_hotsale_mission_status(db, mission=mission):
+            db.commit()
+            db.refresh(mission)
     users = _load_users(
         db,
         {mission.worker_id, *([mission.created_by] if mission.created_by else [])},
@@ -553,7 +560,10 @@ def list_fission_data(
         .outerjoin(Store, Store.id == MissionDataDhFission.store_id)
         .outerjoin(ProductDh, ProductDh.id == MissionDataDhFission.seed_product_id)
         .where(*filters)
-        .order_by(MissionDataDhFission.id.desc())
+        .order_by(
+            MissionDataDhFission.created_at.desc(),
+            MissionDataDhFission.id.desc(),
+        )
         .offset(pagination.offset)
         .limit(pagination.page_size)
     ).all()
@@ -1089,7 +1099,7 @@ def list_hotsale_data(
         .where(*filters)
         .order_by(
             MissionDataDhHotsale.rank_no.asc().nullslast(),
-            MissionDataDhHotsale.id.desc(),
+            MissionDataDhHotsale.id.asc(),
         )
         .offset(pagination.offset)
         .limit(pagination.page_size)
@@ -1195,9 +1205,8 @@ def import_hotsale_capture(
             )
             created += 1
 
-    # 开始采集回传有新增时：未开始 → 进行中
-    if created > 0 and mission.status == MISSION_STATUS_PENDING:
-        mission.status = MISSION_STATUS_RUNNING
+    # 按未闭环数据同步任务状态（有新增 pending 时通常会变为 running）
+    _sync_hotsale_mission_status(db, mission=mission)
 
     db.commit()
     return MissionHotsaleDataImportResult(
@@ -1205,6 +1214,7 @@ def import_hotsale_capture(
         updated=updated,
         total=created + updated,
         cate_name=list_cate_tip,
+        mission_status=mission.status,
     )
 
 
@@ -1383,14 +1393,17 @@ def mark_hotsale_data_finished(
 
 
 def _assert_hotsale_mission_writable(mission: Mission) -> None:
+    """热卖提取前置校验：仅校验任务类型。
+
+    任务已完成 / 标记结束后仍允许对 pending / failed 数据手动再提取，
+    以便失败商品可重试；不再因任务结束态拦截提取。
+    """
     if mission.type != MISSION_TYPE_HOTSALE_DH:
         raise bad_request("该任务不是热卖采集类型")
-    # 热卖 running=进行中（采集有新增后进入）；可继续提取，仅结束态不可写
-    if mission.status in {MISSION_STATUS_MARKED_FINISHED, MISSION_STATUS_FINISHED}:
-        raise bad_request("任务已结束，不能再提取数据")
 
 
-def _hotsale_pending_left(db: Session, *, mission_id: int) -> int:
+def _hotsale_open_work_left(db: Session, *, mission_id: int) -> int:
+    """未闭环条数：pending（待提取）+ failed（可重试失败）。"""
     return (
         db.scalar(
             select(func.count())
@@ -1398,26 +1411,48 @@ def _hotsale_pending_left(db: Session, *, mission_id: int) -> int:
             .where(
                 MissionDataDhHotsale.deleted_at.is_(None),
                 MissionDataDhHotsale.mission_id == mission_id,
-                MissionDataDhHotsale.collect_status == HOTSALE_STATUS_PENDING,
+                MissionDataDhHotsale.collect_status.in_(
+                    _EXECUTABLE_HOTSALE_STATUSES
+                ),
             )
         )
         or 0
     )
 
 
-def _maybe_finish_hotsale_mission(db: Session, *, mission: Mission) -> bool:
-    """若任务下无进行中数据，则将任务标为 finished。返回是否已同步变更。
+def _sync_hotsale_mission_status(db: Session, *, mission: Mission) -> bool:
+    """按未闭环数据同步热卖任务状态。返回是否发生变更。
 
-    注意：工程 Session 为 autoflush=False，调用前必须先 flush，
-    否则 COUNT 仍会看到未刷盘的 pending，导致任务状态无法推进。
+    - 人工 ``marked_finished``：不自动改
+    - 存在 pending/failed → ``running``
+    - 否则 → ``finished``
+
+    注意：工程 Session 为 autoflush=False，COUNT 前必须 flush。
     """
-    if mission.status in {MISSION_STATUS_FINISHED, MISSION_STATUS_MARKED_FINISHED}:
+    if mission.status == MISSION_STATUS_MARKED_FINISHED:
         return False
     db.flush()
-    if _hotsale_pending_left(db, mission_id=mission.id) > 0:
+    desired = (
+        MISSION_STATUS_RUNNING
+        if _hotsale_open_work_left(db, mission_id=mission.id) > 0
+        else MISSION_STATUS_FINISHED
+    )
+    if mission.status == desired:
         return False
-    mission.status = MISSION_STATUS_FINISHED
+    mission.status = desired
     return True
+
+
+def _mark_hotsale_extract_failed(
+    row: MissionDataDhHotsale,
+    *,
+    reason: str,
+    actor_id: int | None,
+) -> None:
+    """提取失败：写 failed + collect_msg。"""
+    row.collect_status = HOTSALE_STATUS_FAILED
+    row.collect_msg = (reason or "").strip() or "提取失败"
+    row.updated_by = actor_id
 
 
 def extract_hotsale_product_pages(
@@ -1430,10 +1465,11 @@ def extract_hotsale_product_pages(
 ) -> MissionHotsaleDataExtractResult:
     """按任务数据 ID 或任务 ID 拉取商品详情页并入库。
 
-    - mission_data_ids：指定数据（须为 pending）
-    - mission_id：该任务下全部 pending（跳过已完成 / 标记结束）
-    成功时写入 parse_raw_json，并将 collect_status 置为 success。
-    按 mission_id 批量时，全部完成后同步任务状态为 finished。
+    - mission_data_ids：指定数据（须为 pending / failed）
+    - mission_id：该任务下全部 pending / failed（跳过已完成 / 标记结束）
+    成功时写入 parse_raw_json，collect_status=success 并清空 collect_msg。
+    失败时 collect_status=failed，collect_msg 写入原因。
+    结束后按未闭环（pending/failed）同步任务 running/finished（人工标记结束除外）。
     """
     assert_mission_type_perm(db, actor, MISSION_TYPE_HOTSALE_DH, suffix="data")
 
@@ -1441,6 +1477,7 @@ def extract_hotsale_product_pages(
     fails: list[MissionHotsaleDataExtractFailItem] = []
     success_count = 0
     skipped_count = 0
+    dirty = False
     target_mission: Mission | None = None
     rows: list[MissionDataDhHotsale] = []
 
@@ -1466,7 +1503,9 @@ def extract_hotsale_product_pages(
                 .where(
                     MissionDataDhHotsale.deleted_at.is_(None),
                     MissionDataDhHotsale.mission_id == target_mission.id,
-                    MissionDataDhHotsale.collect_status == HOTSALE_STATUS_PENDING,
+                    MissionDataDhHotsale.collect_status.in_(
+                        _EXECUTABLE_HOTSALE_STATUSES
+                    ),
                 )
                 .order_by(
                     MissionDataDhHotsale.rank_no.asc().nullslast(),
@@ -1540,7 +1579,7 @@ def extract_hotsale_product_pages(
                     )
                 )
                 continue
-            if row.collect_status != HOTSALE_STATUS_PENDING:
+            if row.collect_status not in _EXECUTABLE_HOTSALE_STATUSES:
                 fails.append(
                     MissionHotsaleDataExtractFailItem(
                         id=row.id,
@@ -1552,10 +1591,10 @@ def extract_hotsale_product_pages(
             rows.append(row)
 
     if by_mission and not rows:
-        # 无可提取的进行中数据：仍检查是否应同步任务状态
+        # 无可提取数据：仍按未闭环同步任务状态
         assert target_mission is not None
-        mission_finished = _maybe_finish_hotsale_mission(db, mission=target_mission)
-        if mission_finished:
+        status_changed = _sync_hotsale_mission_status(db, mission=target_mission)
+        if status_changed:
             db.commit()
         return MissionHotsaleDataExtractResult(
             success_count=0,
@@ -1563,48 +1602,60 @@ def extract_hotsale_product_pages(
             skipped_count=0,
             fails=[],
             mission_id=target_mission.id,
-            mission_finished=mission_finished,
+            mission_finished=target_mission.status == MISSION_STATUS_FINISHED,
+            mission_status=target_mission.status,
         )
 
     for row in rows:
         url = (row.product_url or "").strip()
         if not url:
+            reason = "缺少商品链接"
+            _mark_hotsale_extract_failed(row, reason=reason, actor_id=actor.id)
+            dirty = True
             fails.append(
                 MissionHotsaleDataExtractFailItem(
                     id=row.id,
                     product_url=row.product_url,
-                    reason="缺少商品链接",
+                    reason=reason,
                 )
             )
             continue
         try:
             result = fetch_product_page(url)
         except AppError as exc:
+            reason = exc.message or "请求失败"
+            _mark_hotsale_extract_failed(row, reason=reason, actor_id=actor.id)
+            dirty = True
             fails.append(
                 MissionHotsaleDataExtractFailItem(
                     id=row.id,
                     product_url=url,
-                    reason=exc.message or "请求失败",
+                    reason=reason,
                 )
             )
             continue
         except Exception as exc:
+            reason = f"请求异常：{exc}"
+            _mark_hotsale_extract_failed(row, reason=reason, actor_id=actor.id)
+            dirty = True
             fails.append(
                 MissionHotsaleDataExtractFailItem(
                     id=row.id,
                     product_url=url,
-                    reason=f"请求异常：{exc}",
+                    reason=reason,
                 )
             )
             continue
 
         if not result.get("ok") or not isinstance(result.get("parsed"), dict):
-            reason = result.get("message") or result.get("reason") or "解析失败"
+            reason = str(result.get("message") or result.get("reason") or "解析失败")
+            _mark_hotsale_extract_failed(row, reason=reason, actor_id=actor.id)
+            dirty = True
             fails.append(
                 MissionHotsaleDataExtractFailItem(
                     id=row.id,
                     product_url=url,
-                    reason=str(reason),
+                    reason=reason,
                 )
             )
             continue
@@ -1612,15 +1663,17 @@ def extract_hotsale_product_pages(
         parsed: dict[str, Any] = result["parsed"]
         _apply_hotsale_parsed_fields(row, parsed)
         row.collect_status = HOTSALE_STATUS_SUCCESS
+        row.collect_msg = None
         row.updated_by = actor.id
+        dirty = True
         success_count += 1
 
-    # 任务提取（by_mission）或按 ID 提取完最后一批后：无 pending 则同步任务为已完成
-    mission_finished = False
-    if target_mission is not None and (by_mission or success_count > 0):
-        mission_finished = _maybe_finish_hotsale_mission(db, mission=target_mission)
+    # 有数据变更或按任务提取：按未闭环同步任务状态
+    status_changed = False
+    if target_mission is not None and (by_mission or dirty):
+        status_changed = _sync_hotsale_mission_status(db, mission=target_mission)
 
-    if success_count > 0 or mission_finished:
+    if dirty or status_changed:
         db.commit()
 
     assert target_mission is not None
@@ -1630,5 +1683,6 @@ def extract_hotsale_product_pages(
         skipped_count=skipped_count,
         fails=fails,
         mission_id=target_mission.id,
-        mission_finished=mission_finished,
+        mission_finished=target_mission.status == MISSION_STATUS_FINISHED,
+        mission_status=target_mission.status,
     )
