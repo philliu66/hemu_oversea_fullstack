@@ -38,7 +38,7 @@ The first feature captures DHgate **storefront** hot-sell listings and product d
 
 - **Install check (on demand)**: Only when the user clicks a business action (e.g. “Start collection”) does the page send `PING`; **no global detection** on every admin page load. If missing, prompt to install (guidance later).
 - **List collect `list_collect` (Phase B)**: Admin sends `collectConfig` (`openUrl` / `watchApiUrl` / `alertTip`); extension opens page, watches API, then `SYNC_CONFIRM` back for persist.
-- **Detail fill `detail_fill`**: Admin sends `fillConfig` + product `openUrl`; extension opens the product page and shows `alertTip` (business logic reserved).
+- **Product RSC `fetch_product_rsc` (Phase C)**: Admin sends `fillConfig` + product `openUrl`; extension **fetches Flight in the background (no new tab)** and returns raw text; admin calls `fetchproductrscdata` to parse.
 - **Throttling**: Background queue, rate limits, dedupe, and retries; on risk-control / captcha, pause and prompt the user.
 
 ### Runtime config (`mission_hotsale_dh_config`)
@@ -48,25 +48,22 @@ The first feature captures DHgate **storefront** hot-sell listings and product d
 | `collectConfig.openUrl` | Hot-sell list page to open |
 | `collectConfig.watchApiUrl` | API to watch on that page |
 | `collectConfig.alertTip` | Tip on the list page |
-| `fillConfig` | Detail-fill config (sent as-is; admin adds product `openUrl`) |
-| `fillConfig.alertTip` | Tip on the product page |
+| `fillConfig` | Extra config for RSC fetch (sent as-is; admin adds product `openUrl`) |
+| `fillConfig.alertTip` | Reserved; not shown for background RSC path |
 
 ### Hot-sell list workflow (Phase B)
 
 ```text
 1. “Start collection” → START mode=list_collect + collectConfig
 2. Extension opens page; panel alertTip + watch progress; “Finish” → SYNC_CONFIRM → persist
-3. Row “Detail fill” → START mode=detail_fill + fillConfig + product openUrl (no confirm dialog)
-4. Extension opens product page with tip; fill business logic comes later
 ```
 
-### Hot-sell detail workflow
+### Product RSC workflow (Phase C)
 
 ```text
-1. User manually clicks “Collect details” in the admin
-2. Extension visits each product URL and extracts key fields
-3. On each success → relay to admin → update that row and refresh the list
-4. Finish or user abort → admin shows final status
+1. Row “Extract one” → START mode=fetch_product_rsc + fillConfig + product openUrl
+2. Extension background fetch RSC → reply.payload.flightContent
+3. Admin POST fetchproductrscdata (flight_content) → parse; console.log for now, persist later
 ```
 
 ---

@@ -79,8 +79,8 @@ export function requestExtension(
   });
 }
 
-/** 按需检测扩展是否安装（PING → PONG） */
-export async function pingExtension(timeoutMs = 800): Promise<boolean> {
+/** 按需检测扩展是否安装（PING → PONG；默认偏长以覆盖 MV3 SW 冷启动/代理下延迟） */
+export async function pingExtension(timeoutMs = 5000): Promise<boolean> {
   const reply = await requestExtension(
     {
       businessType: 'platform',

@@ -723,6 +723,35 @@ export type DhgateTweakImgParams = {
 /** @deprecated 使用 DhgateTweakImgPublic */
 export type DhgateUploadImgPublic = DhgateTweakImgPublic;
 
+/** POST /api/v1/common/utils/dhgate/fetchproductrscdata */
+export type DhgateProductPageReason =
+  | 'ok'
+  | 'invalid_url'
+  | 'not_found'
+  | 'blocked'
+  | 'parse_failed'
+  | 'upstream_error';
+
+export type DhgateFetchProductRscDataParams = {
+  /** 无 flight_content 时必填，由服务端发起 RSC */
+  url?: string | null;
+  /** 有该字段时优先解析，服务端不再向上游发请求 */
+  flight_content?: string | null;
+};
+
+export type DhgateFetchProductRscDataPublic = {
+  ok: boolean;
+  reason: DhgateProductPageReason;
+  message: string | null;
+  url: string;
+  channel: 'rsc' | 'html-fallback' | null;
+  http_status: number | null;
+  elapsed_ms: number;
+  content_type: string | null;
+  parsed: Record<string, unknown> | null;
+  raw: string | null;
+};
+
 /** 敦煌商品详情（与后端 DhProductDetailPublic 对齐） */
 export type DhProductDetailPublic = {
   id: number;

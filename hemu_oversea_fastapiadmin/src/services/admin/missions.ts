@@ -332,11 +332,19 @@ export async function importMissionHotsaleData(
   );
 }
 
-/** POST /api/v1/admin/missions/hotsale-data/extract —— mission_id 或 mission_data_ids 二选一 */
+/**
+ * POST /api/v1/admin/missions/hotsale-data/extract
+ * - mission_id | mission_data_ids 二选一
+ * - 可选 flight_content：插件已拉 Flight 时传入，且 mission_data_ids 必须仅 1 条
+ */
 export async function extractMissionHotsaleData(
   params:
     | { mission_id: number; supplier_id?: number }
-    | { mission_data_ids: number[]; supplier_id?: number },
+    | {
+        mission_data_ids: number[];
+        flight_content?: string;
+        supplier_id?: number;
+      },
   options?: RequestOptions,
 ) {
   const res = await request<ApiResponse<MissionHotsaleDataExtractResult>>(
@@ -344,6 +352,7 @@ export async function extractMissionHotsaleData(
     {
       method: 'POST',
       data: params,
+      timeout: 120000,
       ...options,
     },
   );

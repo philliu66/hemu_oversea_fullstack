@@ -16,8 +16,6 @@ export type ExtAction =
   | 'STOP'
   | 'STATUS'
   | 'SYNC_CONFIRM'
-  /** 单次补充回传（业务逻辑预留） */
-  | 'FILL_CONFIRM'
   | 'ITEM_UPSERT'
   | 'ERROR';
 

@@ -6,6 +6,7 @@ import {
   Button,
   Empty,
   Image,
+  InputNumber,
   Modal,
   Popconfirm,
   Space,
@@ -21,7 +22,10 @@ import {
   asMissionHotsaleDhConfig,
   CONFIG_KEY_MISSION_HOTSALE_DH,
   EXT_BUSINESS_HOTSELL,
+  EXT_HOTSELL_MODE_FETCH_PRODUCT_RSC,
   EXT_HOTSELL_MODE_LIST_COLLECT,
+  type HotsaleFillConfig,
+  type HotsellFetchProductRscResult,
   type HotsellStartPayload,
 } from '@/constants/extension';
 import { getAdminSystemConfig } from '@/services/admin/auth';
@@ -44,6 +48,48 @@ import {
   subscribeExtensionMessages,
 } from '@/utils/extensionBridge';
 import { parseHotsellRankResponse } from '@/utils/hotsellRank';
+
+type ExtractUiPhase = 'idle' | 'pick_interval' | 'running';
+
+const EXECUTABLE_COLLECT_STATUSES = new Set(['pending', 'failed']);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+/** 拉取任务下全部 pending + failed（分页拼齐） */
+async function fetchAllExecutableHotsaleRows(
+  missionId: number,
+): Promise<MissionHotsaleDataPublic[]> {
+  const out: MissionHotsaleDataPublic[] = [];
+  for (const collect_status of ['pending', 'failed'] as const) {
+    let page = 1;
+    for (;;) {
+      const result = await fetchMissionHotsaleDataList({
+        mission_id: missionId,
+        collect_status,
+        page,
+        page_size: 100,
+      });
+      out.push(...result.items);
+      if (result.items.length === 0 || page * 100 >= result.total) {
+        break;
+      }
+      page += 1;
+    }
+  }
+  out.sort((a, b) => {
+    const ra = a.rank_no ?? Number.MAX_SAFE_INTEGER;
+    const rb = b.rank_no ?? Number.MAX_SAFE_INTEGER;
+    if (ra !== rb) {
+      return ra - rb;
+    }
+    return a.id - b.id;
+  });
+  return out;
+}
 
 type TableParams = {
   current?: number;
@@ -116,13 +162,28 @@ export function HotsaleDataTable({
   const { message, modal } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
   const extractingRef = useRef(false);
+  /** 多条提取：选完间隔后要跑的队列 */
+  const pendingRecordsRef = useRef<MissionHotsaleDataPublic[] | null>(null);
   const [collecting, setCollecting] = useState(false);
-  const [extracting, setExtracting] = useState(false);
+  /** idle | 选间隔 | 串行提取中 */
+  const [extractPhase, setExtractPhase] = useState<ExtractUiPhase>('idle');
+  const [intervalSec, setIntervalSec] = useState(2);
+  const [extractProgress, setExtractProgress] = useState<{
+    done: number;
+    total: number;
+    intervalSec: number;
+  } | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const [selectedRows, setSelectedRows] = useState<MissionHotsaleDataPublic[]>(
+    [],
+  );
   const [batchLoading, setBatchLoading] = useState(false);
+
+  const extracting = extractPhase !== 'idle';
 
   const clearSelection = useCallback(() => {
     setSelectedRowKeys([]);
+    setSelectedRows([]);
   }, []);
 
   const resolveSelectedIds = useCallback(() => {
@@ -151,31 +212,219 @@ export function HotsaleDataTable({
     [message],
   );
 
-  const runExtract = useCallback(
+  const loadFillConfig = useCallback(async (): Promise<HotsaleFillConfig> => {
+    const configMap = await getAdminSystemConfig({ skipErrorHandler: true });
+    const hotsaleRoot = asMissionHotsaleDhConfig(
+      configMap[CONFIG_KEY_MISSION_HOTSALE_DH],
+    );
+    return hotsaleRoot?.fillConfig ?? {};
+  }, []);
+
+  /** 插件拉 Flight 原文；失败返回 null（批量时不逐条 toast，结束统一汇总） */
+  const fetchFlightViaExtension = useCallback(
     async (
-      params:
-        | { mission_id: number }
-        | { mission_data_ids: number[] },
-    ) => {
+      productUrl: string,
+      fillConfig: HotsaleFillConfig,
+    ): Promise<string | null> => {
+      const reply = await requestExtension(
+        {
+          businessType: EXT_BUSINESS_HOTSELL,
+          action: 'START',
+          payload: {
+            mode: EXT_HOTSELL_MODE_FETCH_PRODUCT_RSC,
+            openUrl: productUrl,
+            fillConfig,
+          } satisfies HotsellStartPayload,
+        },
+        30000,
+      );
+      if (!reply) {
+        console.warn('[hotsale fetch_product_rsc] 插件无响应', productUrl);
+        return null;
+      }
+      if (reply.action === 'ERROR') {
+        console.warn('[hotsale fetch_product_rsc] 插件错误', reply.payload);
+        return null;
+      }
+      const extResult = reply.payload as HotsellFetchProductRscResult | undefined;
+      const flight = (extResult?.flightContent || '').trim();
+      if (!extResult?.ok || !flight) {
+        console.warn(
+          '[hotsale fetch_product_rsc] 无 Flight',
+          productUrl,
+          extResult?.message,
+        );
+        return null;
+      }
+      console.log('[hotsale fetch_product_rsc] raw flight', {
+        productUrl,
+        httpStatus: extResult.httpStatus,
+        contentType: extResult.contentType,
+        elapsedMs: extResult.elapsedMs,
+        flightContent: flight,
+      });
+      return flight;
+    },
+    [],
+  );
+
+  /**
+   * 串行：插件拉数 → extract(flight_content) 入库。
+   * 仅多条时展示进度并应用 gapSec；单条只显示加载态。
+   */
+  const runPluginExtractQueue = useCallback(
+    async (records: MissionHotsaleDataPublic[], gapSec: number) => {
       if (extractingRef.current) {
         return;
       }
+      if (!records.length) {
+        message.warning('没有可提取的任务数据');
+        return;
+      }
+
+      const showProgress = records.length > 1;
       extractingRef.current = true;
-      setExtracting(true);
+      setExtractPhase('running');
+      setExtractProgress(
+        showProgress
+          ? { done: 0, total: records.length, intervalSec: gapSec }
+          : null,
+      );
+
+      const installed = await pingExtension();
+      if (!installed) {
+        message.warning('请先安装对应的采集插件');
+        extractingRef.current = false;
+        setExtractPhase('idle');
+        setExtractProgress(null);
+        pendingRecordsRef.current = null;
+        return;
+      }
+
+      let fillConfig: HotsaleFillConfig;
       try {
-        const result = await extractMissionHotsaleData(params);
-        tipExtractResult(result);
-        onExtracted?.(result);
+        fillConfig = await loadFillConfig();
+      } catch {
+        message.error('读取热卖配置失败');
+        extractingRef.current = false;
+        setExtractPhase('idle');
+        setExtractProgress(null);
+        pendingRecordsRef.current = null;
+        return;
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+      let lastResult: MissionHotsaleDataExtractResult | null = null;
+
+      try {
+        for (let i = 0; i < records.length; i += 1) {
+          if (i > 0 && gapSec > 0) {
+            await sleep(gapSec * 1000);
+          }
+          const record = records[i];
+          const productUrl = (record.product_url || '').trim();
+          if (!productUrl) {
+            failCount += 1;
+            if (showProgress) {
+              setExtractProgress({
+                done: i + 1,
+                total: records.length,
+                intervalSec: gapSec,
+              });
+            }
+            continue;
+          }
+
+          const flight = await fetchFlightViaExtension(productUrl, fillConfig);
+          if (!flight) {
+            failCount += 1;
+            if (showProgress) {
+              setExtractProgress({
+                done: i + 1,
+                total: records.length,
+                intervalSec: gapSec,
+              });
+            }
+            continue;
+          }
+
+          try {
+            const result = await extractMissionHotsaleData({
+              mission_data_ids: [record.id],
+              flight_content: flight,
+            });
+            lastResult = result;
+            successCount += result.success_count;
+            failCount += result.fail_count;
+          } catch {
+            failCount += 1;
+          }
+
+          if (showProgress) {
+            setExtractProgress({
+              done: i + 1,
+              total: records.length,
+              intervalSec: gapSec,
+            });
+          }
+        }
+
+        const summary: MissionHotsaleDataExtractResult = {
+          success_count: successCount,
+          fail_count: failCount,
+          skipped_count: 0,
+          fails: lastResult?.fails ?? [],
+          mission_id: lastResult?.mission_id ?? missionId,
+          mission_finished: lastResult?.mission_finished ?? false,
+          mission_status: lastResult?.mission_status ?? null,
+        };
+        tipExtractResult(summary);
+        onExtracted?.(summary);
         clearSelection();
         actionRef.current?.reload();
-      } catch {
-        // 错误已由全局拦截器处理
       } finally {
         extractingRef.current = false;
-        setExtracting(false);
+        setExtractPhase('idle');
+        setExtractProgress(null);
+        pendingRecordsRef.current = null;
       }
     },
-    [clearSelection, onExtracted, tipExtractResult],
+    [
+      clearSelection,
+      fetchFlightViaExtension,
+      loadFillConfig,
+      message,
+      missionId,
+      onExtracted,
+      tipExtractResult,
+    ],
+  );
+
+  /**
+   * 单条：直接跑（无间隔、无进度）。
+   * 多条：先弹间隔选择，确认后再跑。
+   */
+  const startExtractFlow = useCallback(
+    async (records: MissionHotsaleDataPublic[]) => {
+      // 仅用 ref 防重入：任务提取拉列表时 phase 可能已是 running
+      if (extractingRef.current) {
+        return;
+      }
+      if (!records.length) {
+        message.warning('没有可提取的任务数据');
+        return;
+      }
+      if (records.length === 1) {
+        await runPluginExtractQueue(records, 0);
+        return;
+      }
+      pendingRecordsRef.current = records;
+      setIntervalSec(2);
+      setExtractProgress(null);
+      setExtractPhase('pick_interval');
+    },
+    [message, runPluginExtractQueue],
   );
 
   const handleBatchMarkFinished = useCallback(async () => {
@@ -342,32 +591,86 @@ export function HotsaleDataTable({
     }
   }, [message, sendStartToExtension]);
 
-  /** 单个提取：调用后端商品详情解析入库 */
+  /** 单个提取：始终单条，直接加载态跑插件入库 */
   const handleExtractOne = useCallback(
     async (record: MissionHotsaleDataPublic) => {
-      if (!(record.product_url || '').trim()) {
+      const productUrl = (record.product_url || '').trim();
+      if (!productUrl) {
         message.warning('当前商品缺少产品链接，无法提取');
         return;
       }
-      await runExtract({ mission_data_ids: [record.id] });
+      if (!EXECUTABLE_COLLECT_STATUSES.has(String(record.collect_status))) {
+        message.warning('仅进行中或失败的数据可提取');
+        return;
+      }
+      await startExtractFlow([record]);
     },
-    [message, runExtract],
+    [message, startExtractFlow],
   );
 
-  /** 任务提取：该任务下全部进行中数据 */
-  const handleExtractMission = useCallback(async () => {
-    await runExtract({ mission_id: missionId });
-  }, [missionId, runExtract]);
+  /** 间隔确认后：对已缓存的多条队列串行提取 */
+  const handleConfirmInterval = useCallback(async () => {
+    const records = pendingRecordsRef.current;
+    if (!records?.length) {
+      setExtractPhase('idle');
+      pendingRecordsRef.current = null;
+      return;
+    }
+    const gap = Number.isFinite(intervalSec) ? Math.max(0, intervalSec) : 2;
+    pendingRecordsRef.current = null;
+    await runPluginExtractQueue(records, gap);
+  }, [intervalSec, runPluginExtractQueue]);
 
-  /** 批量提取：当前多选的任务数据 */
-  const handleExtractSelected = useCallback(async () => {
-    const ids = resolveSelectedIds();
-    if (!ids.length) {
+  const handleCancelIntervalPicker = useCallback(() => {
+    if (extractPhase !== 'pick_interval') {
+      return;
+    }
+    setExtractPhase('idle');
+    pendingRecordsRef.current = null;
+  }, [extractPhase]);
+
+  /**
+   * 任务提取：先拉 pending/failed；单条直接跑，多条再选间隔。
+   */
+  const handleExtractMission = useCallback(async () => {
+    if (extractingRef.current || extractPhase !== 'idle') {
+      return;
+    }
+    // 拉列表期间用简单加载态（不展示进度）
+    setExtractPhase('running');
+    setExtractProgress(null);
+    try {
+      const records = await fetchAllExecutableHotsaleRows(missionId);
+      if (!records.length) {
+        setExtractPhase('idle');
+        message.warning('当前任务没有可提取的进行中/失败数据');
+        return;
+      }
+      // 单条会继续 running；多条会切到选间隔
+      await startExtractFlow(records);
+    } catch (err) {
+      setExtractPhase('idle');
+      message.error(
+        err instanceof Error ? err.message : '准备提取列表失败，请稍后重试',
+      );
+    }
+  }, [extractPhase, message, missionId, startExtractFlow]);
+
+  /** 批量提取：可提取行单条直接跑，多条再选间隔 */
+  const handleExtractSelected = useCallback(() => {
+    if (!selectedRows.length) {
       message.warning('请先选择任务数据');
       return;
     }
-    await runExtract({ mission_data_ids: ids });
-  }, [message, resolveSelectedIds, runExtract]);
+    const records = selectedRows.filter((r) =>
+      EXECUTABLE_COLLECT_STATUSES.has(String(r.collect_status)),
+    );
+    if (!records.length) {
+      message.warning('请选择进行中或失败的任务数据');
+      return;
+    }
+    void startExtractFlow(records);
+  }, [message, selectedRows, startExtractFlow]);
 
   const statusLabel = (status: string) =>
     COLLECT_STATUS_LABEL[status as HotsaleCollectStatus] ?? status;
@@ -638,18 +941,59 @@ export function HotsaleDataTable({
   return (
     <>
       <Modal
-        open={extracting}
+        open={extractPhase === 'pick_interval'}
+        title="批量提取间隔"
+        okText="开始提取"
+        cancelText="取消"
+        maskClosable={false}
+        keyboard={false}
+        centered
+        width={420}
+        onOk={() => void handleConfirmInterval()}
+        onCancel={handleCancelIntervalPicker}
+      >
+        <div style={{ paddingTop: 8 }}>
+          <div style={{ marginBottom: 12 }}>
+            请选择批量运行时每条数据的间隔时间：
+          </div>
+          <Space>
+            <InputNumber
+              min={0}
+              precision={0}
+              value={intervalSec}
+              onChange={(v) => setIntervalSec(typeof v === 'number' ? v : 0)}
+              addonAfter="秒"
+              style={{ width: 160 }}
+            />
+            <Typography.Text type="secondary">默认 2 秒，最小 0 秒</Typography.Text>
+          </Space>
+        </div>
+      </Modal>
+      <Modal
+        open={extractPhase === 'running'}
         title={null}
         footer={null}
         closable={false}
         maskClosable={false}
         keyboard={false}
         centered
-        width={280}
+        width={
+          extractProgress && extractProgress.total > 1 ? 320 : 280
+        }
         styles={{ body: { padding: '32px 24px' } }}
       >
         <div style={{ textAlign: 'center' }}>
-          <Spin size="large" description="正在提取，请稍后…" />
+          {extractProgress && extractProgress.total > 1 ? (
+            <div style={{ marginBottom: 16, lineHeight: 1.7 }}>
+              <div>
+                进度：{extractProgress.done} / {extractProgress.total}
+              </div>
+              <div style={{ color: 'rgba(0,0,0,0.45)', fontSize: 13 }}>
+                单次间隔：{extractProgress.intervalSec} 秒
+              </div>
+            </div>
+          ) : null}
+          <Spin size="large" description="插件提取中..." />
         </div>
       </Modal>
       <ProTable<MissionHotsaleDataPublic, TableParams>
@@ -662,7 +1006,10 @@ export function HotsaleDataTable({
         editable
           ? {
               selectedRowKeys,
-              onChange: setSelectedRowKeys,
+              onChange: (keys, rows) => {
+                setSelectedRowKeys(keys);
+                setSelectedRows(rows);
+              },
               getCheckboxProps: (record) => ({
                 // 已完成不可删/不可标记结束
                 disabled: record.collect_status === 'success',

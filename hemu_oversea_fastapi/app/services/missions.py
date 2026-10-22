@@ -1461,12 +1461,16 @@ def extract_hotsale_product_pages(
     actor: User,
     mission_id: int | None = None,
     mission_data_ids: list[int] | None = None,
+    flight_content: str | None = None,
     supplier_id: int | None = None,
 ) -> MissionHotsaleDataExtractResult:
-    """按任务数据 ID 或任务 ID 拉取商品详情页并入库。
+    """按任务数据 ID 或任务 ID 解析商品详情并入库。
 
     - mission_data_ids：指定数据（须为 pending / failed）
     - mission_id：该任务下全部 pending / failed（跳过已完成 / 标记结束）
+    - flight_content：若提供，则只解析该 Flight（不再服务端发 RSC）；
+      调用方应保证仅对应 1 条 mission_data_ids（schema 已校验）
+
     成功时写入 parse_raw_json，collect_status=success 并清空 collect_msg。
     失败时 collect_status=failed，collect_msg 写入原因。
     结束后按未闭环（pending/failed）同步任务 running/finished（人工标记结束除外）。
@@ -1474,6 +1478,7 @@ def extract_hotsale_product_pages(
     assert_mission_type_perm(db, actor, MISSION_TYPE_HOTSALE_DH, suffix="data")
 
     by_mission = mission_id is not None
+    flight_in = (flight_content or "").strip() or None
     fails: list[MissionHotsaleDataExtractFailItem] = []
     success_count = 0
     skipped_count = 0
@@ -1608,7 +1613,8 @@ def extract_hotsale_product_pages(
 
     for row in rows:
         url = (row.product_url or "").strip()
-        if not url:
+        # 插件已上送 Flight：允许无 url（仅解析入库）；服务端直拉则必须有链接
+        if not flight_in and not url:
             reason = "缺少商品链接"
             _mark_hotsale_extract_failed(row, reason=reason, actor_id=actor.id)
             dirty = True
@@ -1621,7 +1627,13 @@ def extract_hotsale_product_pages(
             )
             continue
         try:
-            result = fetch_product_page(url)
+            if flight_in:
+                result = fetch_product_page(
+                    url or None,
+                    flight_content=flight_in,
+                )
+            else:
+                result = fetch_product_page(url)
         except AppError as exc:
             reason = exc.message or "请求失败"
             _mark_hotsale_extract_failed(row, reason=reason, actor_id=actor.id)
@@ -1629,7 +1641,7 @@ def extract_hotsale_product_pages(
             fails.append(
                 MissionHotsaleDataExtractFailItem(
                     id=row.id,
-                    product_url=url,
+                    product_url=url or row.product_url,
                     reason=reason,
                 )
             )
@@ -1641,7 +1653,7 @@ def extract_hotsale_product_pages(
             fails.append(
                 MissionHotsaleDataExtractFailItem(
                     id=row.id,
-                    product_url=url,
+                    product_url=url or row.product_url,
                     reason=reason,
                 )
             )
@@ -1654,7 +1666,7 @@ def extract_hotsale_product_pages(
             fails.append(
                 MissionHotsaleDataExtractFailItem(
                     id=row.id,
-                    product_url=url,
+                    product_url=url or row.product_url,
                     reason=reason,
                 )
             )

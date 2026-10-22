@@ -12,7 +12,7 @@ export type HotsellPanelState = {
   confirmLabel?: string;
   /**
    * 是否必须有最新数据才可点确认。
-   * 列表采集为 true；单次补充占位为 false。
+   * 列表采集为 true；无需监听接口时可为 false。
    */
   requireLatest?: boolean;
 };

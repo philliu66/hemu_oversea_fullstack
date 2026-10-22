@@ -13,12 +13,12 @@ export const CONFIG_KEY_MISSION_HOTSALE_DH = 'mission_hotsale_dh_config' as cons
 /**
  * 扩展 START.mode
  * - list_collect：列表采集（部分信息，对应 collectConfig）
- * - detail_fill：单次补充详情（对应 fillConfig + 商品 openUrl）
+ * - fetch_product_rsc：插件 background 直拉商品 RSC（对应 fillConfig + 商品 openUrl）
  *
  * START 必须嵌套传配置，禁止把 collect/fill 字段扁平 merge，以免 alertTip 等同名字段串扰。
  */
 export const EXT_HOTSELL_MODE_LIST_COLLECT = 'list_collect' as const;
-export const EXT_HOTSELL_MODE_DETAIL_FILL = 'detail_fill' as const;
+export const EXT_HOTSELL_MODE_FETCH_PRODUCT_RSC = 'fetch_product_rsc' as const;
 
 export type HotsaleCollectConfig = {
   openUrl?: string;
@@ -28,7 +28,7 @@ export type HotsaleCollectConfig = {
 };
 
 export type HotsaleFillConfig = {
-  /** 商品页顶部提示 */
+  /** 预留；background 直拉路径暂不展示页内 tip */
   alertTip?: string;
   /** 兼容旧字段名 */
   popTip?: string;
@@ -47,16 +47,30 @@ export type HotsellStartListCollectPayload = {
   collectConfig: HotsaleCollectConfig;
 };
 
-/** 单次补充 START（嵌套 fillConfig + 商品 openUrl） */
-export type HotsellStartDetailFillPayload = {
-  mode: typeof EXT_HOTSELL_MODE_DETAIL_FILL;
+/** 商品 RSC 取数 START（嵌套 fillConfig + 商品 openUrl；同步回传 Flight） */
+export type HotsellStartFetchProductRscPayload = {
+  mode: typeof EXT_HOTSELL_MODE_FETCH_PRODUCT_RSC;
   openUrl: string;
   fillConfig: HotsaleFillConfig;
 };
 
 export type HotsellStartPayload =
   | HotsellStartListCollectPayload
-  | HotsellStartDetailFillPayload;
+  | HotsellStartFetchProductRscPayload;
+
+/** 扩展 START fetch_product_rsc 的回复 payload */
+export type HotsellFetchProductRscResult = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  mode?: typeof EXT_HOTSELL_MODE_FETCH_PRODUCT_RSC;
+  openUrl?: string;
+  httpStatus?: number;
+  contentType?: string;
+  flightContent?: string;
+  elapsedMs?: number;
+  fillConfig?: HotsaleFillConfig;
+};
 
 export function asMissionHotsaleDhConfig(
   value: unknown,

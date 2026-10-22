@@ -1,9 +1,9 @@
 """全局工具类接口相关请求 / 响应。"""
 
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DhgateImgInfoPublic(BaseModel):
@@ -198,15 +198,31 @@ DhgateProductPageReason = Literal[
 
 
 class DhgateProductPageFetchRequest(BaseModel):
-    """传入敦煌商品详情页链接，拉取并解析 RSC Flight。"""
+    """解析敦煌商品 RSC Flight：可传链接由服务端拉取，或直接传 Flight 原文。"""
 
-    url: str = Field(
-        min_length=1,
+    url: str | None = Field(
+        default=None,
         description=(
             "敦煌商品详情页完整链接，例如 "
-            "https://www.dhgate.com/product/{slug}/{itemcode}.html"
+            "https://www.dhgate.com/product/{slug}/{itemcode}.html。"
+            "无 flight_content 时必填，由服务端发起 RSC 请求。"
         ),
     )
+    flight_content: str | None = Field(
+        default=None,
+        description=(
+            "通过 RSC 获取的完整 Flight 原文。"
+            "有该字段时优先解析，服务端不再向上游发起请求。"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def require_url_or_flight(self) -> Self:
+        has_flight = bool((self.flight_content or "").strip())
+        has_url = bool((self.url or "").strip())
+        if not has_flight and not has_url:
+            raise ValueError("请提供 url 或 flight_content 至少其一")
+        return self
 
 
 class DhgateProductPageFetchPublic(BaseModel):
@@ -215,10 +231,15 @@ class DhgateProductPageFetchPublic(BaseModel):
     ok: bool = Field(description="是否解析出有效商品主字段")
     reason: DhgateProductPageReason = Field(description="结果分类")
     message: str | None = Field(default=None, description="说明")
-    url: str = Field(description="实际请求的商品链接")
+    url: str = Field(
+        description="商品链接（服务端拉取时为实际请求 URL；仅 flight_content 时可为空）",
+    )
     channel: Literal["rsc", "html-fallback"] | None = Field(
         default=None,
-        description="取数通道：rsc=请求头 RSC:1；html-fallback=从 HTML 还原",
+        description=(
+            "取数通道：rsc=请求头 RSC:1 或客户端上送 Flight；"
+            "html-fallback=从 HTML 还原"
+        ),
     )
     http_status: int | None = Field(default=None, description="上游 HTTP 状态码")
     elapsed_ms: float = Field(description="接口用时（毫秒，含上游请求）")

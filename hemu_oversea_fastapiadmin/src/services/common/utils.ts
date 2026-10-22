@@ -4,6 +4,8 @@ import type {
   ApiResponse,
   DhMeasuresUnitPublic,
   DhSkuBaseInfoPublic,
+  DhgateFetchProductRscDataParams,
+  DhgateFetchProductRscDataPublic,
   DhgateImgInfoPublic,
   DhgateTweakImgParams,
   DhgateTweakImgPublic,
@@ -121,5 +123,28 @@ export async function fetchDhSkuBaseInfo(
   return requireData(
     unwrapApiData<DhSkuBaseInfoPublic>(res),
     '获取 SKU 基础信息失败',
+  );
+}
+
+/** POST /api/v1/common/utils/dhgate/fetchproductrscdata — 解析敦煌商品 RSC Flight */
+export async function fetchDhgateProductRscData(
+  params: DhgateFetchProductRscDataParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<DhgateFetchProductRscDataPublic>>(
+    CommonUtilsApi.DHGATE_FETCH_PRODUCT_RSC_DATA,
+    {
+      method: 'POST',
+      data: {
+        url: params.url ?? undefined,
+        flight_content: params.flight_content ?? undefined,
+      },
+      timeout: 60000,
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhgateFetchProductRscDataPublic>(res),
+    '解析敦煌商品 RSC 失败',
   );
 }

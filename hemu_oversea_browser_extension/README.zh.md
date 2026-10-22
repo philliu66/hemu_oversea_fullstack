@@ -38,7 +38,7 @@ HeMu 跨境系统的 **浏览器扩展平台**：运行在用户本机浏览器�
 
 - **安装检测（按需）**：仅在具体业务按钮（如「开始采集」）点击时由页面发 `PING` 检测；**不做管理端全局检测**。未安装则提示先安装（引导方式后续细化）。
 - **列表采集 `list_collect`（阶段 B）**：下发 `collectConfig`（`openUrl` / `watchApiUrl` / `alertTip`）；扩展开页、监听、确认后 `SYNC_CONFIRM` 回传入库。
-- **单次补充 `detail_fill`**：下发 `fillConfig` + 当前商品 `openUrl`；扩展打开商品页并展示 `alertTip`（业务逻辑预留）。
+- **商品 RSC `fetch_product_rsc`（阶段 C）**：下发 `fillConfig` + 当前商品 `openUrl`；扩展 **background 直拉 Flight（不开新 tab）**，原文同步回管理端；管理端再调 `fetchproductrscdata` 解析。
 - **任务节流**：后台排队、限速、去重与失败重试；遇风控/验证码可暂停并提示用户。
 
 ### 热卖运行配置（`mission_hotsale_dh_config`）
@@ -48,25 +48,22 @@ HeMu 跨境系统的 **浏览器扩展平台**：运行在用户本机浏览器�
 | `collectConfig.openUrl` | 列表采集打开的热卖页 |
 | `collectConfig.watchApiUrl` | 列表页监听的接口 |
 | `collectConfig.alertTip` | 列表页顶部提示 |
-| `fillConfig` | 单次补充配置（原样下发；管理端再附加商品 `openUrl`） |
-| `fillConfig.alertTip` | 商品页顶部提示 |
+| `fillConfig` | RSC 取数附加配置（原样下发；管理端再附加商品 `openUrl`） |
+| `fillConfig.alertTip` | 预留；background 直拉路径暂不展示页内 tip |
 
 ### 热卖列表工作流（阶段 B）
 
 ```text
 1. 「开始采集」→ START mode=list_collect + collectConfig
 2. 扩展开页；面板 alertTip + 监听进度；「完成采集」→ SYNC_CONFIRM → 入库
-3. 行内「单次补充」→ START mode=detail_fill + fillConfig + 商品 openUrl（无二次确认）
-4. 扩展打开商品页并展示提示；补充业务逻辑后续接入
 ```
 
-### 热卖详情工作流
+### 商品 RSC 工作流（阶段 C）
 
 ```text
-1. 用户在管理端手动点击「采集详细信息」
-2. 扩展按列表逐个访问商品 URL 并提取关键字段
-3. 每提取成功一条 → 回传管理端 → 更新该条并刷新列表
-4. 全部完成或用户中止 → 管理端展示最终状态
+1. 行内「单个提取」→ START mode=fetch_product_rsc + fillConfig + 商品 openUrl
+2. 扩展 background 直拉 RSC → reply.payload.flightContent
+3. 管理端 POST fetchproductrscdata（flight_content）→ 解析；当前 console.log，入库后续
 ```
 
 ---

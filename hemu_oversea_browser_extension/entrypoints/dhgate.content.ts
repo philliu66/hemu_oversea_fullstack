@@ -1,5 +1,4 @@
 import { parseHotsellRankResponse } from '../src/features/hotsell/parse-rank';
-import type { HotsellJobMode } from '../src/features/hotsell/types';
 import {
   HOOK_SOURCE,
   onNetHookHit,
@@ -13,7 +12,7 @@ import {
 type PageReadyResult = {
   ok: boolean;
   active?: boolean;
-  mode?: HotsellJobMode;
+  mode?: string;
   alertTip?: string;
   watchApiUrl?: string;
   hitCount?: number;
@@ -25,7 +24,6 @@ type OpResult = {
   message?: string;
   hitCount?: number;
   hasLatest?: boolean;
-  reserved?: boolean;
 };
 
 function sendInternal<T = unknown>(
@@ -36,8 +34,8 @@ function sendInternal<T = unknown>(
 
 /**
  * 敦煌站 isolated content：
- * - list_collect：面板 + watchApiUrl 监听
- * - detail_fill：面板提示（补充业务逻辑预留）
+ * 仅 list_collect 开页注入；面板展示用摘要解析 + 接口原文回传管理端。
+ * fetch_product_rsc 在 background 直拉，不经过本页。
  */
 export default defineContentScript({
   matches: ['*://*.dhgate.com/*'],
@@ -52,26 +50,23 @@ export default defineContentScript({
       return;
     }
 
-    const mode: HotsellJobMode = ready.mode === 'detail_fill' ? 'detail_fill' : 'list_collect';
-    const isFill = mode === 'detail_fill';
+    // 非列表采集 Job（不应走到这里）；保守退出
+    if (ready.mode && ready.mode !== 'list_collect') {
+      return;
+    }
 
     const panel = mountHotsellPanel(
       {
-        alertTip:
-          ready.alertTip ||
-          (isFill
-            ? '请在本页完成热卖品详情补充'
-            : '请在本页完成热卖数据采集操作'),
+        alertTip: ready.alertTip || '请在本页完成热卖数据采集操作',
         hasLatest: false,
-        requireLatest: !isFill,
-        confirmLabel: isFill ? '完成补充' : '完成采集',
-        statusText: isFill ? '单次补充业务逻辑待接入' : undefined,
+        requireLatest: true,
+        confirmLabel: '完成采集',
       },
       {
         onConfirm: () => {
           void (async () => {
             panel.update({
-              statusText: isFill ? '正在结束补充流程…' : '正在回传管理端…',
+              statusText: '正在回传管理端…',
             });
             const res = await sendInternal<OpResult>({
               channel: 'hotsell',
@@ -95,52 +90,53 @@ export default defineContentScript({
       },
     );
 
-    // 仅列表采集安装接口监听
-    if (!isFill && ready.watchApiUrl) {
-      const watchApiUrl = ready.watchApiUrl;
-      const install = () => requestInstallNetHook(watchApiUrl);
-      install();
-      const onMainReady = (event: MessageEvent) => {
-        if (event.source !== window) return;
-        if (
-          event.data?.source === HOOK_SOURCE &&
-          event.data?.op === 'MAIN_READY'
-        ) {
-          install();
-        }
-      };
-      window.addEventListener('message', onMainReady);
-      window.setTimeout(install, 300);
-      window.setTimeout(install, 1000);
-
-      onNetHookHit((detail) => {
-        void (async () => {
-          const summary = parseHotsellRankResponse(detail.data);
-          const res = await sendInternal<OpResult>({
-            channel: 'hotsell',
-            op: 'API_HIT',
-            data: detail.data,
-            url: detail.url,
-          });
-          if (!res?.ok) return;
-
-          if (summary) {
-            panel.update({
-              hasLatest: true,
-              currentCategory: summary.currentCategory,
-              itemCount: summary.itemCount,
-              statusText: undefined,
-            });
-          } else {
-            panel.update({
-              hasLatest: true,
-              currentCategory: '未知',
-              itemCount: 0,
-              statusText: undefined,
-            });
-          }
-        })();
-      });
+    if (!ready.watchApiUrl) {
+      return;
     }
+
+    const watchApiUrl = ready.watchApiUrl;
+    const install = () => requestInstallNetHook(watchApiUrl);
+    install();
+    const onMainReady = (event: MessageEvent) => {
+      if (event.source !== window) return;
+      if (
+        event.data?.source === HOOK_SOURCE &&
+        event.data?.op === 'MAIN_READY'
+      ) {
+        install();
+      }
+    };
+    window.addEventListener('message', onMainReady);
+    window.setTimeout(install, 300);
+    window.setTimeout(install, 1000);
+
+    onNetHookHit((detail) => {
+      void (async () => {
+        const summary = parseHotsellRankResponse(detail.data);
+        const res = await sendInternal<OpResult>({
+          channel: 'hotsell',
+          op: 'API_HIT',
+          data: detail.data,
+          url: detail.url,
+        });
+        if (!res?.ok) return;
+
+        if (summary) {
+          panel.update({
+            hasLatest: true,
+            currentCategory: summary.currentCategory,
+            itemCount: summary.itemCount,
+            statusText: undefined,
+          });
+        } else {
+          panel.update({
+            hasLatest: true,
+            currentCategory: '未知',
+            itemCount: 0,
+            statusText: undefined,
+          });
+        }
+      })();
+    });
   },
 });

@@ -5,7 +5,6 @@ import {
   isHotsellInternalMessage,
   parseStartPayload,
   type HotsellCollectJob,
-  type HotsellFillJob,
   type HotsellInternalMessage,
 } from './types';
 
@@ -38,11 +37,74 @@ async function finishAndCloseCapture(
 }
 
 /**
+ * 在 background 用 host_permissions 直拉商品页 RSC 原文（不开新 tab、不做解析）。
+ * 携带浏览器档案下 dhgate Cookie；走扩展网络栈（通常含系统/浏览器代理）。
+ */
+export async function fetchProductRscFlight(openUrl: string): Promise<{
+  ok: boolean;
+  error?: string;
+  message?: string;
+  openUrl: string;
+  httpStatus?: number;
+  contentType?: string;
+  flightContent?: string;
+  elapsedMs: number;
+}> {
+  const started = Date.now();
+  try {
+    const res = await fetch(openUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      credentials: 'include',
+      headers: {
+        RSC: '1',
+        Accept: 'text/x-component',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+    const contentType = res.headers.get('content-type') || '';
+    const flightContent = await res.text();
+    const elapsedMs = Date.now() - started;
+
+    if (!flightContent.trim()) {
+      return {
+        ok: false,
+        error: 'empty_body',
+        message: '商品页响应为空',
+        openUrl,
+        httpStatus: res.status,
+        contentType,
+        elapsedMs,
+      };
+    }
+
+    return {
+      ok: true,
+      openUrl,
+      httpStatus: res.status,
+      contentType,
+      flightContent,
+      elapsedMs,
+      message: '已获取 Flight 原文',
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: 'fetch_failed',
+      message:
+        err instanceof Error
+          ? `拉取商品 RSC 失败: ${err.message}`
+          : '拉取商品 RSC 失败',
+      openUrl,
+      elapsedMs: Date.now() - started,
+    };
+  }
+}
+
+/**
  * 管理端 START：
- * - list_collect：payload.collectConfig
- * - detail_fill：payload.fillConfig + openUrl
- *
- * 用判别联合写入对应 Job 形态，不与另一模式的字段混写。
+ * - list_collect：payload.collectConfig → 开标签监听
+ * - fetch_product_rsc：payload.fillConfig + openUrl → background 直拉 Flight，同步回传（不占 job、不开 tab）
  */
 export async function startHotsellJob(
   msg: ExtMessage,
@@ -63,32 +125,42 @@ export async function startHotsellJob(
       ok: false,
       error: 'invalid_config',
       message:
-        '热卖配置无效：list_collect 需 collectConfig；detail_fill 需 fillConfig + openUrl',
+        '热卖配置无效：list_collect 需 collectConfig；fetch_product_rsc 需 openUrl（及 fillConfig）',
     };
   }
 
-  if (config.mode === 'list_collect') {
-    if (
-      !isHttpUrl(config.collectConfig.openUrl) ||
-      !isHttpUrl(config.collectConfig.watchApiUrl)
-    ) {
+  if (config.mode === 'fetch_product_rsc') {
+    if (!isHttpUrl(config.openUrl)) {
       return {
         ok: false,
         error: 'invalid_config',
-        message: '列表采集配置无效：需要合法的 openUrl / watchApiUrl',
+        message: 'fetch_product_rsc 配置无效：需要合法的商品 openUrl',
       };
     }
-  } else if (!isHttpUrl(config.openUrl)) {
+    // 不触碰进行中的 list_collect Job；同步拉 Flight 后随 START 回复返回
+    const result = await fetchProductRscFlight(config.openUrl);
+    return {
+      ...result,
+      phase: 'B',
+      mode: 'fetch_product_rsc' as const,
+      fillConfig: config.fillConfig,
+    };
+  }
+
+  if (
+    !isHttpUrl(config.collectConfig.openUrl) ||
+    !isHttpUrl(config.collectConfig.watchApiUrl)
+  ) {
     return {
       ok: false,
       error: 'invalid_config',
-      message: '单次补充配置无效：需要合法的商品 openUrl',
+      message: '列表采集配置无效：需要合法的 openUrl / watchApiUrl',
     };
   }
 
   const session = bindAdminTab(adminTabId, 'hotsell', msg.sessionId);
 
-  // 开启新任务前关掉上一次采集/补充页（保留会话，仅换页，不先清空再写）
+  // 开启新列表采集前关掉上一次采集页（保留会话，仅换页）
   const prev = getHotsellJob();
   if (prev?.captureTabId) {
     try {
@@ -98,50 +170,27 @@ export async function startHotsellJob(
     }
   }
 
-  const openUrl =
-    config.mode === 'list_collect'
-      ? config.collectConfig.openUrl
-      : config.openUrl;
+  const next: HotsellCollectJob = {
+    mode: 'list_collect',
+    sessionId: session.sessionId,
+    adminTabId,
+    captureTabId: undefined,
+    openUrl: config.collectConfig.openUrl,
+    watchApiUrl: config.collectConfig.watchApiUrl,
+    alertTip:
+      config.collectConfig.alertTip ||
+      '请在本页完成热卖数据采集操作',
+    hitCount: 0,
+    latestData: null,
+    status: 'active',
+    createdAt: Date.now(),
+  };
+  setHotsellJob(next);
 
-  // 先按模式写入完整 Job，再开页，避免 PAGE_READY 抢跑读到半旧状态
-  if (config.mode === 'list_collect') {
-    const next: HotsellCollectJob = {
-      mode: 'list_collect',
-      sessionId: session.sessionId,
-      adminTabId,
-      captureTabId: undefined,
-      openUrl: config.collectConfig.openUrl,
-      watchApiUrl: config.collectConfig.watchApiUrl,
-      alertTip:
-        config.collectConfig.alertTip ||
-        '请在本页完成热卖数据采集操作',
-      hitCount: 0,
-      latestData: null,
-      status: 'active',
-      createdAt: Date.now(),
-    };
-    setHotsellJob(next);
-  } else {
-    const next: HotsellFillJob = {
-      mode: 'detail_fill',
-      sessionId: session.sessionId,
-      adminTabId,
-      captureTabId: undefined,
-      openUrl: config.openUrl,
-      alertTip:
-        (typeof config.fillConfig.alertTip === 'string' &&
-          config.fillConfig.alertTip.trim()) ||
-        (typeof config.fillConfig.popTip === 'string' &&
-          config.fillConfig.popTip.trim()) ||
-        '请在本页完成热卖品详情补充',
-      fillConfig: config.fillConfig,
-      status: 'active',
-      createdAt: Date.now(),
-    };
-    setHotsellJob(next);
-  }
-
-  const tab = await chrome.tabs.create({ url: openUrl, active: true });
+  const tab = await chrome.tabs.create({
+    url: config.collectConfig.openUrl,
+    active: true,
+  });
   if (!tab.id) {
     setHotsellJob(null);
     return {
@@ -156,13 +205,10 @@ export async function startHotsellJob(
   return {
     ok: true,
     phase: 'B',
-    mode: config.mode,
+    mode: 'list_collect' as const,
     sessionId: session.sessionId,
     captureTabId: tab.id,
-    message:
-      config.mode === 'detail_fill'
-        ? '已打开商品页，可进行单次补充'
-        : '已打开采集页并开始监听',
+    message: '已打开采集页并开始监听',
   };
 }
 
@@ -179,7 +225,7 @@ export async function stopListCapture(): Promise<unknown> {
 }
 
 async function relaySyncToAdmin(
-  action: 'SYNC_CONFIRM' | 'FILL_CONFIRM',
+  action: 'SYNC_CONFIRM',
   data: unknown,
 ): Promise<{ ok: boolean; message?: string }> {
   const current = getHotsellJob();
@@ -209,7 +255,7 @@ async function relaySyncToAdmin(
   }
 }
 
-/** 处理敦煌页 content 发来的内部消息 */
+/** 处理敦煌页 content 发来的内部消息（仅 list_collect） */
 export async function handleHotsellInternal(
   raw: HotsellInternalMessage,
   sender: chrome.runtime.MessageSender,
@@ -236,10 +282,9 @@ export async function handleHotsellInternal(
       active: true,
       mode: job.mode,
       alertTip: job.alertTip,
-      watchApiUrl:
-        job.mode === 'list_collect' ? job.watchApiUrl : undefined,
-      hitCount: job.mode === 'list_collect' ? job.hitCount : 0,
-      hasLatest: job.mode === 'list_collect' ? job.latestData != null : false,
+      watchApiUrl: job.watchApiUrl,
+      hitCount: job.hitCount,
+      hasLatest: job.latestData != null,
     };
   }
 
@@ -248,17 +293,13 @@ export async function handleHotsellInternal(
   }
 
   if (raw.op === 'API_HIT') {
-    if (current.mode !== 'list_collect') {
-      return { ok: false, message: '当前模式不监听列表接口' };
-    }
     const next = updateHotsellJob({
       hitCount: current.hitCount + 1,
       latestData: raw.data,
     });
-    const collect = next?.mode === 'list_collect' ? next : null;
     return {
       ok: true,
-      hitCount: collect?.hitCount ?? 0,
+      hitCount: next?.hitCount ?? 0,
       hasLatest: true,
     };
   }
@@ -266,15 +307,6 @@ export async function handleHotsellInternal(
   if (raw.op === 'CONFIRM') {
     const adminTabId = current.adminTabId;
     const captureTabId = current.captureTabId;
-
-    if (current.mode === 'detail_fill') {
-      await finishAndCloseCapture(adminTabId, captureTabId);
-      return {
-        ok: true,
-        message: '补充流程占位结束（业务逻辑待接入）',
-        reserved: true,
-      };
-    }
 
     if (current.latestData == null) {
       return { ok: false, message: '尚未监听到接口数据，请先在本页触发列表加载' };

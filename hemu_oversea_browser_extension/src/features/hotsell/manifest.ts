@@ -3,8 +3,8 @@ import { startHotsellJob, stopListCapture } from './list-capture';
 
 /**
  * 热卖采集 Feature
- * - list_collect：列表采集（部分信息）
- * - detail_fill：单次补充（详细信息，业务逻辑预留）
+ * - list_collect：列表采集（部分信息，开标签 + 页内确认）
+ * - fetch_product_rsc：background 直拉商品 RSC Flight，同步回传（不开 tab）
  */
 export const hotsellFeature: FeatureModule = {
   businessType: 'hotsell',
@@ -13,8 +13,13 @@ export const hotsellFeature: FeatureModule = {
       return {
         ok: true,
         phase: 'B',
-        ready: ['PING', 'START list_collect', 'START detail_fill', 'SYNC_CONFIRM'],
-        pending: ['detail_fill business', 'FILL_CONFIRM'],
+        ready: [
+          'PING',
+          'START list_collect',
+          'START fetch_product_rsc',
+          'SYNC_CONFIRM',
+        ],
+        pending: ['batch fetch_product_rsc queue', 'ITEM_UPSERT ingest'],
       };
     }
     if (msg.action === 'START') {

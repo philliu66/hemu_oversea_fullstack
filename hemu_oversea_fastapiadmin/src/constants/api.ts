@@ -130,6 +130,8 @@ export const CommonUtilsApi = {
   DHGATE_GET_MEASURES_UNIT_LIST:
     '/api/v1/common/utils/dhgate/getmeasuresunitlist',
   DHGATE_GET_SKU_BASE_INFO: '/api/v1/common/utils/dhgate/getskubaseinfo',
+  DHGATE_FETCH_PRODUCT_RSC_DATA:
+    '/api/v1/common/utils/dhgate/fetchproductrscdata',
 } as const;
 
 /** 列表默认分页大小 */

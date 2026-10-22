@@ -1,11 +1,11 @@
 /**
  * 热卖业务模式：
- * - list_collect：列表采集（部分信息，对应 collectConfig）
- * - detail_fill：单次补充详情（对应 fillConfig + 商品 openUrl）
+ * - list_collect：列表采集（部分信息，对应 collectConfig）；需开标签页
+ * - fetch_product_rsc：插件 background 直拉商品页 RSC Flight（对应 fillConfig + 商品 openUrl）；不开新 tab
  *
  * START 用嵌套配置 + mode 判别，避免 collect/fill 同名字段（如 alertTip）扁平合并后串扰。
  */
-export type HotsellJobMode = 'list_collect' | 'detail_fill';
+export type HotsellJobMode = 'list_collect' | 'fetch_product_rsc';
 
 /** 列表采集配置（与系统配置 collectConfig 对齐） */
 export type HotsellCollectConfig = {
@@ -14,11 +14,10 @@ export type HotsellCollectConfig = {
   alertTip?: string;
 };
 
-/** 单次补充配置（与系统配置 fillConfig 对齐） */
+/** RSC 取数附加配置（与系统配置 fillConfig 对齐；预留扩展字段） */
 export type HotsellFillConfig = {
-  /** 商品页顶部提示 */
+  /** 兼容旧字段；background 直拉路径暂不展示页内 tip */
   alertTip?: string;
-  /** 兼容旧字段名 */
   popTip?: string;
   [key: string]: unknown;
 };
@@ -29,17 +28,19 @@ export type HotsellCollectPayload = {
   collectConfig: HotsellCollectConfig;
 };
 
-/** 单次补充 START payload */
-export type HotsellFillPayload = {
-  mode: 'detail_fill';
-  /** 当前商品链接（覆盖/补充 fillConfig 内可能没有的 openUrl） */
+/** 商品 RSC 取数 START payload（同步回传 Flight） */
+export type HotsellFetchProductRscPayload = {
+  mode: 'fetch_product_rsc';
+  /** 当前商品链接 */
   openUrl: string;
   fillConfig: HotsellFillConfig;
 };
 
-export type HotsellStartPayload = HotsellCollectPayload | HotsellFillPayload;
+export type HotsellStartPayload =
+  | HotsellCollectPayload
+  | HotsellFetchProductRscPayload;
 
-/** 列表采集进行中的任务 */
+/** 列表采集进行中的任务（仅 list_collect 占用 job-store） */
 export type HotsellCollectJob = {
   mode: 'list_collect';
   sessionId: string;
@@ -55,21 +56,7 @@ export type HotsellCollectJob = {
   createdAt: number;
 };
 
-/** 单次补充进行中的任务 */
-export type HotsellFillJob = {
-  mode: 'detail_fill';
-  sessionId: string;
-  adminTabId: number;
-  captureTabId?: number;
-  openUrl: string;
-  /** 仅来自 fillConfig.alertTip / popTip */
-  alertTip: string;
-  fillConfig: HotsellFillConfig;
-  status: 'active' | 'stopped';
-  createdAt: number;
-};
-
-export type HotsellJob = HotsellCollectJob | HotsellFillJob;
+export type HotsellJob = HotsellCollectJob;
 
 /** 敦煌 content ↔ background 内部消息 */
 export type HotsellInternalMessage =
@@ -117,15 +104,16 @@ export function parseStartPayload(payload: unknown): HotsellStartPayload | null 
     return null;
   }
   const o = payload as Record<string, unknown>;
-  const mode = o.mode === 'detail_fill' ? 'detail_fill' : 'list_collect';
+  const modeRaw = typeof o.mode === 'string' ? o.mode.trim() : '';
+  const mode =
+    modeRaw === 'fetch_product_rsc' ? 'fetch_product_rsc' : 'list_collect';
 
-  if (mode === 'detail_fill') {
-    const fillConfig = asRecord(o.fillConfig);
-    if (!fillConfig) return null;
+  if (mode === 'fetch_product_rsc') {
+    const fillConfig = asRecord(o.fillConfig) ?? {};
     const openUrl = readStr(o, 'openUrl') || readStr(fillConfig, 'openUrl');
     if (!openUrl) return null;
     return {
-      mode: 'detail_fill',
+      mode: 'fetch_product_rsc',
       openUrl,
       fillConfig: {
         ...fillConfig,

@@ -406,16 +406,20 @@ def extract_hotsale_data(
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionHotsaleDataExtractResult]:
     """
-    拉取敦煌商品详情页并解析入库（写入 `parse_raw_json`，状态置为已完成）。
+    解析敦煌商品详情并入库（写入 `parse_raw_json`，成功则 `collect_status=success`）。
 
-    参数二选一：
-    - `mission_data_ids`：指定任务数据 ID 数组（单个时长度为 1；须为 pending / failed）
-    - `mission_id`：批量处理该任务下全部 pending / failed 数据（跳过已完成 / 标记结束）
+    **选数（二选一）**
+    - `mission_data_ids`：指定任务数据（须为 pending / failed）
+    - `mission_id`：该任务下全部 pending / failed（跳过已完成 / 标记结束）
 
-    任务已完成 / 标记结束后仍可手动再提取失败或进行中数据。
-    提取结束后按未闭环（pending/failed）同步任务为 running/finished（人工标记结束除外），
-    并在结果中带回 `mission_status`。
-    返回成功数、失败数与失败明细，供前端提示。
+    **取数**
+    - 不传 `flight_content`：服务端按行内 `product_url` 发起 RSC 拉取后解析（后台批量）
+    - 传 `flight_content`：Flight 已由浏览器扩展拉取，服务端只解析入库、不再向上游发 RSC；
+      此时必须且仅传 1 条 `mission_data_ids`（插件单条入库；批量请前端串行多次调用）
+
+    任务已完成 / 标记结束后仍可对 pending / failed 手动再提取。
+    结束后按未闭环同步任务 `running` / `finished`（`marked_finished` 除外），
+    结果带回 `mission_status`、成功/失败数与失败明细。
     """
     assert_supplier_data_writable(current_user)
     return success(
@@ -424,6 +428,7 @@ def extract_hotsale_data(
             actor=current_user,
             mission_id=payload.mission_id,
             mission_data_ids=payload.resolved_data_ids() or None,
+            flight_content=payload.flight_content,
             supplier_id=payload.supplier_id,
         )
     )

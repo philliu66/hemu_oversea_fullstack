@@ -315,20 +315,41 @@ class MissionHotsaleDataImportResult(BaseModel):
 
 
 class MissionHotsaleDataExtract(BaseModel):
-    """热卖产品信息提取。二选一：
+    """热卖产品信息提取。
 
-    - mission_data_ids：指定任务数据 ID（单个时长度为 1）
-    - mission_id：批量提取该任务下所有 pending / failed 的任务数据
+    选数方式二选一：
+    - ``mission_data_ids``：指定任务数据 ID（单个时长度为 1；须为 pending / failed）
+    - ``mission_id``：批量提取该任务下所有 pending / failed（跳过已完成 / 标记结束）
+
+    取数方式：
+    - 不传 ``flight_content``：服务端按行内 ``product_url`` 自行发起 RSC 拉取并解析入库
+      （适合后台批量；插件批量请改为前端串行传 ``flight_content``）
+    - 传 ``flight_content``：表示 Flight 已由浏览器扩展拉取，服务端只解析入库、不再向上游发 RSC。
+      此时必须且仅能传 **1 条** ``mission_data_ids``（不可与 ``mission_id`` 同用）
     """
 
     mission_data_ids: list[int] | None = Field(
         default=None,
-        description="任务数据 ID 数组（单个时长度为 1；须为 pending / failed）",
+        description=(
+            "任务数据 ID 数组（须为 pending / failed）。"
+            "传 flight_content 时必须且仅能为 1 条"
+        ),
     )
     mission_id: int | None = Field(
         default=None,
         ge=1,
-        description="任务 ID：批量提取该任务下所有 pending / failed 数据（跳过已完成/标记结束）",
+        description=(
+            "任务 ID：服务端批量提取该任务下所有 pending / failed。"
+            "不可与 flight_content 同用"
+        ),
+    )
+    flight_content: str | None = Field(
+        default=None,
+        description=(
+            "浏览器扩展拉取的完整 RSC Flight 原文。"
+            "有值时优先解析入库，服务端不发 RSC；"
+            "须配合恰好 1 条 mission_data_ids"
+        ),
     )
     supplier_id: int | None = Field(
         default=None,
@@ -340,10 +361,22 @@ class MissionHotsaleDataExtract(BaseModel):
         has_mission = self.mission_id is not None
         ids = self.resolved_data_ids()
         has_ids = bool(ids)
+        flight = (self.flight_content or "").strip()
+        has_flight = bool(flight)
+
         if has_mission == has_ids:
             raise ValueError("请传 mission_id 或 mission_data_ids 二者之一")
         if has_ids and any(i < 1 for i in ids):
             raise ValueError("任务数据 ID 无效")
+        if has_flight:
+            if has_mission:
+                raise ValueError("传 flight_content 时不可使用 mission_id，请传单条 mission_data_ids")
+            if len(ids) != 1:
+                raise ValueError("传 flight_content 时 mission_data_ids 必须且仅能为 1 条")
+            # 归一化去掉首尾空白，避免无意义空串被当成有内容
+            self.flight_content = flight
+        else:
+            self.flight_content = None
         return self
 
     def resolved_data_ids(self) -> list[int]:

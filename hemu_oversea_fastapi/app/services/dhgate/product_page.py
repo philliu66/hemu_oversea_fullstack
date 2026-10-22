@@ -333,52 +333,34 @@ def _http_get_rsc(url: str) -> tuple[int, str, str]:
         )
 
 
-def fetch_product_page(url: str, *, include_raw: bool = False) -> dict[str, Any]:
-    """
-    拉取并解析敦煌商品详情页。
-
-    返回结构：
-    - ok / reason / message / url
-    - channel / http_status / elapsed_ms
-    - parsed：解析后的结构化数据
-    - raw / content_type：仅当 include_raw=True（联调接口）时返回完整 Flight 原文
-    """
-    safe_url = assert_dhgate_product_url(url)
-    started = time.perf_counter()
-
+def _parse_product_body(
+    *,
+    safe_url: str,
+    status_code: int | None,
+    content_type: str,
+    body: str,
+    include_raw: bool,
+    started: float,
+    skip_http_status_check: bool = False,
+) -> dict[str, Any]:
+    """根据已拿到的响应体（或客户端上送的 Flight）完成判定与解析。"""
     result: dict[str, Any] = {
         "ok": False,
         "reason": "upstream_error",
         "message": None,
         "url": safe_url,
         "channel": None,
-        "http_status": None,
-        "elapsed_ms": 0.0,
+        "http_status": status_code,
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
         "parsed": None,
     }
     if include_raw:
         result["raw"] = None
-        result["content_type"] = None
+        result["content_type"] = content_type or None
 
-    try:
-        status_code, content_type, body = _http_get_rsc(safe_url)
-    except httpx.TimeoutException:
-        result["reason"] = "upstream_error"
-        result["message"] = "请求敦煌商品页超时"
-        result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 2)
-        return result
-    except Exception as exc:
-        result["reason"] = "upstream_error"
-        result["message"] = f"请求失败: {exc}"
-        result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 2)
-        return result
-
-    result["http_status"] = status_code
-    result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 2)
-    if include_raw:
-        result["content_type"] = content_type
-
-    if status_code == 404 or _is_product_not_found_strong(body):
+    if (not skip_http_status_check and status_code == 404) or _is_product_not_found_strong(
+        body
+    ):
         result["reason"] = "not_found"
         result["message"] = "商品不存在或已下架"
         # 联调接口：下架页 body 同样带回，便于核对 soft 404 特征
@@ -397,7 +379,8 @@ def fetch_product_page(url: str, *, include_raw: bool = False) -> dict[str, Any]
         return result
 
     ctype = (content_type or "").lower()
-    if "text/x-component" in ctype:
+    if "text/x-component" in ctype or skip_http_status_check:
+        # 客户端上送的 flight_content 按 RSC Flight 原文处理
         flight = body
         channel = "rsc"
     else:
@@ -435,3 +418,79 @@ def fetch_product_page(url: str, *, include_raw: bool = False) -> dict[str, Any]
     result["reason"] = "ok"
     result["message"] = "ok"
     return result
+
+
+def fetch_product_page(
+    url: str | None = None,
+    *,
+    flight_content: str | None = None,
+    include_raw: bool = False,
+) -> dict[str, Any]:
+    """
+    拉取并解析敦煌商品详情页。
+
+    - 若提供 `flight_content`：优先按该 Flight 原文解析，不再向上游发 RSC 请求。
+    - 否则必须提供 `url`，由服务端发起 RSC 请求后再解析。
+
+    返回结构：
+    - ok / reason / message / url
+    - channel / http_status / elapsed_ms
+    - parsed：解析后的结构化数据
+    - raw / content_type：仅当 include_raw=True（联调接口）时返回完整 Flight 原文
+    """
+    started = time.perf_counter()
+    flight_in = (flight_content or "").strip()
+
+    if flight_in:
+        raw_url = (url or "").strip()
+        safe_url = assert_dhgate_product_url(raw_url) if raw_url else ""
+        return _parse_product_body(
+            safe_url=safe_url,
+            status_code=None,
+            content_type="text/x-component",
+            body=flight_in,
+            include_raw=include_raw,
+            started=started,
+            skip_http_status_check=True,
+        )
+
+    if not (url or "").strip():
+        raise bad_request("请提供敦煌商品链接或 flight_content")
+
+    safe_url = assert_dhgate_product_url(url or "")
+
+    result: dict[str, Any] = {
+        "ok": False,
+        "reason": "upstream_error",
+        "message": None,
+        "url": safe_url,
+        "channel": None,
+        "http_status": None,
+        "elapsed_ms": 0.0,
+        "parsed": None,
+    }
+    if include_raw:
+        result["raw"] = None
+        result["content_type"] = None
+
+    try:
+        status_code, content_type, body = _http_get_rsc(safe_url)
+    except httpx.TimeoutException:
+        result["reason"] = "upstream_error"
+        result["message"] = "请求敦煌商品页超时"
+        result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 2)
+        return result
+    except Exception as exc:
+        result["reason"] = "upstream_error"
+        result["message"] = f"请求失败: {exc}"
+        result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 2)
+        return result
+
+    return _parse_product_body(
+        safe_url=safe_url,
+        status_code=status_code,
+        content_type=content_type,
+        body=body,
+        include_raw=include_raw,
+        started=started,
+    )
