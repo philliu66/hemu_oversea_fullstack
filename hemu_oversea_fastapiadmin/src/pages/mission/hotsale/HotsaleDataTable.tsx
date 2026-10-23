@@ -41,8 +41,8 @@ import type {
   MissionHotsaleDataExtractResult,
   MissionHotsaleDataPublic,
 } from '@/types/api';
+import { ensureExtensionInstalled } from '@/utils/ensureExtensionInstalled';
 import {
-  pingExtension,
   requestExtension,
   subscribeExtensionMessages,
 } from '@/utils/extensionBridge';
@@ -287,6 +287,17 @@ export function HotsaleDataTable({
       const showProgress = records.length > 1;
       extractStopRef.current = false;
       extractingRef.current = true;
+      // 先关掉间隔选择等前序弹框，避免与安装引导叠层；后台运行中则保持
+      setExtractPhase((prev) => (prev === 'running_bg' ? 'running_bg' : 'idle'));
+
+      const installed = await ensureExtensionInstalled(modal);
+      if (!installed) {
+        extractingRef.current = false;
+        pendingRecordsRef.current = null;
+        extractStopRef.current = false;
+        return;
+      }
+
       // 若用户已点「后台运行」（例如任务提取拉列表阶段），保持不弹框
       setExtractPhase((prev) =>
         prev === 'running_bg' ? 'running_bg' : 'running',
@@ -297,16 +308,6 @@ export function HotsaleDataTable({
           : null,
       );
 
-      const installed = await pingExtension();
-      if (!installed) {
-        message.warning('请先安装对应的采集插件');
-        extractingRef.current = false;
-        setExtractPhase('idle');
-        setExtractProgress(null);
-        pendingRecordsRef.current = null;
-        extractStopRef.current = false;
-        return;
-      }
       if (extractStopRef.current) {
         extractingRef.current = false;
         setExtractPhase('idle');
@@ -428,6 +429,7 @@ export function HotsaleDataTable({
       loadFillConfig,
       message,
       missionId,
+      modal,
       onExtracted,
       tipExtractResult,
     ],
@@ -556,9 +558,8 @@ export function HotsaleDataTable({
 
   const sendStartToExtension = useCallback(
     async (payload: HotsellStartPayload, successText: string) => {
-      const installed = await pingExtension();
+      const installed = await ensureExtensionInstalled(modal);
       if (!installed) {
-        message.warning('请先安装对应的采集插件');
         return false;
       }
 
@@ -593,7 +594,7 @@ export function HotsaleDataTable({
       message.success(successText);
       return true;
     },
-    [message],
+    [message, modal],
   );
 
   const handleStartCollect = useCallback(async () => {

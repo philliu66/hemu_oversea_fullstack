@@ -10,6 +10,10 @@ export const EXT_BUSINESS_HOTSELL = 'hotsell' as const;
 /** 系统配置中热卖相关的 key */
 export const CONFIG_KEY_MISSION_HOTSALE_DH = 'mission_hotsale_dh_config' as const;
 
+/** 系统配置：浏览器采集插件 ZIP 下载地址 */
+export const CONFIG_KEY_EXTENSION_DOWNLOAD_URL =
+  'extension_download_url' as const;
+
 /**
  * 扩展 START.mode
  * - list_collect：列表采集（部分信息，对应 collectConfig）
