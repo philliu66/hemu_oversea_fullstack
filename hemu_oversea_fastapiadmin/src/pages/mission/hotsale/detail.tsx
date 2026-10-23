@@ -57,9 +57,6 @@ const MissionHotsaleDetailPage: React.FC = () => {
     >
       <Spin spinning={loading}>
         {mission ? <MissionInfo mission={mission} /> : null}
-        <Card style={{ marginTop: 16 }} type="inner" title="说明">
-          热卖采集执行日志与详情扩展对接后补充；任务类型不在此展示。
-        </Card>
       </Spin>
     </PageContainer>
   );

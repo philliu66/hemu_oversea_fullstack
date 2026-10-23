@@ -317,7 +317,7 @@ class MissionHotsaleDataImportResult(BaseModel):
     total: int = Field(description="本次处理条数")
     cate_name: str | None = Field(default=None, description="品类名称")
     mission_status: str = Field(
-        description="入库后同步的任务状态：有未闭环则为 running，否则 finished（人工标记结束除外）",
+        description="入库后同步的任务状态：无数据 pending；有未闭环 running；有数据且无未闭环 finished（人工标记结束除外）",
     )
 
 
@@ -426,7 +426,7 @@ class MissionHotsaleDataExtractResult(BaseModel):
     )
     mission_status: str | None = Field(
         default=None,
-        description="同步后的任务状态；有未闭环(pending/failed)为 running，否则 finished（人工标记结束除外）",
+        description="同步后的任务状态；无数据 pending；有未闭环(pending/failed)为 running；有数据且无未闭环 finished（人工标记结束除外）",
     )
 
 

@@ -418,7 +418,7 @@ def extract_hotsale_data(
       此时必须且仅传 1 条 `mission_data_ids`（插件单条入库；批量请前端串行多次调用）
 
     任务已完成 / 标记结束后仍可对 pending / failed 手动再提取。
-    结束后按未闭环同步任务 `running` / `finished`（`marked_finished` 除外），
+    结束后按数据量与未闭环同步任务 `pending` / `running` / `finished`（`marked_finished` 除外），
     结果带回 `mission_status`、成功/失败数与失败明细。
     """
     assert_supplier_data_writable(current_user)

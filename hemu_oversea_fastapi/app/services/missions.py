@@ -334,7 +334,7 @@ def get_mission(
         supplier_id=supplier_id,
     )
     assert_mission_type_perm(db, actor, mission.type)
-    # 热卖：进入详情/设置数据页时按未闭环数据同步任务状态
+    # 热卖：进入详情/设置数据页时按数据量与未闭环同步任务状态
     if mission.type == MISSION_TYPE_HOTSALE_DH:
         if _sync_hotsale_mission_status(db, mission=mission):
             db.commit()
@@ -1439,6 +1439,21 @@ def _assert_hotsale_mission_writable(mission: Mission) -> None:
         raise bad_request("该任务不是热卖采集类型")
 
 
+def _hotsale_data_total(db: Session, *, mission_id: int) -> int:
+    """任务下未删除的热卖数据总条数。"""
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(MissionDataDhHotsale)
+            .where(
+                MissionDataDhHotsale.deleted_at.is_(None),
+                MissionDataDhHotsale.mission_id == mission_id,
+            )
+        )
+        or 0
+    )
+
+
 def _hotsale_open_work_left(db: Session, *, mission_id: int) -> int:
     """未闭环条数：pending（待提取）+ failed（可重试失败）。"""
     return (
@@ -1458,22 +1473,24 @@ def _hotsale_open_work_left(db: Session, *, mission_id: int) -> int:
 
 
 def _sync_hotsale_mission_status(db: Session, *, mission: Mission) -> bool:
-    """按未闭环数据同步热卖任务状态。返回是否发生变更。
+    """按任务数据同步热卖任务状态。返回是否发生变更。
 
     - 人工 ``marked_finished``：不自动改
+    - 无任务数据 → ``pending``（新建尚未采集）
     - 存在 pending/failed → ``running``
-    - 否则 → ``finished``
+    - 有数据且无未闭环 → ``finished``
 
     注意：工程 Session 为 autoflush=False，COUNT 前必须 flush。
     """
     if mission.status == MISSION_STATUS_MARKED_FINISHED:
         return False
     db.flush()
-    desired = (
-        MISSION_STATUS_RUNNING
-        if _hotsale_open_work_left(db, mission_id=mission.id) > 0
-        else MISSION_STATUS_FINISHED
-    )
+    if _hotsale_data_total(db, mission_id=mission.id) == 0:
+        desired = MISSION_STATUS_PENDING
+    elif _hotsale_open_work_left(db, mission_id=mission.id) > 0:
+        desired = MISSION_STATUS_RUNNING
+    else:
+        desired = MISSION_STATUS_FINISHED
     if mission.status == desired:
         return False
     mission.status = desired
@@ -1510,7 +1527,7 @@ def extract_hotsale_product_pages(
 
     成功时写入 parse_raw_json，collect_status=success 并清空 collect_msg。
     失败时 collect_status=failed，collect_msg 写入原因。
-    结束后按未闭环（pending/failed）同步任务 running/finished（人工标记结束除外）。
+    结束后按数据量与未闭环同步任务 pending/running/finished（人工标记结束除外）。
     """
     assert_mission_type_perm(db, actor, MISSION_TYPE_HOTSALE_DH, suffix="data")
 
