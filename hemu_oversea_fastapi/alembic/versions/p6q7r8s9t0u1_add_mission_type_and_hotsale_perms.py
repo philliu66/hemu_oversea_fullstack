@@ -51,6 +51,7 @@ def upgrade() -> None:
     for code, ptype, title, path, sort_order in _HOTSALE_PERMS:
         parent_code = "mission" if code == "mission.hotsale" else "mission.hotsale"
         parent_id = parent_ids[parent_code]
+        # 仅写入权限目录；供应商开通池需平台主动分配，不在此自动下放
         perm_id = conn.execute(
             sa.text(
                 """
@@ -78,18 +79,6 @@ def upgrade() -> None:
             },
         ).scalar_one()
         parent_ids[code] = perm_id
-        conn.execute(
-            sa.text(
-                """
-                INSERT INTO supplier_permissions (supplier_id, permission_id)
-                SELECT s.id, :perm_id
-                FROM suppliers s
-                WHERE s.deleted_at IS NULL
-                ON CONFLICT DO NOTHING
-                """
-            ),
-            {"perm_id": perm_id},
-        )
 
 
 def downgrade() -> None:

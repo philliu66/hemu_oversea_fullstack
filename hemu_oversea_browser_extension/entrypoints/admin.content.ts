@@ -13,9 +13,10 @@ import { ADMIN_PAGE_SOURCE, EXT_SOURCE, PROTOCOL_VERSION } from '../src/shared/c
  * - background → 页面：把 SYNC_CONFIRM 等回传 postMessage 到页面
  *
  * 不在页面加载时主动 PING。
+ * 注入域名与 wxt.config.ts 的 adminMatches 保持一致。
  */
 export default defineContentScript({
-  matches: ['http://localhost/*', 'http://127.0.0.1/*'],
+  matches: ['http://localhost/*', 'https://*.xiaohemu.net/*'],
   runAt: 'document_idle',
   main() {
     window.addEventListener('message', (event: MessageEvent) => {

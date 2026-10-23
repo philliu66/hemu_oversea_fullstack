@@ -15,15 +15,18 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError, bad_request
+from app.core.errors import AppError, bad_request, forbidden
 from app.models.product_dh import ProductDh
 from app.models.store import Store
+from app.models.user import User
 from app.services.dhgate.client import DhgateClient
 from app.services.dhgate.items import get_item
 from app.services.dhgate.store_context import (
     get_dhgate_client_by_identifier,
+    get_dhgate_store,
     get_dhgate_store_by_identifier,
 )
+from app.services.supplier_scope import is_supplier_portal_role
 
 logger = logging.getLogger("app")
 
@@ -296,6 +299,66 @@ def persist_item_detail(
         "item_name": product.item_name,
         "sync_state": product.sync_state,
         "sync_state_desc": _SYNC_OK_DESC,
+    }
+
+
+def sync_single_product_dh(
+    db: Session,
+    *,
+    actor: User,
+    store_id: int,
+    item_code: str,
+    site_id: str = _DEFAULT_SITE_ID,
+) -> dict[str, Any]:
+    """
+    按店铺 ID + 商品编码同步单个敦煌商品（底层复用 sync_products_dh）。
+
+    - 已存在同 store+item_code+site 记录则更新
+    - 供应商门户仅可同步本供应商店铺
+    - 单条失败不抛业务异常，以 ok=False 返回，便于前端批量循环
+    """
+    code = _as_str(item_code)
+    if not code:
+        raise bad_request("item_code 不能为空")
+    site = (_as_str(site_id) or _DEFAULT_SITE_ID).upper()
+
+    store = get_dhgate_store(db, store_id)
+    if is_supplier_portal_role(actor.role):
+        if store.supplier_id is None or store.supplier_id != actor.supplier_id:
+            raise forbidden("无权同步该店铺商品")
+
+    batch = sync_products_dh(
+        db,
+        items=[
+            {
+                "store_identifier": store.identifier,
+                "item_code": code,
+                "site_id": site,
+            }
+        ],
+        site_id_default=site,
+    )
+    if batch.get("success_count"):
+        saved = batch["success"][0]
+        return {
+            "ok": True,
+            "store_id": store.id,
+            "item_code": code,
+            "site_id": site,
+            "product_id": saved.get("product_id"),
+            "sync_state": saved.get("sync_state") or _SYNC_OK,
+            "message": None,
+        }
+
+    fail = (batch.get("failed") or [{}])[0]
+    return {
+        "ok": False,
+        "store_id": store.id,
+        "item_code": code,
+        "site_id": site,
+        "product_id": fail.get("product_id"),
+        "sync_state": fail.get("sync_state") or _SYNC_FAIL,
+        "message": fail.get("message") or "同步失败",
     }
 
 

@@ -221,6 +221,13 @@ class MissionFissionDataPublic(BaseModel):
     item_name: str | None = None
     main_image_url: str | None = None
     update_json: dict[str, Any]
+    sku_models: list[str] = Field(
+        default_factory=list,
+        description=(
+            "产品型号标签：取自 raw_json.sku_list，"
+            "按定价参考同款正则清洗并去重；无 sku_list 时为空"
+        ),
+    )
     fission_status: str
     fission_msg: str | None
     fission_at: datetime | None = None

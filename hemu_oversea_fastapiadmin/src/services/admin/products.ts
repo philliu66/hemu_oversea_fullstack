@@ -7,6 +7,8 @@ import type {
   DhProductPublic,
   DhProductPublishParams,
   DhProductPublishPublic,
+  DhProductSyncParams,
+  DhProductSyncPublic,
   DhSkuListPriceParams,
   DhSkuListPricePublic,
   PageData,
@@ -95,6 +97,29 @@ export async function fetchDhSkuListPrice(
   return requireData(
     unwrapApiData<DhSkuListPricePublic>(res),
     '计算 SKU 标价失败',
+  );
+}
+
+/** POST /api/v1/admin/product/dh/sync */
+export async function syncDhProduct(
+  params: DhProductSyncParams,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<DhProductSyncPublic>>(
+    AdminProductApi.DH_PRODUCT_SYNC,
+    {
+      method: 'POST',
+      data: {
+        store_id: params.store_id,
+        item_code: params.item_code,
+        site_id: params.site_id ?? 'EN',
+      },
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<DhProductSyncPublic>(res),
+    '同步敦煌商品失败',
   );
 }
 

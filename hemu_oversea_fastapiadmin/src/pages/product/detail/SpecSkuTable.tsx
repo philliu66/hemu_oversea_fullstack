@@ -15,7 +15,6 @@ import {
   Typography,
 } from 'antd';
 import React, { useMemo, useState } from 'react';
-import { fetchDhSkuListPrice } from '@/services/admin/products';
 import { fetchDhSkuBaseInfo } from '@/services/common/utils';
 import type {
   DhCommissionUnitPublic,
@@ -26,11 +25,8 @@ import type {
   StoreBaseDiscountPublic,
 } from '@/types/api';
 import { resolveRequestSupplierId } from '@/utils/portalScope';
-import {
-  REF_PRICING_CATE_ID,
-  collectDistinctSkuSpecModels,
-  extractSkuSpecModel,
-} from './CommissionRateHint';
+import { collectDistinctSkuSpecModels } from './CommissionRateHint';
+import { applyAutoSkuRetailPrices } from './skuAutoPrice';
 
 function useScopedSupplierId(propSupplierId?: number | null): number | undefined {
   const { initialState } = useModel('@@initialState');
@@ -620,54 +616,21 @@ const SpecSkuTable: React.FC<SpecSkuTableProps> = ({
 
     setAutoPriceLoading(true);
     try {
-      const priceByModel = new Map<string, number>();
-      let failedCount = 0;
-      await Promise.all(
-        models.map(async (item) => {
-          try {
-            const data = await fetchDhSkuListPrice(
-              {
-                supplier_id: supplierId,
-                sku_code: item.sampleSkuCode,
-                store_id: storeId,
-                cate_id: REF_PRICING_CATE_ID,
-              },
-              { skipErrorHandler: true },
-            );
-            const price = Number(data.list_price);
-            if (Number.isFinite(price)) {
-              priceByModel.set(item.model, Number(price.toFixed(2)));
-            } else {
-              failedCount += 1;
-            }
-          } catch {
-            failedCount += 1;
-          }
-        }),
-      );
-
-      if (priceByModel.size === 0) {
+      const result = await applyAutoSkuRetailPrices(list, {
+        supplierId,
+        storeId,
+      });
+      if (result.updatedCount === 0) {
         message.error('未能获取任何 SKU 标价，请检查基础信息与佣金/折扣配置');
         return;
       }
-
-      let updatedCount = 0;
-      const next = list.map((sku) => {
-        const model = extractSkuSpecModel(sku.sku_code);
-        if (!model || !priceByModel.has(model)) {
-          return sku;
-        }
-        updatedCount += 1;
-        return { ...sku, retail_price: priceByModel.get(model)! };
-      });
-      onChange?.(next);
-
-      if (failedCount > 0) {
+      onChange?.(result.next);
+      if (result.failedCount > 0) {
         message.warning(
-          `已更新 ${updatedCount} 条预计收入；${failedCount} 个型号获取标价失败`,
+          `已更新 ${result.updatedCount} 条预计收入；${result.failedCount} 个型号获取标价失败`,
         );
       } else {
-        message.success(`已按标价自动设置 ${updatedCount} 条预计收入`);
+        message.success(`已按标价自动设置 ${result.updatedCount} 条预计收入`);
       }
     } finally {
       setAutoPriceLoading(false);

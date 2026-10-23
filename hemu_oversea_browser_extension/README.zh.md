@@ -101,7 +101,7 @@ entrypoints/        # WXT 入口：background、admin/dhgate content 等
 - 面板「开始采集」→ `SYNC_CONFIRM` 回传最新响应；「取消」结束任务
 - 管理端：接收回传并 `console.log`（见对接文档）
 
-开发：`npm install && npm run dev`，加载 `.output` 下 Chrome 产物。详情队列为阶段 C。
+开发：`npm install && npm run dev`，加载 `.output` 下 Chrome 产物。管理端注入域名写在 `wxt.config.ts` 与 `entrypoints/admin.content.ts`（见 [docs/ADMIN_BRIDGE.zh.md](./docs/ADMIN_BRIDGE.zh.md)）。详情队列为阶段 C。
 
 ---
 

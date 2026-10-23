@@ -1,10 +1,12 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import {
   App,
   Button,
   Image,
   Popconfirm,
+  Popover,
   Space,
   Tag,
   Typography,
@@ -199,6 +201,14 @@ export function FissionDataTable({
           <div style={{ minWidth: 0, flex: 1 }}>
             <Typography.Paragraph
               ellipsis={{ rows: 2, tooltip: record.item_name || undefined }}
+              copyable={
+                (record.item_name || '').trim()
+                  ? {
+                      text: record.item_name || '',
+                      tooltips: ['复制', '已复制'],
+                    }
+                  : false
+              }
               style={{ marginBottom: 4 }}
             >
               {record.item_name || '-'}
@@ -215,12 +225,49 @@ export function FissionDataTable({
       ),
     },
     {
-      title: '店铺',
+      title: '店铺名称',
       dataIndex: 'store_name',
       search: false,
-      width: 140,
-      ellipsis: true,
-      render: (_, record) => record.store_name || String(record.store_id),
+      ellipsis: false,
+      onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+      render: (_, record) => {
+        const text =
+          (record.store_name || '').trim() ||
+          (record.store_id != null ? String(record.store_id) : '');
+        if (!text) {
+          return '-';
+        }
+        return (
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {text}
+            <Typography.Text
+              copyable={{ text, tooltips: ['复制', '已复制'] }}
+              style={{ marginLeft: 4 }}
+            />
+          </span>
+        );
+      },
+    },
+    {
+      title: '产品型号',
+      dataIndex: 'sku_models',
+      search: false,
+      width: 180,
+      render: (_, record) => {
+        const models = record.sku_models || [];
+        if (!models.length) {
+          return '-';
+        }
+        return (
+          <Space size={[4, 4]} wrap>
+            {models.map((model) => (
+              <Tag key={model} style={{ marginInlineEnd: 0 }}>
+                {model}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
     },
     {
       title: '裂变状态',
@@ -237,29 +284,41 @@ export function FissionDataTable({
         failed: { text: '失败' },
         marked_finished: { text: '标记结束' },
       },
-      width: 200,
+      width: 120,
       render: (_, record) => {
-        const msg = (record.fission_msg || '').trim();
+        const msg =
+          record.fission_status === 'failed'
+            ? (record.fission_msg || '').trim()
+            : '';
         return (
-          <div style={{ minWidth: 0, maxWidth: 200 }}>
-            <Tag color={FISSION_COLOR[record.fission_status]}>
-              {statusLabel(record.fission_status)}
-            </Tag>
+          <Tag
+            color={FISSION_COLOR[record.fission_status]}
+            style={{ marginInlineEnd: 0 }}
+          >
+            {statusLabel(record.fission_status)}
             {msg ? (
-              <Typography.Paragraph
-                type="secondary"
-                ellipsis={{ rows: 1, tooltip: msg }}
-                style={{
-                  marginBottom: 0,
-                  marginTop: 4,
-                  fontSize: 12,
-                  lineHeight: 1.4,
-                }}
+              <Popover
+                trigger="click"
+                title="失败信息"
+                content={
+                  <div
+                    style={{
+                      maxWidth: 360,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {msg}
+                  </div>
+                }
               >
-                {msg}
-              </Typography.Paragraph>
+                <InfoCircleOutlined
+                  style={{ marginLeft: 4, cursor: 'pointer' }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </Popover>
             ) : null}
-          </div>
+          </Tag>
         );
       },
     },
@@ -411,7 +470,7 @@ export function FissionDataTable({
         actionRef={actionRef}
         rowKey="id"
         search={{ labelWidth: 'auto' }}
-        scroll={{ x: 1140 }}
+        scroll={{ x: 'max-content' }}
         headerTitle={'任务数据'}
         pagination={{
           defaultPageSize: PAGE_SIZE_DEFAULT,

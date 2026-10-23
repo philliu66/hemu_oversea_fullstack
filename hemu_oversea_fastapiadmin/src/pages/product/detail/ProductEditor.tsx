@@ -101,6 +101,23 @@ import {
   type CustomAttrDraft,
   type ProductFormValues,
 } from './productFormMapping';
+import { applyAutoSkuRetailPrices } from './skuAutoPrice';
+
+const SKU_PRICE_FILL_BLOCKED = 'sku-price-fill-blocked';
+
+type SkuPriceFillStatus = 'applied' | 'failed' | 'none' | 'superseded';
+
+export function isSkuPriceFillBlocked(error: unknown): boolean {
+  return error instanceof Error && error.message === SKU_PRICE_FILL_BLOCKED;
+}
+
+function toPositiveId(value: unknown): number | undefined {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(num) || num <= 0) {
+    return undefined;
+  }
+  return num;
+}
 
 const CHANGED_COLOR = '#cf1322';
 const DH_CUSTOM_ATTR_MAX_COUNT = 20;
@@ -206,6 +223,11 @@ export type ProductEditorProps = {
    * 用于裂变「手动添加」第二步；baseline 仍保留原标题供 diff。
    */
   seedTitleAsItemNamePlaceholder?: boolean;
+  /**
+   * 用户切换店铺后，按「自动设置」同一套定价规则重算并回填 SKU 预计收入。
+   * 仅裂变「手动添加」第二步开启。切换分类不重算：佣金费率按写死的美容仪类目，与所选分类无关。
+   */
+  autoFillSkuPriceOnStoreChange?: boolean;
   /** 显式供应商作用域（优先于 URL / 当前用户绑定） */
   supplierId?: number;
 };
@@ -225,6 +247,7 @@ export const ProductEditor = forwardRef<
     embedded = false,
     applySkuAttrTemplateOnCategoryChange = false,
     seedTitleAsItemNamePlaceholder = false,
+    autoFillSkuPriceOnStoreChange = false,
     supplierId: supplierIdProp,
   },
   ref,
@@ -292,6 +315,8 @@ export const ProductEditor = forwardRef<
   const categoryAttrsReqRef = useRef(0);
   const commissionRateReqRef = useRef(0);
   const baselineItemGroupIdRef = useRef<string | null | undefined>(undefined);
+  const skuPriceReqRef = useRef(0);
+  const skuPriceTaskRef = useRef<Promise<SkuPriceFillStatus> | null>(null);
 
   const displayCategory = pickedCategory ?? baseDetail?.category ?? null;
   /** 规格卡片标红：仅定价属性变更，不含普通类目属性 */
@@ -328,6 +353,19 @@ export const ProductEditor = forwardRef<
       },
       isReady: () => Boolean(baselineRef.current) && !loading,
       validate: async () => {
+        let pending = skuPriceTaskRef.current;
+        while (pending) {
+          const result = await pending;
+          const next = skuPriceTaskRef.current;
+          if (next && next !== pending) {
+            pending = next;
+            continue;
+          }
+          if (result === 'failed') {
+            throw new Error(SKU_PRICE_FILL_BLOCKED);
+          }
+          break;
+        }
         await form.validateFields([...PRODUCT_EDITOR_REQUIRED_FIELDS]);
       },
     }),
@@ -627,6 +665,96 @@ export const ProductEditor = forwardRef<
     ],
   );
 
+  const fillSkuPricesForStore = useCallback(
+    (storeId: unknown) => {
+      const reqId = skuPriceReqRef.current + 1;
+      skuPriceReqRef.current = reqId;
+      const nextStoreId = toPositiveId(storeId);
+      const run = (async (): Promise<SkuPriceFillStatus> => {
+        if (!nextStoreId) {
+          return 'none';
+        }
+        if (typeof supplierId !== 'number' || supplierId <= 0) {
+          if (skuPriceReqRef.current !== reqId) {
+            return 'superseded';
+          }
+          modal.warning({
+            title: '未能自动计算 SKU 价格',
+            content: '未指定供应商，无法按新店铺重新计算 SKU 价格。',
+          });
+          return 'failed';
+        }
+        const hide = message.loading('正在根据新店铺计算 SKU 价格…', 0);
+        try {
+          const skuList = (form.getFieldValue('sku_list') ||
+            []) as DhProductSkuPublic[];
+          const result = await applyAutoSkuRetailPrices(skuList, {
+            supplierId,
+            storeId: nextStoreId,
+          });
+          if (skuPriceReqRef.current !== reqId) {
+            return 'superseded';
+          }
+          if (result.modelCount === 0) {
+            modal.warning({
+              title: '未能自动计算 SKU 价格',
+              content: '暂无可识别的 SKU 型号，未重新填充价格。',
+            });
+            return 'none';
+          }
+          if (result.updatedCount === 0) {
+            modal.error({
+              title: '未能自动计算 SKU 价格',
+              content:
+                '未能获取任何 SKU 标价，请检查基础信息与佣金/折扣配置。当前价格未改动。',
+            });
+            return 'failed';
+          }
+          form.setFieldsValue({ sku_list: result.next });
+          if (result.failedCount > 0) {
+            modal.warning({
+              title: '已自动计算 SKU 价格',
+              content: `已根据新店铺的定价规则自动计算并填充 ${result.updatedCount} 条 SKU 价格；${result.failedCount} 个型号获取标价失败，请核对。`,
+            });
+          } else {
+            modal.success({
+              title: '已自动计算 SKU 价格',
+              content: `已根据新店铺的定价规则自动计算并填充 ${result.updatedCount} 条 SKU 价格。`,
+            });
+          }
+          return 'applied';
+        } catch (error) {
+          if (skuPriceReqRef.current !== reqId) {
+            return 'superseded';
+          }
+          modal.error({
+            title: '未能自动计算 SKU 价格',
+            content:
+              error instanceof Error
+                ? error.message
+                : '计算 SKU 价格失败，当前价格未改动。',
+          });
+          return 'failed';
+        } finally {
+          hide();
+        }
+      })();
+      skuPriceTaskRef.current = run;
+      void run.finally(() => {
+        if (skuPriceTaskRef.current === run) {
+          skuPriceTaskRef.current = null;
+        }
+      });
+    },
+    [form, message, modal, supplierId],
+  );
+
+  useEffect(() => {
+    return () => {
+      skuPriceReqRef.current += 1;
+    };
+  }, []);
+
   const routeInvalid =
     !embedded &&
     ((mode === 'view' || mode === 'edit') && !productId
@@ -669,6 +797,10 @@ export const ProductEditor = forwardRef<
               after_sale_template_id: null,
               shipping_model_id: null,
             });
+            // 分类变更不重算：佣金费率目前按写死的美容仪类目，与所选分类无关。
+            if (autoFillSkuPriceOnStoreChange) {
+              fillSkuPricesForStore(changedValues.store_id);
+            }
           }
         }}
       >

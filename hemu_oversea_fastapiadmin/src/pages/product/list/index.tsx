@@ -2,14 +2,29 @@ import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useAccess, useModel } from '@umijs/max';
-import { App, Button, Image, Space, Typography } from 'antd';
+import {
+  App,
+  Button,
+  Image,
+  Input,
+  Modal,
+  Popconfirm,
+  Popover,
+  Progress,
+  Select,
+  Space,
+  Typography,
+} from 'antd';
 import type { CascaderProps, DefaultOptionType } from 'antd/es/cascader';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { buildPlatformSupplierSearchColumn } from '@/components/SupplierSelectField';
 import { PAGE_SIZE_DEFAULT } from '@/constants/api';
 import { DH_PRODUCT_STATE_LABEL, DH_PRODUCT_STATES } from '@/constants/product';
 import { fetchDhSeedCategories } from '@/services/admin/categories';
-import { fetchDhProductList } from '@/services/admin/products';
+import {
+  fetchDhProductList,
+  syncDhProduct,
+} from '@/services/admin/products';
 import { fetchStoreList } from '@/services/admin/stores';
 import type {
   DhProductPublic,
@@ -27,6 +42,20 @@ import {
   productDetailPath,
   productEditPath,
 } from '../utils';
+
+function parseItemCodes(raw: string): string[] {
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  for (const part of raw.split(/[,，]/)) {
+    const code = part.trim();
+    if (!code || seen.has(code)) {
+      continue;
+    }
+    seen.add(code);
+    codes.push(code);
+  }
+  return codes;
+}
 
 type ProductTableParams = {
   current?: number;
@@ -108,6 +137,14 @@ const ProductList: React.FC = () => {
   const [categoryOptions, setCategoryOptions] = useState<SeedCategoryOption[]>(
     [],
   );
+  const [createPopoverOpen, setCreatePopoverOpen] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncStoreId, setSyncStoreId] = useState<number>();
+  const [syncItemCodesText, setSyncItemCodesText] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncDone, setSyncDone] = useState(0);
+  const [syncTotal, setSyncTotal] = useState(0);
+  const [rowSyncingId, setRowSyncingId] = useState<number>();
 
   useEffect(() => {
     if (needsSupplierSelection(currentUser, supplierId) || !supplierId) {
@@ -380,46 +417,171 @@ const ProductList: React.FC = () => {
       render: (_, record) => record.state || '-',
     },
     {
-      title: '同步状态',
-      dataIndex: 'sync_state',
-      search: false,
-      width: 100,
-      render: (_, record) =>
-        formatSyncState(
-          record.sync_state,
-          '成功',
-          '失败',
-        ),
-    },
-    {
-      title: '同步时间',
-      dataIndex: 'last_synced_at',
+      title: '同步',
+      dataIndex: 'sync',
       search: false,
       width: 168,
-      render: (_, record) => formatDateTime(record.last_synced_at),
+      render: (_, record) => (
+        <div style={{ lineHeight: 1.4 }}>
+          <div>
+            {formatSyncState(record.sync_state, '成功', '失败')}
+          </div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {formatDateTime(record.last_synced_at) || '-'}
+          </Typography.Text>
+        </div>
+      ),
     },
-    // 操作列暂时隐藏，进入商品只保留点击标题进入编辑。
-    // 恢复时需重新引入 productDetailPath、productCreatePath。
-    // {
-    //   title: '操作',
-    //   dataIndex: 'option',
-    //   valueType: 'option',
-    //   search: false,
-    //   width: 200,
-    //   fixed: 'right',
-    //   render: (_, record) => [
-    //     <Button type="link" key="detail" onClick={() => history.push(productDetailPath(record.id))}>
-    //       {'查看'}
-    //     </Button>,
-    //     <Button type="link" key="edit" onClick={() => history.push(productEditPath(record.id))}>
-    //       {'编辑'}
-    //     </Button>,
-    //     <Button type="link" key="copy" onClick={() => history.push(productCreatePath({ from: record.id }))}>
-    //       {'复制'}
-    //     </Button>,
-    //   ],
-    // },
+    {
+      title: '操作',
+      dataIndex: 'option',
+      valueType: 'option',
+      search: false,
+      width: 220,
+      fixed: 'right',
+      render: (_, record) => {
+        const sid = supplierId ?? record.supplier_id ?? undefined;
+        const actions: React.ReactNode[] = [
+          <Button
+            key="detail"
+            color="default"
+            variant="filled"
+            size="small"
+            shape="round"
+            onClick={() =>
+              history.push(productDetailPath(record.id, { supplierId: sid }))
+            }
+          >
+            查看详情
+          </Button>,
+        ];
+        if (
+          access.canWriteSupplierData &&
+          access.can('product.list.sync')
+        ) {
+          actions.push(
+            <Popconfirm
+              key="sync"
+              title="确认同步该商品数据？"
+              disabled={rowSyncingId === record.id || syncing}
+              onConfirm={async () => {
+                setRowSyncingId(record.id);
+                try {
+                  const result = await syncDhProduct({
+                    store_id: record.store_id,
+                    item_code: record.item_code,
+                  });
+                  if (result.ok) {
+                    message.success('同步成功');
+                    actionRef.current?.reload();
+                  } else {
+                    message.error(result.message || '同步失败');
+                    actionRef.current?.reload();
+                  }
+                } catch {
+                  // 错误已由全局拦截器处理
+                } finally {
+                  setRowSyncingId(undefined);
+                }
+              }}
+            >
+              <Button
+                type="primary"
+                size="small"
+                shape="round"
+                loading={rowSyncingId === record.id}
+                disabled={syncing}
+              >
+                同步商品
+              </Button>
+            </Popconfirm>,
+          );
+        }
+        return (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, max-content)',
+              gap: 8,
+              justifyContent: 'start',
+            }}
+          >
+            {actions}
+          </div>
+        );
+      },
+    },
   ];
+
+  const openSyncModal = () => {
+    setCreatePopoverOpen(false);
+    setSyncStoreId(undefined);
+    setSyncItemCodesText('');
+    setSyncing(false);
+    setSyncDone(0);
+    setSyncTotal(0);
+    setSyncModalOpen(true);
+  };
+
+  const handleManualCreate = () => {
+    setCreatePopoverOpen(false);
+    history.push(
+      productCreatePath({
+        supplierId: supplierId,
+      }),
+    );
+  };
+
+  const handleStartSync = async () => {
+    if (!syncStoreId) {
+      message.warning('请选择店铺');
+      return;
+    }
+    const codes = parseItemCodes(syncItemCodesText);
+    if (!codes.length) {
+      message.warning('请输入至少一个商品编码');
+      return;
+    }
+
+    setSyncing(true);
+    setSyncTotal(codes.length);
+    setSyncDone(0);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < codes.length; i += 1) {
+      const itemCode = codes[i];
+      try {
+        const result = await syncDhProduct(
+          { store_id: syncStoreId, item_code: itemCode },
+          { skipErrorHandler: true },
+        );
+        if (result.ok) {
+          successCount += 1;
+        } else {
+          failCount += 1;
+        }
+      } catch {
+        failCount += 1;
+      }
+      setSyncDone(i + 1);
+    }
+
+    setSyncing(false);
+    setSyncModalOpen(false);
+    actionRef.current?.reload();
+    const tip = `同步完成：成功 ${successCount} 个，失败 ${failCount} 个`;
+    if (failCount > 0 && successCount > 0) {
+      message.warning(tip);
+    } else if (failCount > 0) {
+      message.error(tip);
+    } else {
+      message.success(tip);
+    }
+  };
+
+  const syncPercent =
+    syncTotal > 0 ? Math.round((syncDone / syncTotal) * 100) : 0;
 
   return (
     <PageContainer>
@@ -439,20 +601,29 @@ const ProductList: React.FC = () => {
         toolBarRender={() =>
           access.canWriteSupplierData
             ? [
-                <Button
-                  type="primary"
+                <Popover
                   key="create"
-                  icon={<PlusOutlined />}
-                  onClick={() =>
-                    history.push(
-                      productCreatePath({
-                        supplierId: supplierId,
-                      }),
-                    )
+                  trigger="click"
+                  open={createPopoverOpen}
+                  onOpenChange={setCreatePopoverOpen}
+                  placement="bottomLeft"
+                  content={
+                    <Space direction="vertical" style={{ minWidth: 120 }}>
+                      <Button type="link" onClick={handleManualCreate}>
+                        手动新建
+                      </Button>
+                      {access.can('product.list.sync') ? (
+                        <Button type="link" onClick={openSyncModal}>
+                          敦煌同步
+                        </Button>
+                      ) : null}
+                    </Space>
                   }
                 >
-                  {'新建'}
-                </Button>,
+                  <Button type="primary" icon={<PlusOutlined />}>
+                    {'新建'}
+                  </Button>
+                </Popover>,
               ]
             : []
         }
@@ -499,6 +670,88 @@ const ProductList: React.FC = () => {
           };
         }}
       />
+      <Modal
+        title="敦煌同步"
+        open={syncModalOpen}
+        centered
+        destroyOnClose
+        maskClosable={false}
+        keyboard={!syncing}
+        closable={!syncing}
+        onCancel={() => {
+          if (!syncing) {
+            setSyncModalOpen(false);
+          }
+        }}
+        footer={
+          syncing
+            ? null
+            : [
+                <Button key="cancel" onClick={() => setSyncModalOpen(false)}>
+                  取消
+                </Button>,
+                <Button key="ok" type="primary" onClick={() => void handleStartSync()}>
+                  开始同步
+                </Button>,
+              ]
+        }
+      >
+        {syncing ? (
+          <div style={{ paddingTop: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <Progress
+                percent={syncPercent}
+                status="active"
+                style={{ flex: 1, marginBottom: 0 }}
+                showInfo={false}
+              />
+              <Typography.Text style={{ whiteSpace: 'nowrap' }}>
+                {`${syncDone}/${syncTotal}`}
+              </Typography.Text>
+            </div>
+            <Typography.Text type="secondary" style={{ marginTop: 12, display: 'block' }}>
+              正在同步敦煌商品，请稍候…
+            </Typography.Text>
+          </div>
+        ) : (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <div>
+              <Typography.Text style={{ display: 'block', marginBottom: 8 }}>
+                店铺
+              </Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                placeholder="请选择店铺"
+                value={syncStoreId}
+                onChange={(value) => setSyncStoreId(value)}
+                options={stores.map((store) => ({
+                  value: store.id,
+                  label: store.name,
+                }))}
+                showSearch
+                optionFilterProp="label"
+              />
+            </div>
+            <div>
+              <Typography.Text style={{ display: 'block', marginBottom: 8 }}>
+                产品编码
+              </Typography.Text>
+              <Input.TextArea
+                rows={4}
+                value={syncItemCodesText}
+                onChange={(e) => setSyncItemCodesText(e.target.value)}
+                placeholder="可输入多个编码，用逗号,分割批量同步"
+              />
+            </div>
+          </Space>
+        )}
+      </Modal>
     </PageContainer>
   );
 };

@@ -428,6 +428,23 @@ export type DhProductListParams = {
   supplier_id?: number;
 };
 
+/** POST /api/v1/admin/product/dh/sync */
+export type DhProductSyncParams = {
+  store_id: number;
+  item_code: string;
+  site_id?: 'EN' | 'RU' | 'ES' | 'ID';
+};
+
+export type DhProductSyncPublic = {
+  ok: boolean;
+  store_id: number;
+  item_code: string;
+  site_id: string;
+  product_id?: number | null;
+  sync_state?: string | null;
+  message?: string | null;
+};
+
 /** 敦煌商品列表项（与后端 DhProductPublic 对齐） */
 export type DhProductPublic = {
   id: number;
@@ -943,6 +960,8 @@ export type MissionFissionDataPublic = {
   item_name?: string | null;
   main_image_url?: string | null;
   update_json: Record<string, unknown>;
+  /** 产品型号：SKU 编码正则清洗去重后的标签列表 */
+  sku_models?: string[];
   fission_status: FissionStatus;
   fission_msg: string | null;
   fission_at?: string | null;

@@ -70,6 +70,7 @@ export const AdminProductApi = {
   DH_PRODUCT_LIST: '/api/v1/admin/product/dh/list',
   DH_PRODUCT_DETAIL: '/api/v1/admin/product/dh/detail',
   DH_SKU_LIST_PRICE: '/api/v1/admin/product/dh/skulistprice/get',
+  DH_PRODUCT_SYNC: '/api/v1/admin/product/dh/sync',
   DH_PRODUCT_PUBLISH: '/api/v1/admin/product/dh/publish',
 } as const;
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.deps import Pagination, require_admin_user
+from app.core.deps import Pagination, require_admin_user, require_perm
 from app.models.user import User
 from app.schemas.common import ApiResponse, PageData, success
 from app.schemas.product import (
@@ -14,11 +14,14 @@ from app.schemas.product import (
     DhProductPublic,
     DhProductPublishPublic,
     DhProductPublishRequest,
+    DhProductSyncPublic,
+    DhProductSyncRequest,
     DhSkuListPricePublic,
     DhSkuListPriceRequest,
 )
 from app.services import product_publish as product_publish_service
 from app.services import products as product_service
+from app.services import products_dh as products_dh_service
 from app.services.sku_list_prices import calc_sku_list_price
 from app.services.supplier_scope import (
     assert_supplier_data_writable,
@@ -116,6 +119,35 @@ def get_dh_sku_list_price(
             cate_id=payload.cate_id,
         )
     )
+
+
+@router.post(
+    "/dh/sync",
+    response_model=ApiResponse[DhProductSyncPublic],
+    summary="同步敦煌单个商品",
+)
+def sync_dh_product(
+    payload: DhProductSyncRequest,
+    current_user: User = Depends(require_perm("product.list.sync")),
+    db: Session = Depends(get_db),
+) -> ApiResponse[DhProductSyncPublic]:
+    """
+    按店铺 ID + 商品编码拉取 dh.item.get 并写入 product_dh。
+
+    - 底层复用 testAPI `/dhgate/commerce/product/sync` 同一套 sync_products_dh
+    - 同店铺 + 编码 + 站点已存在则更新，否则新建
+    - 单条失败时仍返回 200，`ok=false` 与失败原因，便于前端批量循环
+    - 需要按钮权限 `product.list.sync`
+    """
+    assert_supplier_data_writable(current_user)
+    result = products_dh_service.sync_single_product_dh(
+        db,
+        actor=current_user,
+        store_id=payload.store_id,
+        item_code=payload.item_code,
+        site_id=payload.site_id,
+    )
+    return success(DhProductSyncPublic.model_validate(result))
 
 
 @router.post(

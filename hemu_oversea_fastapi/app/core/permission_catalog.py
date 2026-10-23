@@ -1,4 +1,9 @@
-"""权限目录种子数据。code 与前端 routeId / 按钮码对齐。"""
+"""权限目录种子数据。code 与前端 routeId / 按钮码对齐。
+
+新增供应商 scope 权限时：只登记本目录；不要在迁移里批量写入
+supplier_permissions。开通由平台在供应商「开通权限」中勾选
+（见业务规则：权限下放）。
+"""
 
 from __future__ import annotations
 
@@ -191,6 +196,15 @@ PERMISSION_SEEDS: list[PermissionSeed] = [
         "path": "/product/list",
         "scope": "supplier",
         "sort_order": 41,
+    },
+    {
+        "code": "product.list.sync",
+        "parent_code": "product.list",
+        "type": "button",
+        "title": "同步商品",
+        "path": None,
+        "scope": "supplier",
+        "sort_order": 411,
     },
     {
         "code": "product.category",

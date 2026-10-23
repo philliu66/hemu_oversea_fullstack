@@ -1,7 +1,10 @@
 import { StepsForm } from '@ant-design/pro-components';
 import { App, Button, Drawer, Space } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
-import type { ProductEditorHandle } from '@/pages/product/detail/ProductEditor';
+import {
+  isSkuPriceFillBlocked,
+  type ProductEditorHandle,
+} from '@/pages/product/detail/ProductEditor';
 import { addMissionFissionData } from '@/services/admin/missions';
 import type { DhProductPublic } from '@/types/api';
 import { FissionProductStep } from './FissionProductStep';
@@ -59,8 +62,10 @@ export function AddFissionDrawer({
     }
     try {
       await editorRef.current.validate();
-    } catch {
-      message.warning('请完善必填信息');
+    } catch (error) {
+      if (!isSkuPriceFillBlocked(error)) {
+        message.warning('请完善必填信息');
+      }
       return false;
     }
     const baseline = editorRef.current.getBaseline();
@@ -253,6 +258,7 @@ export function AddFissionDrawer({
                 supplierId={supplierId ?? selected.supplier_id ?? undefined}
                 applySkuAttrTemplateOnCategoryChange
                 seedTitleAsItemNamePlaceholder
+                autoFillSkuPriceOnStoreChange
               />
             ) : null}
           </StepsForm.StepForm>

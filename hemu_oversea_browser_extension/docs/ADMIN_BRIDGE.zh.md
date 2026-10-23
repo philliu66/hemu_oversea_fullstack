@@ -12,7 +12,7 @@ npm run dev
 
 Chrome → 扩展程序 → 开发者模式 →「加载已解压的扩展程序」→ 选择 `.output/chrome-mv3`（以 WXT 实际输出目录为准）。
 
-管理端需跑在 `http://localhost` / `http://127.0.0.1` 任意端口（已匹配）。敦煌采集页需能访问 `*.dhgate.com`。
+管理端注入域名写死在 `wxt.config.ts` 的 `adminMatches` 和 `entrypoints/admin.content.ts` 的 `matches`：`http://localhost/*` 与 `https://*.xiaohemu.net/*`。敦煌采集页需能访问 `*.dhgate.com`。
 
 ## 按需 PING（检测是否安装）
 

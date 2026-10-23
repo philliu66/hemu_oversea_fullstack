@@ -24,6 +24,8 @@ export const FissionProductStep = forwardRef<
     applySkuAttrTemplateOnCategoryChange?: boolean;
     /** 产品标题清空并以种子标题为 placeholder（手动添加第二步） */
     seedTitleAsItemNamePlaceholder?: boolean;
+    /** 切换店铺后按自动定价规则重算并回填 SKU 价格（手动添加第二步） */
+    autoFillSkuPriceOnStoreChange?: boolean;
     supplierId?: number;
   }
 >(function FissionProductStep(
@@ -35,6 +37,7 @@ export const FissionProductStep = forwardRef<
     changedAttrList = [],
     applySkuAttrTemplateOnCategoryChange = false,
     seedTitleAsItemNamePlaceholder = false,
+    autoFillSkuPriceOnStoreChange = false,
     supplierId,
   },
   ref,
@@ -52,6 +55,7 @@ export const FissionProductStep = forwardRef<
         applySkuAttrTemplateOnCategoryChange
       }
       seedTitleAsItemNamePlaceholder={seedTitleAsItemNamePlaceholder}
+      autoFillSkuPriceOnStoreChange={autoFillSkuPriceOnStoreChange}
       supplierId={supplierId}
     />
   );

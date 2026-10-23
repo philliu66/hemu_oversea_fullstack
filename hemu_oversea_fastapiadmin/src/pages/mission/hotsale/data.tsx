@@ -86,6 +86,7 @@ const MissionHotsaleDataPage: React.FC = () => {
         <div style={{ marginTop: 16 }}>
           <HotsaleDataTable
             missionId={missionId}
+            missionTitle={mission?.title}
             supplierId={mission?.supplier_id}
             editable={canWriteData}
             onImported={(result) => {

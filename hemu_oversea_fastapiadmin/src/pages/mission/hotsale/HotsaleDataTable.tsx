@@ -9,10 +9,10 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Popover,
   Space,
   Spin,
   Tag,
-  Tooltip,
   Typography,
 } from 'antd';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -41,7 +41,6 @@ import type {
   MissionHotsaleDataExtractResult,
   MissionHotsaleDataPublic,
 } from '@/types/api';
-import { formatDateTime } from '@/utils/datetime';
 import {
   pingExtension,
   requestExtension,
@@ -49,13 +48,33 @@ import {
 } from '@/utils/extensionBridge';
 import { parseHotsellRankResponse } from '@/utils/hotsellRank';
 
-type ExtractUiPhase = 'idle' | 'pick_interval' | 'running';
+/** running=前台弹框；running_bg=后台继续跑但不弹框 */
+type ExtractUiPhase = 'idle' | 'pick_interval' | 'running' | 'running_bg';
 
 const EXECUTABLE_COLLECT_STATUSES = new Set(['pending', 'failed']);
 
-function sleep(ms: number): Promise<void> {
+/** 可中断的等待：abort 返回 true 时提前结束 */
+function sleep(ms: number, shouldAbort?: () => boolean): Promise<void> {
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
   return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
+    const step = 200;
+    let left = ms;
+    const tick = () => {
+      if (shouldAbort?.()) {
+        resolve();
+        return;
+      }
+      if (left <= 0) {
+        resolve();
+        return;
+      }
+      const chunk = Math.min(step, left);
+      left -= chunk;
+      window.setTimeout(tick, chunk);
+    };
+    tick();
   });
 }
 
@@ -112,43 +131,19 @@ const COLLECT_STATUS_LABEL: Record<HotsaleCollectStatus, string> = {
   marked_finished: '标记结束',
 };
 
-function renderProductLink(
-  text: string | null | undefined,
-  productUrl: string | null | undefined,
-) {
-  const label = (text || '').trim();
-  if (!label) {
-    return '-';
-  }
-  if (!productUrl) {
-    return (
-      <Typography.Text style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-        {label}
-      </Typography.Text>
-    );
-  }
-  return (
-    <Typography.Link
-      href={productUrl}
-      target="_blank"
-      rel="noreferrer"
-      style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
-    >
-      {label}
-    </Typography.Link>
-  );
-}
-
 /**
  * 设置任务数据表格：工具栏「开始采集」；扩展回传后入库并刷新列表。
  */
 export function HotsaleDataTable({
   missionId,
+  missionTitle,
   editable = false,
   onImported,
   onExtracted,
 }: {
   missionId: number;
+  /** 任务标题，提取完成提示用 */
+  missionTitle?: string;
   supplierId?: number;
   editable?: boolean;
   /** 采集入库成功后回调（用于刷新任务状态等） */
@@ -162,10 +157,12 @@ export function HotsaleDataTable({
   const { message, modal } = App.useApp();
   const actionRef = useRef<ActionType | null>(null);
   const extractingRef = useRef(false);
+  /** 用户点击「停止」后置 true，队列在当前条结束后不再继续 */
+  const extractStopRef = useRef(false);
   /** 多条提取：选完间隔后要跑的队列 */
   const pendingRecordsRef = useRef<MissionHotsaleDataPublic[] | null>(null);
   const [collecting, setCollecting] = useState(false);
-  /** idle | 选间隔 | 串行提取中 */
+  /** idle | 选间隔 | 前台提取中 | 后台提取中 */
   const [extractPhase, setExtractPhase] = useState<ExtractUiPhase>('idle');
   const [intervalSec, setIntervalSec] = useState(2);
   const [extractProgress, setExtractProgress] = useState<{
@@ -178,8 +175,16 @@ export function HotsaleDataTable({
     [],
   );
   const [batchLoading, setBatchLoading] = useState(false);
+  /** 任务提取：拉未闭环列表时不弹框，仅用于禁用按钮防连点 */
+  const [resolvingTargets, setResolvingTargets] = useState(false);
 
-  const extracting = extractPhase !== 'idle';
+  /**
+   * 前台有弹框（选间隔 / 提取中）时靠蒙层挡点击，不整表置灰。
+   * 后台运行或静默拉列表时再锁提取相关入口，避免误开第二路队列。
+   */
+  const lockExtractActions =
+    extractPhase === 'running_bg' || resolvingTargets;
+  const extractRunningInBackground = extractPhase === 'running_bg';
 
   const clearSelection = useCallback(() => {
     setSelectedRowKeys([]);
@@ -195,12 +200,8 @@ export function HotsaleDataTable({
   const tipExtractResult = useCallback(
     (result: MissionHotsaleDataExtractResult) => {
       const total = result.success_count + result.fail_count;
-      let text = `共计提取 ${total} 条，成功 ${result.success_count} 条，失败 ${result.fail_count} 条`;
-      if (result.mission_status === 'running') {
-        text += '；任务进行中';
-      } else if (result.mission_finished || result.mission_status === 'finished') {
-        text += '；任务已全部完成';
-      }
+      const title = (missionTitle || '').trim() || `任务#${missionId}`;
+      const text = `${title}：本次提取共计${total}个，成功${result.success_count}个，失败${result.fail_count}个。`;
       if (result.fail_count > 0 && result.success_count > 0) {
         message.warning(text);
       } else if (result.fail_count > 0) {
@@ -209,7 +210,7 @@ export function HotsaleDataTable({
         message.success(text);
       }
     },
-    [message],
+    [message, missionId, missionTitle],
   );
 
   const loadFillConfig = useCallback(async (): Promise<HotsaleFillConfig> => {
@@ -271,6 +272,7 @@ export function HotsaleDataTable({
   /**
    * 串行：插件拉数 → extract(flight_content) 入库。
    * 仅多条时展示进度并应用 gapSec；单条只显示加载态。
+   * 支持「停止」（当前条结束后中断并汇总）与「后台运行」（关弹框继续跑）。
    */
   const runPluginExtractQueue = useCallback(
     async (records: MissionHotsaleDataPublic[], gapSec: number) => {
@@ -283,8 +285,12 @@ export function HotsaleDataTable({
       }
 
       const showProgress = records.length > 1;
+      extractStopRef.current = false;
       extractingRef.current = true;
-      setExtractPhase('running');
+      // 若用户已点「后台运行」（例如任务提取拉列表阶段），保持不弹框
+      setExtractPhase((prev) =>
+        prev === 'running_bg' ? 'running_bg' : 'running',
+      );
       setExtractProgress(
         showProgress
           ? { done: 0, total: records.length, intervalSec: gapSec }
@@ -298,6 +304,24 @@ export function HotsaleDataTable({
         setExtractPhase('idle');
         setExtractProgress(null);
         pendingRecordsRef.current = null;
+        extractStopRef.current = false;
+        return;
+      }
+      if (extractStopRef.current) {
+        extractingRef.current = false;
+        setExtractPhase('idle');
+        setExtractProgress(null);
+        pendingRecordsRef.current = null;
+        extractStopRef.current = false;
+        tipExtractResult({
+          success_count: 0,
+          fail_count: 0,
+          skipped_count: 0,
+          fails: [],
+          mission_id: missionId,
+          mission_finished: false,
+          mission_status: null,
+        });
         return;
       }
 
@@ -310,6 +334,7 @@ export function HotsaleDataTable({
         setExtractPhase('idle');
         setExtractProgress(null);
         pendingRecordsRef.current = null;
+        extractStopRef.current = false;
         return;
       }
 
@@ -319,8 +344,14 @@ export function HotsaleDataTable({
 
       try {
         for (let i = 0; i < records.length; i += 1) {
+          if (extractStopRef.current) {
+            break;
+          }
           if (i > 0 && gapSec > 0) {
-            await sleep(gapSec * 1000);
+            await sleep(gapSec * 1000, () => extractStopRef.current);
+            if (extractStopRef.current) {
+              break;
+            }
           }
           const record = records[i];
           const productUrl = (record.product_url || '').trim();
@@ -388,6 +419,7 @@ export function HotsaleDataTable({
         setExtractPhase('idle');
         setExtractProgress(null);
         pendingRecordsRef.current = null;
+        extractStopRef.current = false;
       }
     },
     [
@@ -400,6 +432,10 @@ export function HotsaleDataTable({
       tipExtractResult,
     ],
   );
+
+  const handleExtractStop = useCallback(() => {
+    extractStopRef.current = true;
+  }, []);
 
   /**
    * 单条：直接跑（无间隔、无进度）。
@@ -630,33 +666,39 @@ export function HotsaleDataTable({
   }, [extractPhase]);
 
   /**
-   * 任务提取：先拉 pending/failed；单条直接跑，多条再选间隔。
+   * 任务提取：先静默拉 pending/failed；无未闭环则只提醒不弹框；
+   * 有数据则单条直接跑 / 多条再选间隔。
    */
   const handleExtractMission = useCallback(async () => {
-    if (extractingRef.current || extractPhase !== 'idle') {
+    if (extractingRef.current || extractPhase !== 'idle' || resolvingTargets) {
       return;
     }
-    // 拉列表期间用简单加载态（不展示进度）
-    setExtractPhase('running');
-    setExtractProgress(null);
+    extractStopRef.current = false;
+    setResolvingTargets(true);
     try {
       const records = await fetchAllExecutableHotsaleRows(missionId);
       if (!records.length) {
-        setExtractPhase('idle');
-        message.warning('当前任务没有可提取的进行中/失败数据');
+        message.warning('没有可提取的任务数据');
         return;
       }
-      // 单条会继续 running；多条会切到选间隔
       await startExtractFlow(records);
     } catch (err) {
-      setExtractPhase('idle');
       message.error(
         err instanceof Error ? err.message : '准备提取列表失败，请稍后重试',
       );
+    } finally {
+      setResolvingTargets(false);
+      extractStopRef.current = false;
     }
-  }, [extractPhase, message, missionId, startExtractFlow]);
+  }, [
+    extractPhase,
+    message,
+    missionId,
+    resolvingTargets,
+    startExtractFlow,
+  ]);
 
-  /** 批量提取：可提取行单条直接跑，多条再选间隔 */
+  /** 批量提取：可提取行单条直接跑，多条再选间隔；无可提取则只提醒 */
   const handleExtractSelected = useCallback(() => {
     if (!selectedRows.length) {
       message.warning('请先选择任务数据');
@@ -666,7 +708,7 @@ export function HotsaleDataTable({
       EXECUTABLE_COLLECT_STATUSES.has(String(r.collect_status)),
     );
     if (!records.length) {
-      message.warning('请选择进行中或失败的任务数据');
+      message.warning('没有可提取的任务数据');
       return;
     }
     void startExtractFlow(records);
@@ -674,6 +716,33 @@ export function HotsaleDataTable({
 
   const statusLabel = (status: string) =>
     COLLECT_STATUS_LABEL[status as HotsaleCollectStatus] ?? status;
+
+  const copyCode = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      message.success('已复制');
+    } catch {
+      message.error('复制失败');
+    }
+  };
+
+  const renderCodeTag = (value: string | null | undefined) => {
+    const text = (value || '').trim() || '-';
+    const canCopy = text !== '-';
+    return (
+      <Tag
+        color="default"
+        style={{ cursor: canCopy ? 'pointer' : 'default', marginInlineEnd: 0 }}
+        onClick={() => {
+          if (canCopy) {
+            void copyCode(text);
+          }
+        }}
+      >
+        {text}
+      </Tag>
+    );
+  };
 
   const columns: ProColumns<MissionHotsaleDataPublic>[] = [
     {
@@ -686,9 +755,104 @@ export function HotsaleDataTable({
       },
     },
     {
-      title: '任务数据状态',
+      title: '排名',
+      dataIndex: 'rank_no',
+      width: 72,
+      search: false,
+    },
+    {
+      title: '商品',
+      dataIndex: 'product',
+      search: false,
+      width: 360,
+      render: (_, record) => {
+        const fullName = (record.product_name || '').trim();
+        const shortName = (record.product_name_short || '').trim();
+        const name = fullName || shortName;
+        const isShortOnly = Boolean(!fullName && shortName);
+        const productUrl = (record.product_url || '').trim();
+        return (
+          <Space align="start" size={12} style={{ maxWidth: '100%' }}>
+            {record.main_image_url ? (
+              <Image
+                src={record.main_image_url}
+                alt={name || record.item_code || undefined}
+                width={48}
+                height={48}
+                style={{
+                  objectFit: 'cover',
+                  borderRadius: 6,
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 6,
+                  background: 'rgba(0,0,0,0.04)',
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 4,
+                  marginBottom: 4,
+                }}
+              >
+                {isShortOnly ? (
+                  <Tag
+                    color="orange"
+                    style={{ flexShrink: 0, marginInlineEnd: 0 }}
+                  >
+                    简
+                  </Tag>
+                ) : null}
+                {/*
+                  Paragraph + ellipsis 只能吃纯文本；嵌套 Link/a 会导致标题空白。
+                  有产品链接时用点击打开，样式做成链接色。
+                */}
+                <Typography.Paragraph
+                  ellipsis={{ rows: 2, tooltip: name || undefined }}
+                  copyable={
+                    name ? { text: name, tooltips: ['复制', '已复制'] } : false
+                  }
+                  style={{
+                    marginBottom: 0,
+                    flex: 1,
+                    minWidth: 0,
+                    ...(productUrl && name
+                      ? {
+                          color: 'var(--ant-color-link)',
+                          cursor: 'pointer',
+                        }
+                      : {}),
+                  }}
+                  onClick={
+                    productUrl && name
+                      ? () => {
+                          window.open(productUrl, '_blank', 'noopener,noreferrer');
+                        }
+                      : undefined
+                  }
+                >
+                  {name || '-'}
+                </Typography.Paragraph>
+              </div>
+              {renderCodeTag(record.item_code)}
+            </div>
+          </Space>
+        );
+      },
+    },
+    {
+      title: '提取状态',
       dataIndex: 'collect_status',
-      hideInTable: true,
       valueType: 'select',
       initialValue: 'all',
       fieldProps: {
@@ -701,104 +865,56 @@ export function HotsaleDataTable({
         failed: { text: '失败' },
         marked_finished: { text: '标记结束' },
       },
-    },
-    {
-      title: '排名',
-      dataIndex: 'rank_no',
-      width: 72,
-      search: false,
-    },
-    {
-      title: '产品编码',
-      dataIndex: 'item_code',
-      width: 130,
-      search: false,
+      width: 120,
       render: (_, record) => {
         const status = record.collect_status as HotsaleCollectStatus;
-        const failMsg =
+        const msg =
           status === 'failed' ? (record.collect_msg || '').trim() : '';
         return (
-          <div style={{ lineHeight: 1.5 }}>
-            <div>{(record.item_code || '').trim() || '-'}</div>
-            <div style={{ marginTop: 4 }}>
-              <Tag color={COLLECT_STATUS_COLOR[status] ?? 'default'}>
-                <span>{statusLabel(record.collect_status)}</span>
-                {failMsg ? (
-                  <Tooltip title={failMsg}>
-                    <InfoCircleOutlined style={{ marginLeft: 4 }} />
-                  </Tooltip>
-                ) : null}
-              </Tag>
-            </div>
-          </div>
+          <Tag
+            color={COLLECT_STATUS_COLOR[status] ?? 'default'}
+            style={{ marginInlineEnd: 0 }}
+          >
+            {statusLabel(record.collect_status)}
+            {msg ? (
+              <Popover
+                trigger="click"
+                title="失败信息"
+                content={
+                  <div
+                    style={{
+                      maxWidth: 360,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {msg}
+                  </div>
+                }
+              >
+                <InfoCircleOutlined
+                  style={{ marginLeft: 4, cursor: 'pointer' }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </Popover>
+            ) : null}
+          </Tag>
         );
       },
-    },
-    {
-      title: '主图',
-      dataIndex: 'main_image_url',
-      width: 72,
-      search: false,
-      render: (_, record) =>
-        record.main_image_url ? (
-          <Image
-            src={record.main_image_url}
-            width={48}
-            height={48}
-            style={{ objectFit: 'cover' }}
-          />
-        ) : (
-          '-'
-        ),
-    },
-    {
-      title: '产品名称',
-      dataIndex: 'product_name',
-      search: false,
-      ellipsis: false,
-      render: (_, record) => {
-        const name =
-          (record.product_name || '').trim() ||
-          (record.product_name_short || '').trim();
-        if (!name) {
-          return '-';
-        }
-        return (
-          <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-            {renderProductLink(name, record.product_url)}
-            <Typography.Text
-              copyable={{ text: name, tooltips: ['复制', '已复制'] }}
-              style={{ marginLeft: 4 }}
-            />
-          </span>
-        );
-      },
-    },
-    {
-      title: '指标',
-      dataIndex: 'deal',
-      width: 140,
-      search: false,
-      render: (_, record) => (
-        <div style={{ lineHeight: 1.55, fontSize: 12 }}>
-          <div>成交量：{record.deal || '-'}</div>
-          <div>成交金额：{record.deal_amount || '-'}</div>
-          <div>成交人数：{record.deal_persons || '-'}</div>
-        </div>
-      ),
     },
     {
       title: '类目',
       dataIndex: 'cate_name',
       search: false,
       ellipsis: false,
+      onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
       render: (_, record) => {
         const text = (record.cate_name || '').trim();
         if (!text) {
           return '-';
         }
         return (
-          <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          <span style={{ whiteSpace: 'nowrap' }}>
             {text}
             <Typography.Text
               copyable={{ text, tooltips: ['复制', '已复制'] }}
@@ -813,13 +929,14 @@ export function HotsaleDataTable({
       dataIndex: 'store_name',
       search: false,
       ellipsis: false,
+      onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
       render: (_, record) => {
         const text = (record.store_name || '').trim();
         if (!text) {
           return '-';
         }
         return (
-          <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          <span style={{ whiteSpace: 'nowrap' }}>
             {text}
             <Typography.Text
               copyable={{ text, tooltips: ['复制', '已复制'] }}
@@ -830,6 +947,19 @@ export function HotsaleDataTable({
       },
     },
     {
+      title: '指标',
+      dataIndex: 'deal',
+      width: 160,
+      search: false,
+      render: (_, record) => (
+        <div style={{ lineHeight: 1.55, fontSize: 12, whiteSpace: 'nowrap' }}>
+          <div>成交量：{record.deal || '-'}</div>
+          <div>成交金额：{record.deal_amount || '-'}</div>
+          <div>成交人数：{record.deal_persons || '-'}</div>
+        </div>
+      ),
+    },
+    {
       title: '操作',
       dataIndex: 'option',
       valueType: 'option' as const,
@@ -837,12 +967,11 @@ export function HotsaleDataTable({
       width: editable ? 220 : 160,
       fixed: 'right',
       render: (_: unknown, record: MissionHotsaleDataPublic) => {
-        // 已完成：操作列展示提取时间
+        // 已完成：操作列仅展示「已提取」
         if (record.collect_status === 'success') {
-          const timeText = formatDateTime(record.updated_at) || '-';
           return (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {`提取时间${timeText}`}
+              已提取
             </Typography.Text>
           );
         }
@@ -855,16 +984,21 @@ export function HotsaleDataTable({
             record.collect_status === 'failed')
         ) {
           actions.push(
-            <Button
+            <Popconfirm
               key="extract-one"
-              type="primary"
-              size="small"
-              shape="round"
-              disabled={extracting}
-              onClick={() => void handleExtractOne(record)}
+              title="确认对该任务数据进行单个提取？"
+              disabled={lockExtractActions}
+              onConfirm={() => void handleExtractOne(record)}
             >
-              单个提取
-            </Button>,
+              <Button
+                type="primary"
+                size="small"
+                shape="round"
+                disabled={lockExtractActions}
+              >
+                单个提取
+              </Button>
+            </Popconfirm>,
           );
         }
 
@@ -978,7 +1112,7 @@ export function HotsaleDataTable({
         keyboard={false}
         centered
         width={
-          extractProgress && extractProgress.total > 1 ? 320 : 280
+          extractProgress && extractProgress.total > 1 ? 360 : 320
         }
         styles={{ body: { padding: '32px 24px' } }}
       >
@@ -994,6 +1128,24 @@ export function HotsaleDataTable({
             </div>
           ) : null}
           <Spin size="large" description="插件提取中..." />
+          <div style={{ marginTop: 20 }}>
+            <Space>
+              <Button onClick={handleExtractStop}>停止</Button>
+              {/*
+                暂时屏蔽「后台运行」。恢复时取消注释，并加回：
+                const handleExtractBackground = () =>
+                  setExtractPhase((p) => (p === 'running' ? 'running_bg' : p));
+              */}
+              {/* <Button
+                type="primary"
+                onClick={() =>
+                  setExtractPhase((p) => (p === 'running' ? 'running_bg' : p))
+                }
+              >
+                后台运行
+              </Button> */}
+            </Space>
+          </div>
         </div>
       </Modal>
       <ProTable<MissionHotsaleDataPublic, TableParams>
@@ -1001,7 +1153,7 @@ export function HotsaleDataTable({
       actionRef={actionRef}
       rowKey="id"
       search={{ labelWidth: 'auto' }}
-      scroll={{ x: 1100 }}
+      scroll={{ x: 'max-content' }}
       rowSelection={
         editable
           ? {
@@ -1020,30 +1172,41 @@ export function HotsaleDataTable({
       tableAlertOptionRender={() =>
         editable ? (
           <Space size={16}>
-            <a
-              onClick={() => {
-                if (!extracting) {
-                  void handleExtractSelected();
-                }
-              }}
-              style={
-                extracting || !selectedRowKeys.length
-                  ? { pointerEvents: 'none', opacity: 0.45 }
-                  : undefined
+            <Popconfirm
+              title={`确认对选中的可提取数据进行批量提取？`}
+              disabled={
+                lockExtractActions ||
+                !selectedRowKeys.length ||
+                extractRunningInBackground
               }
+              onConfirm={() => void handleExtractSelected()}
             >
-              批量提取
-            </a>
+              <a
+                style={
+                  lockExtractActions ||
+                  !selectedRowKeys.length ||
+                  extractRunningInBackground
+                    ? { pointerEvents: 'none', opacity: 0.45 }
+                    : undefined
+                }
+              >
+                {extractRunningInBackground ? '提取进行中…' : '批量提取'}
+              </a>
+            </Popconfirm>
             <Popconfirm
               title={`确认将选中的 ${selectedRowKeys.length} 条标记结束？`}
-              disabled={!selectedRowKeys.length || batchLoading || extracting}
+              disabled={
+                !selectedRowKeys.length || batchLoading || lockExtractActions
+              }
               onConfirm={() => void handleBatchMarkFinished()}
             >
               <a>批量标记结束</a>
             </Popconfirm>
             <Popconfirm
               title={`确认删除选中的 ${selectedRowKeys.length} 条？`}
-              disabled={!selectedRowKeys.length || batchLoading || extracting}
+              disabled={
+                !selectedRowKeys.length || batchLoading || lockExtractActions
+              }
               onConfirm={() => void handleBatchDelete()}
             >
               <a>批量删除</a>
@@ -1057,22 +1220,38 @@ export function HotsaleDataTable({
       toolBarRender={
         editable
           ? () => [
-              <Button
+              <Popconfirm
                 key="start-collect"
-                type="primary"
-                loading={collecting}
-                disabled={extracting}
-                onClick={() => void handleStartCollect()}
+                title="确认开始采集热卖列表？"
+                disabled={collecting || lockExtractActions}
+                onConfirm={() => void handleStartCollect()}
               >
-                开始采集
-              </Button>,
-              <Button
+                <Button
+                  type="primary"
+                  loading={collecting}
+                  disabled={lockExtractActions}
+                >
+                  开始采集
+                </Button>
+              </Popconfirm>,
+              <Popconfirm
                 key="extract-mission"
-                disabled={collecting || extracting}
-                onClick={() => void handleExtractMission()}
+                title="确认对本任务未闭环数据进行任务提取？"
+                disabled={
+                  collecting ||
+                  lockExtractActions ||
+                  extractRunningInBackground ||
+                  resolvingTargets
+                }
+                onConfirm={() => void handleExtractMission()}
               >
-                任务提取
-              </Button>,
+                <Button
+                  disabled={collecting || lockExtractActions}
+                  loading={extractRunningInBackground || resolvingTargets}
+                >
+                  {extractRunningInBackground ? '提取进行中…' : '任务提取'}
+                </Button>
+              </Popconfirm>,
             ]
           : false
       }

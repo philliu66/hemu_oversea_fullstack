@@ -280,6 +280,36 @@ class DhProductDetailRequest(BaseModel):
     id: int = Field(description="商品 ID（product_dh.id）", ge=1)
 
 
+class DhProductSyncRequest(BaseModel):
+    """按店铺同步单个敦煌商品（存在则更新）。"""
+
+    store_id: int = Field(description="店铺 ID", ge=1)
+    item_code: str = Field(
+        min_length=1,
+        max_length=64,
+        description="商品编码 itemCode",
+    )
+    site_id: Literal["EN", "RU", "ES", "ID"] = Field(
+        default="EN",
+        description="站点语言，默认 EN",
+    )
+
+
+class DhProductSyncPublic(BaseModel):
+    """单商品同步结果。"""
+
+    ok: bool = Field(description="是否同步成功")
+    store_id: int = Field(description="店铺 ID")
+    item_code: str = Field(description="商品编码")
+    site_id: str = Field(description="站点语言")
+    product_id: int | None = Field(default=None, description="本地商品 ID")
+    sync_state: str | None = Field(
+        default=None,
+        description="同步状态：1=成功，0=失败",
+    )
+    message: str | None = Field(default=None, description="失败原因；成功时为空")
+
+
 # 定价参考类目默认 cate_id（与前端 / 佣金查询一致）
 DH_REF_PRICING_CATE_ID = "000000"
 

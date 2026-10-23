@@ -436,6 +436,42 @@ def mark_mission_finished(
     )
 
 
+# 与前端定价参考 extractSkuSpecModel 一致：字母+数字，可选 -数字
+_SKU_SPEC_MODEL_RE = re.compile(r"^[A-Za-z]+[0-9]+(?:-[0-9]+)?")
+
+
+def _extract_sku_spec_models(sku_list: Any) -> list[str]:
+    """从 sku_list 清洗产品型号并去重（保持首次出现顺序）。"""
+    if not isinstance(sku_list, list):
+        return []
+    seen: set[str] = set()
+    models: list[str] = []
+    for sku in sku_list:
+        if not isinstance(sku, dict):
+            continue
+        raw = str(sku.get("sku_code") or "").strip()
+        if not raw:
+            continue
+        matched = _SKU_SPEC_MODEL_RE.match(raw)
+        if not matched:
+            continue
+        model = matched.group(0)
+        if model in seen:
+            continue
+        seen.add(model)
+        models.append(model)
+    return models
+
+
+def _resolve_fission_sku_list(row: MissionDataDhFission) -> list[Any]:
+    """以 raw_json.sku_list 为准；无则返回空列表。"""
+    raw = row.raw_json if isinstance(row.raw_json, dict) else None
+    if not raw:
+        return []
+    skus = raw.get("sku_list")
+    return skus if isinstance(skus, list) else []
+
+
 def _to_fission_list_public(
     row: MissionDataDhFission,
     *,
@@ -448,6 +484,7 @@ def _to_fission_list_public(
             "store_name": store_name,
             "seed_item_code": seed_item_code,
             "main_image_url": _build_dh_main_image_url(row.main_image_url),
+            "sku_models": _extract_sku_spec_models(_resolve_fission_sku_list(row)),
         }
     )
 
@@ -554,8 +591,8 @@ def list_fission_data(
     rows = db.execute(
         select(MissionDataDhFission, Store.name, ProductDh.item_code)
         .options(
+            # raw_json 用于列表推导产品型号；seed_json 列表不需要
             defer(MissionDataDhFission.seed_json),
-            defer(MissionDataDhFission.raw_json),
         )
         .outerjoin(Store, Store.id == MissionDataDhFission.store_id)
         .outerjoin(ProductDh, ProductDh.id == MissionDataDhFission.seed_product_id)
