@@ -24,13 +24,47 @@ def parse_http_response(response: httpx.Response) -> dict:
     return data
 
 
+def _text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _top_level_code(data: dict) -> str | None:
+    """body 直接带 code，且同时有 message 或 solution。"""
+    if _text(data.get("message")) is None and _text(data.get("solution")) is None:
+        return None
+    return _text(data.get("code"))
+
+
+def _join_message_parts(parts: list[str]) -> str | None:
+    merged: list[str] = []
+    for part in parts:
+        if part and part not in merged:
+            merged.append(part)
+    if not merged:
+        return None
+    return "/".join(merged)
+
+
+def _top_level_message(data: dict) -> str | None:
+    return _join_message_parts(
+        [
+            text
+            for text in (_text(data.get("message")), _text(data.get("solution")))
+            if text
+        ]
+    )
+
+
 def get_status_code(data: dict) -> str | None:
     status = data.get("status")
     if isinstance(status, dict):
-        code = status.get("code")
+        code = _text(status.get("code"))
         if code is not None:
-            return str(code)
-    return None
+            return code
+    return _top_level_code(data)
 
 
 def get_status_message(data: dict) -> str:
@@ -41,6 +75,9 @@ def get_status_message(data: dict) -> str:
         return str(data["error_description"])
     if data.get("error"):
         return str(data["error"])
+    gateway = _top_level_message(data)
+    if gateway:
+        return gateway
     return "敦煌 API 调用失败"
 
 
@@ -68,10 +105,16 @@ def format_status_error_message(data: dict) -> str:
         return str(data["error_description"])
     if data.get("error"):
         return str(data["error"])
+    gateway = _top_level_message(data)
+    if gateway:
+        return gateway
     return "敦煌 API 调用失败"
 
 
-def is_success(data: dict) -> bool:
+def is_success(data: dict, *, http_status: int | None = None) -> bool:
+    """HTTP 2xx 且 body 的 code 属于成功码才算成功。body 里的错误码优先于 HTTP 200。"""
+    if http_status is not None and http_status >= 400:
+        return False
     if data.get("error"):
         return False
     code = get_status_code(data)
@@ -83,8 +126,16 @@ def is_token_expired(data: dict) -> bool:
     if code == TOKEN_EXPIRED_ERROR_CODE:
         return True
     message = get_status_message(data).lower()
-    return "access token" in message and (
-        "expired" in message or "does not exist" in message
+    if "access token" not in message and "令牌" not in message:
+        return False
+    return any(
+        marker in message
+        for marker in (
+            "expired",
+            "does not exist",
+            "过期",
+            "不存在",
+        )
     )
 
 
@@ -111,10 +162,17 @@ def is_refresh_token_expired(data: dict) -> bool:
     )
 
 
-def raise_if_error(data: dict) -> None:
-    if is_success(data):
+def raise_if_error(data: dict, *, http_status: int | None = None) -> None:
+    """body 中的 code/message 表示失败时，用该 message 作为业务错误抛出。"""
+    if is_success(data, http_status=http_status):
         return
     message = format_status_error_message(data)
+    if (
+        message == "敦煌 API 调用失败"
+        and http_status is not None
+        and http_status >= 400
+    ):
+        message = f"敦煌 API 调用失败 HTTP {http_status}"
     code = get_status_code(data)
     raise bad_request(
         message,

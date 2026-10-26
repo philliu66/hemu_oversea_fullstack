@@ -7,8 +7,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.errors import bad_request
+from app.core.errors import AppError, bad_request
 from app.services.dhgate.client import DhgateClient
+
+# dh.order.disputeopen.list 在没有纠纷中订单时返回的空结果，不是调用失败。
+_EMPTY_DISPUTE_OPEN_CODE = "105"
+_EMPTY_DISPUTE_OPEN_MESSAGE = "无符合查询条件的订单"
 
 
 def list_orders(
@@ -101,6 +105,8 @@ def list_order_dispute_open(
     返回：
     - orderDisputeOpenInfos：开启中纠纷订单列表
     - pages / count：总页数、总条数
+
+    店铺没有纠纷中订单时，敦煌返回状态码 105「无符合查询条件的订单」，按空列表处理。
     """
     if page_no < 1:
         raise bad_request("page_no 不能小于 1")
@@ -121,9 +127,26 @@ def list_order_dispute_open(
     if ono:
         params["orderNo"] = ono
 
-    return client.call(
-        "dh.order.disputeopen.list",
-        version="2.0",
-        params=params,
-        http_method="POST",
-    )
+    try:
+        return client.call(
+            "dh.order.disputeopen.list",
+            version="2.0",
+            params=params,
+            http_method="POST",
+        )
+    except AppError as exc:
+        if _is_empty_dispute_open_error(exc):
+            return {
+                "orderDisputeOpenInfos": [],
+                "pages": 0,
+                "count": 0,
+            }
+        raise
+
+
+def _is_empty_dispute_open_error(exc: AppError) -> bool:
+    """纠纷开启列表无订单：状态码 105，或文案为「无符合查询条件的订单」。"""
+    data = exc.data or {}
+    if str(data.get("dhgate_error_code") or "") == _EMPTY_DISPUTE_OPEN_CODE:
+        return True
+    return _EMPTY_DISPUTE_OPEN_MESSAGE in (exc.message or "")

@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError, bad_request
+from app.core.errors import bad_request
 from app.core.store_types import StoreType
 from app.models.store import Store
 from app.services.commerce.multi_store import (
@@ -99,18 +99,6 @@ class SupplierDisputeOpenSummary:
     raw_calls: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _safe_call(
-    source: str,
-    fn,
-) -> tuple[dict[str, Any] | None, StoreDisputeCallError | None]:
-    try:
-        return fn(), None
-    except AppError as exc:
-        return None, StoreDisputeCallError(source=source, message=exc.message)
-    except Exception as exc:
-        return None, StoreDisputeCallError(source=source, message=str(exc))
-
-
 def _annotate_raw_calls(
     call_history: list[dict[str, Any]],
     *,
@@ -196,20 +184,14 @@ def _fetch_store_dispute_processing(
         store_identifier=store.identifier,
     )
 
-    dispute_processing, err = _safe_call(
-        "dispute_processing",
-        lambda: list_dispute_processing(
-            client,
-            dispute_status=dispute_status,
-            page_num=page_num,
-            page_size=page_size,
-            start_time=start_time,
-            end_time=end_time,
-        ),
+    result.dispute_processing = list_dispute_processing(
+        client,
+        dispute_status=dispute_status,
+        page_num=page_num,
+        page_size=page_size,
+        start_time=start_time,
+        end_time=end_time,
     )
-    result.dispute_processing = dispute_processing
-    if err:
-        result.call_errors.append(err)
 
     raw_calls = _annotate_raw_calls(
         client.call_history,
@@ -256,7 +238,8 @@ def summarize_supplier_dispute_processing(
     - dh.dispute.processing.list$1.0 → stores[].dispute_processing
 
     stores_summary.dispute_processing_list：
-    合并各店 disputeList（附 store_id / store_identifier）
+    合并各店 disputeList（附 store_id / store_identifier）。
+    任一敦煌调用失败则整次汇总失败。
     """
     stores = _resolve_dispute_stores(
         db,
@@ -274,36 +257,17 @@ def summarize_supplier_dispute_processing(
     )
 
     for store in stores:
-        try:
-            store_result, raw_calls = _fetch_store_dispute_processing(
-                db,
-                store,
-                dispute_status=dispute_status,
-                page_num=page_num,
-                page_size=page_size,
-                start_time=start_time,
-                end_time=end_time,
-            )
-            summary.stores.append(store_result)
-            summary.raw_calls.extend(raw_calls)
-        except AppError as exc:
-            summary.errors.append(
-                StoreRunError(
-                    store_id=store.id,
-                    store_name=store.name,
-                    store_type=store.store_type,
-                    message=exc.message,
-                )
-            )
-        except Exception as exc:
-            summary.errors.append(
-                StoreRunError(
-                    store_id=store.id,
-                    store_name=store.name,
-                    store_type=store.store_type,
-                    message=str(exc),
-                )
-            )
+        store_result, raw_calls = _fetch_store_dispute_processing(
+            db,
+            store,
+            dispute_status=dispute_status,
+            page_num=page_num,
+            page_size=page_size,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        summary.stores.append(store_result)
+        summary.raw_calls.extend(raw_calls)
 
     summary.stores_summary = _build_processing_stores_summary(summary.stores)
     return summary
@@ -324,17 +288,11 @@ def _fetch_store_dispute_open(
         store_identifier=store.identifier,
     )
 
-    dispute_open, err = _safe_call(
-        "dispute_open",
-        lambda: list_order_dispute_open(
-            client,
-            page_no=page_no,
-            page_size=page_size,
-        ),
+    result.dispute_open = list_order_dispute_open(
+        client,
+        page_no=page_no,
+        page_size=page_size,
     )
-    result.dispute_open = dispute_open
-    if err:
-        result.call_errors.append(err)
 
     raw_calls = _annotate_raw_calls(
         client.call_history,
@@ -383,6 +341,7 @@ def summarize_supplier_dispute_open(
     合并各店 orderDisputeOpenInfos（附 store_id / store_identifier）
 
     说明：官方纠纷开启列表无时间范围入参，返回的是当前仍处于开启状态的纠纷。
+    任一敦煌调用失败则整次汇总失败。
     """
     stores = _resolve_dispute_stores(
         db,
@@ -397,33 +356,14 @@ def summarize_supplier_dispute_open(
     )
 
     for store in stores:
-        try:
-            store_result, raw_calls = _fetch_store_dispute_open(
-                db,
-                store,
-                page_no=page_no,
-                page_size=page_size,
-            )
-            summary.stores.append(store_result)
-            summary.raw_calls.extend(raw_calls)
-        except AppError as exc:
-            summary.errors.append(
-                StoreRunError(
-                    store_id=store.id,
-                    store_name=store.name,
-                    store_type=store.store_type,
-                    message=exc.message,
-                )
-            )
-        except Exception as exc:
-            summary.errors.append(
-                StoreRunError(
-                    store_id=store.id,
-                    store_name=store.name,
-                    store_type=store.store_type,
-                    message=str(exc),
-                )
-            )
+        store_result, raw_calls = _fetch_store_dispute_open(
+            db,
+            store,
+            page_no=page_no,
+            page_size=page_size,
+        )
+        summary.stores.append(store_result)
+        summary.raw_calls.extend(raw_calls)
 
     summary.stores_summary = _build_open_stores_summary(summary.stores)
     return summary

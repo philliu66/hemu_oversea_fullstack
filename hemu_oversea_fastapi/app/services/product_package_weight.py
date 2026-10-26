@@ -39,8 +39,6 @@ _MAX_EXECUTE_ITEMS = 50
 _DEFAULT_SITE_ID = "EN"
 # 官网 update 特殊错误：需下架后再更新并上架
 _ERR_IN_PROMOTION = "该产品正在参加促销活动"
-# 官网 update 特殊错误：不可官方修改，仅改本地库
-_ERR_CANNOT_MODIFY = "不可以做修改操作"
 
 
 def _as_decimal(value: Any) -> Decimal | None:
@@ -207,41 +205,19 @@ def _summary_from_changes(changes: list[dict[str, Any]]) -> str:
     return f"更新包装信息：{labels}（{len(changes)}项）"
 
 
-def _format_local_change_note(changes: list[dict[str, Any]]) -> str:
-    """拼一段「已更改本地库」说明，便于写入失败日志。"""
-    if not changes:
-        return "已更改本地库数据"
-    parts: list[str] = []
-    for item in changes:
-        label = str(item.get("label") or item.get("field") or "")
-        before = item.get("before")
-        after = item.get("after")
-        parts.append(f"{label} {before}→{after}")
-    return "已更改本地库数据：" + "、".join(parts)
-
-
 def _update_item_with_special_handling(
     client: DhgateClient,
     *,
     payload: dict[str, Any],
     item_code: str,
     site_id: str,
-) -> tuple[str, str | None]:
-    """
-    先调 dh.item.update；按官网错误分流。
-
-    返回 (result, error_message)：
-    - ("ok", None)：官方更新成功（含促销下架→更新→上架）
-    - ("cannot_modify", msg)：不可修改，调用方应只改本地库并记失败日志
-    其他错误继续抛出。
-    """
+) -> None:
+    """先调 dh.item.update。促销中的商品先下架再更新并上架，其它敦煌错误原样抛出。"""
     try:
         update_item(client, payload)
-        return "ok", None
+        return
     except AppError as exc:
         message = format_dhgate_error_message(exc, fallback="更新商品失败")
-        if _ERR_CANNOT_MODIFY in message:
-            return "cannot_modify", message
         if _ERR_IN_PROMOTION not in message:
             raise
 
@@ -254,7 +230,6 @@ def _update_item_with_special_handling(
     downshelf_items(client, item_codes=item_code, site_id=site_id)
     update_item(client, payload)
     upshelf_items(client, item_codes=item_code, site_id=site_id)
-    return "ok", None
 
 
 def _ensure_html_content(
@@ -418,7 +393,7 @@ def execute_dhgate_product_updates(
     官方 update 特殊错误处理：
     - 本地 product_dh 未找到：记失败，error_message=「非种子商品；itemCode=...」
     - 含「该产品正在参加促销活动」：下架 → 再 update → 上架
-    - 含「不可以做修改操作」：不调上下架；只更新本地库，失败日志附官网错误 + 本地变更说明
+    - 其它敦煌接口错误：原样抛出
 
     dry_run=false：真实调敦煌更新，并同步本地 product_dh、写变更日志。
     dry_run=true：仅试跑对比，不写敦煌、不落库、不记日志。
@@ -516,47 +491,12 @@ def execute_dhgate_product_updates(
             payload = build_item_update_payload(
                 patched, item_code=code, site_id=site_id
             )
-            update_result, cannot_modify_message = _update_item_with_special_handling(
+            _update_item_with_special_handling(
                 client,
                 payload=payload,
                 item_code=code,
                 site_id=site_id,
             )
-
-            if update_result == "cannot_modify":
-                # 官方不可修改 → 只写本地库，日志记失败并附本地变更说明
-                saved = persist_item_detail(
-                    db,
-                    store_id=store_id,
-                    item_code=code,
-                    site_id=site_id,
-                    detail=patched,
-                    is_seed=local.is_seed or "1",
-                )
-                product_dh_id = saved.get("product_id") or product_dh_id
-                local_note = _format_local_change_note(changes)
-                error_message = f"{cannot_modify_message}；{local_note}"
-                log_id = _write_log(
-                    db,
-                    store_id=store_id,
-                    item_code=code,
-                    site_id=site_id,
-                    operator_id=actor_id,
-                    status="failed",
-                    summary=f"不可官方修改，仅更新本地库：{summary}",
-                    changes=changes,
-                    error_message=error_message,
-                    product_dh_id=product_dh_id,
-                )
-                failed_items.append(
-                    DhgateUpdateProductFailedItem(
-                        itemCode=code,
-                        store_id=store_id,
-                        error_message=error_message,
-                        log_id=log_id,
-                    )
-                )
-                continue
 
             fresh = get_item(client, item_code=code, site_id=site_id)
             saved = persist_item_detail(
@@ -591,10 +531,9 @@ def execute_dhgate_product_updates(
                 code,
                 message,
             )
-            log_id = None
             if not dry_run and store_id is not None:
                 try:
-                    log_id = _write_log(
+                    _write_log(
                         db,
                         store_id=store_id,
                         item_code=code or "",
@@ -609,48 +548,15 @@ def execute_dhgate_product_updates(
                 except Exception:
                     db.rollback()
                     logger.exception("写更新失败日志异常 itemCode=%s", code)
-            failed_items.append(
-                DhgateUpdateProductFailedItem(
-                    itemCode=code,
-                    store_id=store_id,
-                    error_message=message,
-                    log_id=log_id,
-                )
-            )
-        except Exception as exc:
+            raise
+        except Exception:
             db.rollback()
-            message = str(exc) or "更新商品异常"
             logger.exception(
                 "敦煌商品更新异常 supplier_id=%s itemCode=%s",
                 supplier_id,
                 code,
             )
-            log_id = None
-            if not dry_run and store_id is not None:
-                try:
-                    log_id = _write_log(
-                        db,
-                        store_id=store_id,
-                        item_code=code or "",
-                        site_id=site_id,
-                        operator_id=actor_id,
-                        status="failed",
-                        summary="更新商品失败",
-                        changes=[],
-                        error_message=message,
-                        product_dh_id=product_dh_id,
-                    )
-                except Exception:
-                    db.rollback()
-                    logger.exception("写更新失败日志异常 itemCode=%s", code)
-            failed_items.append(
-                DhgateUpdateProductFailedItem(
-                    itemCode=code,
-                    store_id=store_id,
-                    error_message=message,
-                    log_id=log_id,
-                )
-            )
+            raise
 
     return DhgateUpdateProductPublic(
         supplier_id=supplier_id,

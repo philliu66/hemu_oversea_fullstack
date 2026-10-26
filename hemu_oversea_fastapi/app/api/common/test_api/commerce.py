@@ -88,9 +88,9 @@ def test_punish_summary(
 
     ## 返回结构（与单店联调一致）
     - `result`：业务汇总
-      - `stores[]`：各店 `punish` / `punish_brand` / `punish_other` 及 `call_errors`
+      - `stores[]`：各店 `punish` / `punish_brand` / `punish_other`
       - `stores_summary.punish_list`：三类处罚合并（附 store_id）
-      - `errors`：整店级失败
+      - 任一敦煌调用失败则整接口失败，不在 `errors` 里继续返回其它店
     - `raw`：最近一次敦煌原始响应（含 status）
     - `raw_calls`：本次全部调用明细（含 store_id / store_identifier）
 
@@ -134,7 +134,7 @@ def test_dispute_processing_summary(
       （含义见单店 `/order/disputeopen/list` 注释）
 
     ## 返回结构（与单店联调一致）
-    - `result`：业务汇总（stores / stores_summary / errors）
+    - `result`：业务汇总（stores / stores_summary）；任一敦煌调用失败则整接口失败
     - `raw` / `raw_calls`：敦煌原始响应与调用明细
 
     单店【v1】：`/testAPI/dhgate/dispute/processing/list`。
@@ -178,9 +178,9 @@ def test_dispute_open_summary(
 
     ## 返回结构（与单店联调一致）
     - `result`：业务汇总
-      - `stores[]`：各店 `dispute_open` 与 `call_errors`
+      - `stores[]`：各店 `dispute_open`
       - `stores_summary.dispute_open_list`：合并 `orderDisputeOpenInfos`（附 store_id）
-      - `errors`：整店级失败
+      - 任一敦煌调用失败则整接口失败
     - `raw`：最近一次敦煌原始响应（含 status；可对照 payDate 等官方原文字段）
     - `raw_calls`：本次全部调用明细（含 store_id / store_identifier）
 
@@ -219,7 +219,7 @@ def test_sync_product_groups(
     ## 入库行为（本地）
     - 每入库一条立即 commit；同店已存在的 `group_id` 跳过
     - 子分组扁平化，`parent_group_id` 记录层级；每条带 `supplier_id`、`store_id`
-    - 单店失败不中断其余店铺
+    - 任一店铺敦煌调用失败则整次接口失败
 
     单店联调：`/testAPI/dhgate/item/group/list`。
     """
@@ -248,7 +248,7 @@ def test_sync_shipping_templates(
 
     ## 入库行为（本地）
     - 每入库一条立即 commit；同店已存在的 `shipping_temp_id` 跳过
-    - 每条带 `supplier_id`、`store_id`；单店失败不中断其余店铺
+    - 每条带 `supplier_id`、`store_id`；任一店铺敦煌调用失败则整次接口失败
 
     单店联调：`/testAPI/dhgate/shipping/template/list`。
     """
@@ -277,7 +277,7 @@ def test_sync_aftersale_templates(
 
     ## 入库行为（本地）
     - 每入库一条立即 commit；同店已存在的 `after_sale_template_id` 跳过
-    - 每条带 `supplier_id`、`store_id`；单店失败不中断其余店铺
+    - 每条带 `supplier_id`、`store_id`；任一店铺敦煌调用失败则整次接口失败
 
     单店联调：`/testAPI/dhgate/item/aftersale/list`。
     """
@@ -304,7 +304,7 @@ def test_product_sync(
     - 可跨店铺一次传入多个商品
     - site_id 默认 EN
     - 同步成功的商品 is_seed=1
-    - 单条失败不中断整批
+    - 敦煌接口失败时原样抛出，不按成功响应返回
     """
     result = sync_products_dh(
         db,
@@ -357,7 +357,7 @@ async def test_product_sync_from_file(
     1. 按 extract_field_info 提取行（须含 store_identifier / item_code）
     2. 行内缺少店铺或商品编码：仅在响应 failed 中体现，不写库
     3. 调 dh.item.get 成功：写入完整详情，sync_state=1
-    4. 敦煌 API 报错/数据异常：仍写入店铺+商品编码，sync_state=0，便于事后排查
+    4. 敦煌 API 报错/数据异常：写入 sync_state=0 后原样抛出
     5. is_autocheck=1 时仅处理库中尚不存在的商品
 
     响应：elapsed_ms、success_count、failed_count；

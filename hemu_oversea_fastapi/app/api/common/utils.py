@@ -155,12 +155,12 @@ def update_dhgate_product(
     1. 按 supplier_id 加载该供应商下全部已授权敦煌店铺
     2. 每条 item 用 itemCode 查 product_dh 得到店铺，再取对应 token
     3. dh.item.get → 按入参官网字段改详情 → dh.item.update 原样提交
-    4. dry_run=false 时同步写回 product_dh，并写入 product_dh_update_log
-       （失败时 error_message 记录官方错误）；dry_run=true 仅试跑不落库
+    4. dry_run=false 时同步写回 product_dh，并写入 product_dh_update_log；
+       dry_run=true 仅试跑不落库
+    5. 敦煌接口报错时原样返回该错误
 
     官方 update 特殊错误：
-    - 含「该产品正在参加促销活动」：下架 → 再更新 → 上架
-    - 含「不可以做修改操作」：无法官方更新；只改本地库，日志保留官网错误并补充本地变更说明
+    - 含「该产品正在参加促销活动」：下架 → 再更新 → 上架；其后仍失败则原样抛出
 
     当前已支持的包装重量字段：
     itemCode / grossWeight / baseQt / stepQt / stepWeight

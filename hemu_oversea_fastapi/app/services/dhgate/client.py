@@ -15,7 +15,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import bad_request
 from app.models.store import Store
-from app.services.dhgate.oauth import ensure_valid_access_token, refresh_access_token
+from app.services.dhgate.oauth import (
+    DHGATE_HTTP_HEADERS,
+    ensure_valid_access_token,
+    refresh_access_token,
+)
 from app.services.dhgate.response import (
     extract_result,
     is_token_expired,
@@ -27,7 +31,6 @@ from app.services.dhgate.response import (
 logger = logging.getLogger("app")
 
 HttpMethod = Literal["GET", "POST"]
-_RAW_LOG_MAX_CHARS = 4000
 _SENSITIVE_PARAM_KEYS = frozenset({"access_token", "client_secret"})
 _OMIT_VALUE_PARAM_KEYS = frozenset({"imgBase64"})
 
@@ -66,16 +69,6 @@ def _stringify_params(params: dict) -> dict[str, str]:
 def _request_timestamp_ms() -> str:
     """敦煌公共参数 timestamp：毫秒时间戳（北京时间 UTC+8，服务端容忍约 30 分钟）。"""
     return str(int(time.time() * 1000))
-
-
-def _safe_json_preview(data: dict) -> str:
-    try:
-        text = json.dumps(data, ensure_ascii=False, default=str)
-    except TypeError:
-        text = str(data)
-    if len(text) > _RAW_LOG_MAX_CHARS:
-        return text[:_RAW_LOG_MAX_CHARS] + "...(truncated)"
-    return text
 
 
 def _public_params(params: dict[str, str]) -> dict[str, str]:
@@ -175,25 +168,28 @@ class DhgateClient:
             }
         )
 
+        api_url = _dhgate_api_url()
         try:
-            api_url = _dhgate_api_url()
             if http_method == "GET":
                 response = httpx.get(
                     api_url,
                     params=request_params,
+                    headers=DHGATE_HTTP_HEADERS,
                     timeout=timeout,
                 )
             else:
                 response = httpx.post(
                     api_url,
                     data=request_params,
+                    headers=DHGATE_HTTP_HEADERS,
                     timeout=timeout,
                 )
         except httpx.HTTPError as exc:
             logger.exception(
-                "敦煌 API 网络失败 store_id=%s method=%s",
+                "敦煌 API 网络失败 store_id=%s method=%s url=%s",
                 self.store.id,
                 method,
+                api_url,
             )
             raise bad_request(f"请求敦煌 API 失败: {exc}") from exc
 
@@ -206,13 +202,6 @@ class DhgateClient:
             http_status=response.status_code,
             response_body=data,
         )
-        # logger.info(
-        #     "敦煌 API 原始响应 store_id=%s method=%s http=%s body=%s",
-        #     self.store.id,
-        #     method,
-        #     response.status_code,
-        #     _safe_json_preview(data),
-        # )
 
         if is_token_expired(data) and not retried:
             refresh_access_token(self.db, self.store)
@@ -229,5 +218,5 @@ class DhgateClient:
                 retried=True,
             )
 
-        raise_if_error(data)
+        raise_if_error(data, http_status=response.status_code)
         return extract_result(data)

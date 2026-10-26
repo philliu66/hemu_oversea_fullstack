@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError, bad_request
+from app.core.errors import bad_request
 from app.core.store_types import StoreType
 from app.models.store import Store
 from app.services.commerce.multi_store import (
@@ -90,15 +90,6 @@ def _date_range_by_days(query_days: int) -> tuple[str, str]:
     return start.isoformat(), today.isoformat()
 
 
-def _safe_call(source: str, fn) -> tuple[dict[str, Any] | None, StorePunishCallError | None]:
-    try:
-        return fn(), None
-    except AppError as exc:
-        return None, StorePunishCallError(source=source, message=exc.message)
-    except Exception as exc:
-        return None, StorePunishCallError(source=source, message=str(exc))
-
-
 def _annotate_raw_calls(
     call_history: list[dict[str, Any]],
     *,
@@ -132,45 +123,25 @@ def _fetch_store_punish(
         store_identifier=store.identifier,
     )
 
-    punish, err = _safe_call(
-        "punish",
-        lambda: list_punish(
-            client,
-            start_date=start_date,
-            end_date=end_date,
-            page_no=page_no,
-            page_size=page_size,
-        ),
+    result.punish = list_punish(
+        client,
+        start_date=start_date,
+        end_date=end_date,
+        page_no=page_no,
+        page_size=page_size,
     )
-    result.punish = punish
-    if err:
-        result.call_errors.append(err)
-
-    brand, err = _safe_call(
-        "punish_brand",
-        lambda: list_punish_brand(
-            client,
-            third_type="brand",
-            page_no=page_no,
-            page_size=page_size,
-        ),
+    result.punish_brand = list_punish_brand(
+        client,
+        third_type="brand",
+        page_no=page_no,
+        page_size=page_size,
     )
-    result.punish_brand = brand
-    if err:
-        result.call_errors.append(err)
-
-    other, err = _safe_call(
-        "punish_other",
-        lambda: list_punish_brand(
-            client,
-            third_type="other",
-            page_no=page_no,
-            page_size=page_size,
-        ),
+    result.punish_other = list_punish_brand(
+        client,
+        third_type="other",
+        page_no=page_no,
+        page_size=page_size,
     )
-    result.punish_other = other
-    if err:
-        result.call_errors.append(err)
 
     raw_calls = _annotate_raw_calls(
         client.call_history,
@@ -265,7 +236,8 @@ def summarize_supplier_punish(
     2. dh.punish.brand.list.get thirdType=brand → stores[].punish_brand
     3. dh.punish.brand.list.get thirdType=other → stores[].punish_other
 
-    stores_summary.punish_list：合并三类处罚的 punishInfoList（附 store_id / store_identifier）
+    stores_summary.punish_list：合并三类处罚的 punishInfoList（附 store_id / store_identifier）。
+    任一敦煌调用失败则整次汇总失败。
     """
     stores = _resolve_punish_stores(
         db,
@@ -284,35 +256,16 @@ def summarize_supplier_punish(
     )
 
     for store in stores:
-        try:
-            store_result, raw_calls = _fetch_store_punish(
-                db,
-                store,
-                start_date=start_date,
-                end_date=end_date,
-                page_no=page_no,
-                page_size=page_size,
-            )
-            summary.stores.append(store_result)
-            summary.raw_calls.extend(raw_calls)
-        except AppError as exc:
-            summary.errors.append(
-                StoreRunError(
-                    store_id=store.id,
-                    store_name=store.name,
-                    store_type=store.store_type,
-                    message=exc.message,
-                )
-            )
-        except Exception as exc:
-            summary.errors.append(
-                StoreRunError(
-                    store_id=store.id,
-                    store_name=store.name,
-                    store_type=store.store_type,
-                    message=str(exc),
-                )
-            )
+        store_result, raw_calls = _fetch_store_punish(
+            db,
+            store,
+            start_date=start_date,
+            end_date=end_date,
+            page_no=page_no,
+            page_size=page_size,
+        )
+        summary.stores.append(store_result)
+        summary.raw_calls.extend(raw_calls)
 
     summary.stores_summary = _build_stores_summary(summary.stores)
     return summary

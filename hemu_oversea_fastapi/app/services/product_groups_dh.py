@@ -196,11 +196,7 @@ def sync_supplier_product_groups_dh(
     *,
     supplier_id: int,
 ) -> dict[str, Any]:
-    """
-    按供应商同步其下全部已授权敦煌店铺的产品分组。
-
-    单店失败不中断其余店铺。
-    """
+    """按供应商同步其下全部已授权敦煌店铺的产品分组。任一店铺敦煌调用失败则整次失败。"""
     supplier = db.get(Supplier, supplier_id)
     if supplier is None:
         raise not_found("供应商不存在")
@@ -215,33 +211,22 @@ def sync_supplier_product_groups_dh(
         raise bad_request("该供应商下没有已授权的敦煌店铺")
 
     store_results: list[dict[str, Any]] = []
-    errors: list[dict[str, Any]] = []
     inserted_total = 0
     skipped_total = 0
 
     for store in stores:
-        try:
-            result = sync_store_product_groups_dh(db, store=store)
-            store_results.append(result)
-            inserted_total += int(result.get("inserted") or 0)
-            skipped_total += int(result.get("skipped") or 0)
-        except Exception as exc:  # noqa: BLE001 — 联调汇总单店失败
-            message = getattr(exc, "message", None) or str(exc)
-            errors.append(
-                {
-                    "store_id": store.id,
-                    "store_name": store.name,
-                    "message": message,
-                }
-            )
+        result = sync_store_product_groups_dh(db, store=store)
+        store_results.append(result)
+        inserted_total += int(result.get("inserted") or 0)
+        skipped_total += int(result.get("skipped") or 0)
 
     return {
         "supplier_id": supplier_id,
         "store_count": len(stores),
         "success_store_count": len(store_results),
-        "fail_store_count": len(errors),
+        "fail_store_count": 0,
         "inserted": inserted_total,
         "skipped": skipped_total,
         "stores": store_results,
-        "errors": errors,
+        "errors": [],
     }

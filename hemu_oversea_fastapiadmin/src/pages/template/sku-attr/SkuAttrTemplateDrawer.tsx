@@ -25,6 +25,7 @@ import {
   retainAttrsForCategory,
   toCustomAttrDrafts,
 } from '@/pages/product/detail/productFormMapping';
+import { readRequestErrorMessage } from '@/requestErrorConfig';
 import {
   fetchDhCategoryAttrs,
   fetchDhCategoryPath,
@@ -168,6 +169,7 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
     [],
   );
   const [categoryAttrsLoading, setCategoryAttrsLoading] = useState(false);
+  const [categoryAttrsError, setCategoryAttrsError] = useState<string>();
   /** 类目普通属性（不含自定义 attr_id=11） */
   const [attrList, setAttrList] = useState<DhProductSelectedAttrPublic[]>([]);
   /** 自定义属性草稿（attr_id=11），保存时合并进 attr_list */
@@ -195,6 +197,7 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
     categoryAttrsReqRef.current = reqId;
     setCategoryAttrsLoading(true);
     setCategoryAttrs([]);
+    setCategoryAttrsError(undefined);
     try {
       const data = await fetchDhCategoryAttrs(categoryId);
       if (categoryAttrsReqRef.current !== reqId) {
@@ -202,12 +205,16 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
       }
       const list = data.attrs || [];
       setCategoryAttrs(list);
+      setCategoryAttrsError(undefined);
       return list;
-    } catch {
+    } catch (error) {
       if (categoryAttrsReqRef.current !== reqId) {
         return undefined;
       }
       setCategoryAttrs([]);
+      setCategoryAttrsError(
+        readRequestErrorMessage(error, '获取分类属性失败'),
+      );
       return undefined;
     } finally {
       if (categoryAttrsReqRef.current === reqId) {
@@ -221,6 +228,7 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
     setPickedCategory(null);
     setCategoryPath(undefined);
     setCategoryAttrs([]);
+    setCategoryAttrsError(undefined);
     setAttrList([]);
     setCustomAttrs([]);
     setCategoryAttrsLoading(false);
@@ -594,6 +602,8 @@ const SkuAttrTemplateDrawer: React.FC<SkuAttrTemplateDrawerProps> = ({
               <Typography.Text type="secondary">
                 请先选择商品分类
               </Typography.Text>
+            ) : categoryAttrsError ? (
+              <Typography.Text type="danger">{categoryAttrsError}</Typography.Text>
             ) : normalCategoryAttrs.length === 0 ? (
               <Typography.Text type="secondary">暂无类目属性</Typography.Text>
             ) : (

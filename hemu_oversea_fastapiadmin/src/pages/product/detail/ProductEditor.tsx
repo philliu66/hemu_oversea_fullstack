@@ -51,6 +51,7 @@ import {
   toCopyProductDetail,
   type ProductPageMode,
 } from '@/pages/product/utils';
+import { readRequestErrorMessage } from '@/requestErrorConfig';
 import {
   fetchDhCategoryAttrs,
   fetchDhCategoryPath,
@@ -309,6 +310,7 @@ export const ProductEditor = forwardRef<
     [],
   );
   const [categoryAttrsLoading, setCategoryAttrsLoading] = useState(false);
+  const [categoryAttrsError, setCategoryAttrsError] = useState<string>();
   const [commissionRate, setCommissionRate] =
     useState<DhCommissionRatePublic | null>(null);
   const [commissionRateLoading, setCommissionRateLoading] = useState(false);
@@ -377,6 +379,7 @@ export const ProductEditor = forwardRef<
     categoryAttrsReqRef.current = reqId;
     setCategoryAttrsLoading(true);
     setCategoryAttrs([]);
+    setCategoryAttrsError(undefined);
     try {
       const attrs = await fetchDhCategoryAttrs(categoryId);
       if (categoryAttrsReqRef.current !== reqId) {
@@ -384,12 +387,16 @@ export const ProductEditor = forwardRef<
       }
       const list = attrs.attrs || [];
       setCategoryAttrs(list);
+      setCategoryAttrsError(undefined);
       return list;
-    } catch {
+    } catch (error) {
       if (categoryAttrsReqRef.current !== reqId) {
         return undefined;
       }
       setCategoryAttrs([]);
+      setCategoryAttrsError(
+        readRequestErrorMessage(error, '获取分类属性失败'),
+      );
       return undefined;
     } finally {
       if (categoryAttrsReqRef.current === reqId) {
@@ -407,6 +414,7 @@ export const ProductEditor = forwardRef<
     baselineItemGroupIdRef.current = undefined;
     setCategoryPath(undefined);
     setCategoryAttrs([]);
+    setCategoryAttrsError(undefined);
     setCategoryAttrsLoading(false);
     categoryAttrsReqRef.current += 1;
     void (async () => {
@@ -491,6 +499,7 @@ export const ProductEditor = forwardRef<
         } else {
           setCategoryPath(undefined);
           setCategoryAttrs([]);
+          setCategoryAttrsError(undefined);
           setCategoryAttrsLoading(false);
         }
       } catch (error) {
@@ -499,6 +508,7 @@ export const ProductEditor = forwardRef<
           baselineRef.current = null;
           setPickedCategory(null);
           setCategoryAttrs([]);
+          setCategoryAttrsError(undefined);
           setCategoryAttrsLoading(false);
           message.error(
             error instanceof Error ? error.message : '加载商品详情失败',
@@ -859,6 +869,8 @@ export const ProductEditor = forwardRef<
           </Typography.Text>
           {categoryAttrsLoading ? (
             <Skeleton active paragraph={{ rows: 8 }} />
+          ) : categoryAttrsError ? (
+            <Typography.Text type="danger">{categoryAttrsError}</Typography.Text>
           ) : (
             <ProFormDependency name={['attr_list']}>
               {({ attr_list }) => {

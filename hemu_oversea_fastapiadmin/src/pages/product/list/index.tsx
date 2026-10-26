@@ -548,21 +548,25 @@ const ProductList: React.FC = () => {
     setSyncDone(0);
     let successCount = 0;
     let failCount = 0;
+    const failReasons: string[] = [];
 
     for (let i = 0; i < codes.length; i += 1) {
       const itemCode = codes[i];
       try {
-        const result = await syncDhProduct(
+        await syncDhProduct(
           { store_id: syncStoreId, item_code: itemCode },
           { skipErrorHandler: true },
         );
-        if (result.ok) {
-          successCount += 1;
-        } else {
-          failCount += 1;
-        }
-      } catch {
+        successCount += 1;
+      } catch (error) {
         failCount += 1;
+        const reason =
+          (error as { info?: { errorMessage?: string } })?.info
+            ?.errorMessage ||
+          (error as { message?: string })?.message;
+        if (reason) {
+          failReasons.push(`${itemCode}：${reason}`);
+        }
       }
       setSyncDone(i + 1);
     }
@@ -570,7 +574,10 @@ const ProductList: React.FC = () => {
     setSyncing(false);
     setSyncModalOpen(false);
     actionRef.current?.reload();
-    const tip = `同步完成：成功 ${successCount} 个，失败 ${failCount} 个`;
+    const reasonText = failReasons.length
+      ? `。${failReasons.join('；')}`
+      : '';
+    const tip = `同步完成：成功 ${successCount} 个，失败 ${failCount} 个${reasonText}`;
     if (failCount > 0 && successCount > 0) {
       message.warning(tip);
     } else if (failCount > 0) {

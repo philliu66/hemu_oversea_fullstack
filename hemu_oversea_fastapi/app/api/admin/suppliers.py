@@ -221,7 +221,7 @@ def run_supplier_daily_inspection(
     手动触发：读取巡检设置 → 汇总处罚/纠纷 → 发邮件 → 写发送记录。
 
     与后续定时任务调用同一 service：`run_supplier_daily_inspection`。
-    成功/失败均会写入 mail_send_logs。
+    成功与失败都会写入 mail_send_logs。敦煌汇总或发信失败时，记录失败日志后接口返回错误。
     """
     supplier_id = resolve_supplier_id(db, current_user, payload.supplier_id)
     return success(

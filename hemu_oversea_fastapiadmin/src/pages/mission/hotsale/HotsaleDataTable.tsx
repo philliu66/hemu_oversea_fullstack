@@ -766,6 +766,10 @@ export function HotsaleDataTable({
       dataIndex: 'product',
       search: false,
       width: 360,
+      ellipsis: false,
+      onCell: () => ({
+        style: { maxWidth: 360, whiteSpace: 'normal' },
+      }),
       render: (_, record) => {
         const fullName = (record.product_name || '').trim();
         const shortName = (record.product_name_short || '').trim();
@@ -773,7 +777,15 @@ export function HotsaleDataTable({
         const isShortOnly = Boolean(!fullName && shortName);
         const productUrl = (record.product_url || '').trim();
         return (
-          <Space align="start" size={12} style={{ maxWidth: '100%' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+              width: 336,
+              maxWidth: 336,
+            }}
+          >
             {record.main_image_url ? (
               <Image
                 src={record.main_image_url}
@@ -815,18 +827,19 @@ export function HotsaleDataTable({
                   </Tag>
                 ) : null}
                 {/*
-                  Paragraph + ellipsis 只能吃纯文本；嵌套 Link/a 会导致标题空白。
                   有产品链接时用点击打开，样式做成链接色。
+                  标题在列最大宽度内自动折行，全文展示、不截断。
                 */}
-                <Typography.Paragraph
-                  ellipsis={{ rows: 2, tooltip: name || undefined }}
+                <Typography.Text
                   copyable={
                     name ? { text: name, tooltips: ['复制', '已复制'] } : false
                   }
                   style={{
-                    marginBottom: 0,
                     flex: 1,
                     minWidth: 0,
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'anywhere',
                     ...(productUrl && name
                       ? {
                           color: 'var(--ant-color-link)',
@@ -843,11 +856,11 @@ export function HotsaleDataTable({
                   }
                 >
                   {name || '-'}
-                </Typography.Paragraph>
+                </Typography.Text>
               </div>
               {renderCodeTag(record.item_code)}
             </div>
-          </Space>
+          </div>
         );
       },
     },
@@ -948,17 +961,28 @@ export function HotsaleDataTable({
       },
     },
     {
-      title: '指标',
+      title: '成交量',
       dataIndex: 'deal',
-      width: 160,
       search: false,
-      render: (_, record) => (
-        <div style={{ lineHeight: 1.55, fontSize: 12, whiteSpace: 'nowrap' }}>
-          <div>成交量：{record.deal || '-'}</div>
-          <div>成交金额：{record.deal_amount || '-'}</div>
-          <div>成交人数：{record.deal_persons || '-'}</div>
-        </div>
-      ),
+      ellipsis: false,
+      onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+      render: (_, record) => (record.deal || '').trim() || '-',
+    },
+    {
+      title: '成交金额',
+      dataIndex: 'deal_amount',
+      search: false,
+      ellipsis: false,
+      onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+      render: (_, record) => (record.deal_amount || '').trim() || '-',
+    },
+    {
+      title: '成交人数',
+      dataIndex: 'deal_persons',
+      search: false,
+      ellipsis: false,
+      onCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+      render: (_, record) => (record.deal_persons || '').trim() || '-',
     },
     {
       title: '操作',

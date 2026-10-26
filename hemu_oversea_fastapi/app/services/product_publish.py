@@ -508,10 +508,7 @@ def _filter_item_attrs_by_category(
     attrs = detail.get("itemAttrList")
     if not cate_pub_id or not isinstance(attrs, list) or not attrs:
         return detail
-    try:
-        cate = get_category(client, cate_pub_id=cate_pub_id)
-    except AppError:
-        return detail
+    cate = get_category(client, cate_pub_id=cate_pub_id)
     allowed = set(_ALWAYS_ALLOWED_ATTR_IDS)
     for row in cate.get("categoryPubAttrList") or []:
         if not isinstance(row, dict):

@@ -302,7 +302,7 @@ def run_supplier_daily_inspection(
                 SupplierInspectionSchedule.supplier_id == supplier_id
             )
         )
-        log_row = create_mail_send_log(
+        create_mail_send_log(
             db,
             category=category,
             supplier_id=supplier_id,
@@ -320,16 +320,4 @@ def run_supplier_daily_inspection(
                 status=MailSendStatus.FAILED,
             )
         db.commit()
-        db.refresh(log_row)
-
-        return SupplierDailyInspectionRunPublic(
-            supplier_id=supplier_id,
-            query_days=query_days,
-            to_emails=to_emails or None,
-            subject=subject,
-            status=MailSendStatus.FAILED,
-            punish_count=len(punish_list),
-            dispute_count=len(dispute_list),
-            mail_send_log_id=log_row.id,
-            error_message=error_message,
-        )
+        raise

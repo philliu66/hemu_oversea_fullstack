@@ -82,12 +82,12 @@ def run_for_stores(
     store_type: StoreType | None,
     worker: Callable[[Session, Store], T],
     require_oauth: bool = True,
-    continue_on_error: bool = True,
+    continue_on_error: bool = False,
 ) -> MultiStoreResult[T]:
     """
-    对范围内每个店铺执行 worker，汇总成功结果与失败信息。
+    对范围内每个店铺执行 worker。
 
-    continue_on_error=True 时单店失败不中断其余店铺。
+    默认遇错即失败。批量场景由调用方循环单次接口，不在一次请求里跳过失败店铺。
     """
     stores = resolve_stores(
         db,

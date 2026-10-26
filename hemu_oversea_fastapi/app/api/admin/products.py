@@ -136,7 +136,7 @@ def sync_dh_product(
 
     - 底层复用 testAPI `/dhgate/commerce/product/sync` 同一套 sync_products_dh
     - 同店铺 + 编码 + 站点已存在则更新，否则新建
-    - 单条失败时仍返回 200，`ok=false` 与失败原因，便于前端批量循环
+    - 敦煌接口失败时按错误返回，message 为敦煌原文
     - 需要按钮权限 `product.list.sync`
     """
     assert_supplier_data_writable(current_user)

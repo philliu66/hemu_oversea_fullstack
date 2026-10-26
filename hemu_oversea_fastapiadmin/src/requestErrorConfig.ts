@@ -162,6 +162,23 @@ function canAttemptRefresh(opts: RequestOpts): boolean {
   return true;
 }
 
+export function readRequestErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  if (error && typeof error === 'object') {
+    const info = (error as { info?: { errorMessage?: string } }).info;
+    if (info?.errorMessage) {
+      return info.errorMessage;
+    }
+    const message = (error as { message?: string }).message;
+    if (message) {
+      return message;
+    }
+  }
+  return fallback;
+}
+
 function unauthorizedTip(error: any): string {
   if (error?.name === 'BizError' && error.info?.errorMessage) {
     return error.info.errorMessage;

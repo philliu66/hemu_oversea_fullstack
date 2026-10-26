@@ -35,14 +35,6 @@ _DEFAULT_SITE_ID = "EN"
 _SYNC_OK = "1"
 _SYNC_FAIL = "0"
 _SYNC_OK_DESC = "同步成功"
-_SYNC_DESC_MAX_LEN = 512
-
-
-def _clip_sync_desc(message: str | None) -> str:
-    text = (message or "").strip() or "未知错误"
-    if len(text) <= _SYNC_DESC_MAX_LEN:
-        return text
-    return text[: _SYNC_DESC_MAX_LEN - 3] + "..."
 
 
 def _get_product_row(
@@ -315,7 +307,7 @@ def sync_single_product_dh(
 
     - 已存在同 store+item_code+site 记录则更新
     - 供应商门户仅可同步本供应商店铺
-    - 单条失败不抛业务异常，以 ok=False 返回，便于前端批量循环
+    - 敦煌接口失败时抛出原始错误，由接口按失败返回
     """
     code = _as_str(item_code)
     if not code:
@@ -351,15 +343,7 @@ def sync_single_product_dh(
         }
 
     fail = (batch.get("failed") or [{}])[0]
-    return {
-        "ok": False,
-        "store_id": store.id,
-        "item_code": code,
-        "site_id": site,
-        "product_id": fail.get("product_id"),
-        "sync_state": fail.get("sync_state") or _SYNC_FAIL,
-        "message": fail.get("message") or "同步失败",
-    }
+    raise bad_request(fail.get("message") or "同步失败")
 
 
 def sync_products_dh(
@@ -373,8 +357,8 @@ def sync_products_dh(
 
     items 元素需含 store_identifier（stores.identifier）、item_code；
     可选 site_id（默认 EN）。
-    同 store+item_code+site 重复时覆盖旧数据；
-    单条失败不中断整批，并在 product_dh 写入 sync_state=0。失败原因只出现在返回结果里。
+    同 store+item_code+site 重复时覆盖旧数据。
+    敦煌接口或处理过程报错时，将该条记为 sync_state=0 后原样抛出，不再以成功响应返回。
     """
     if not items:
         raise bad_request("items 不能为空")
@@ -428,26 +412,15 @@ def sync_products_dh(
                 site_id=site_id,
                 clients=clients,
             )
-            failed_list.append(
-                {
-                    "index": index,
-                    "store_identifier": store_identifier,
-                    "item_code": item_code,
-                    "site_id": site_id,
-                    "message": exc.message,
-                    "code": exc.code,
-                    "product_id": fail_row.id if fail_row else None,
-                    "sync_state": _SYNC_FAIL,
-                    "sync_state_desc": _clip_sync_desc(exc.message),
-                }
-            )
             logger.warning(
-                "商品同步失败 store_identifier=%s item_code=%s: %s",
+                "商品同步失败 store_identifier=%s item_code=%s product_id=%s: %s",
                 store_identifier,
                 item_code,
+                fail_row.id if fail_row else None,
                 exc.message,
             )
-        except Exception as exc:  # noqa: BLE001
+            raise
+        except Exception:
             db.rollback()
             fail_row = _try_mark_sync_failed(
                 db,
@@ -456,23 +429,13 @@ def sync_products_dh(
                 site_id=site_id,
                 clients=clients,
             )
-            failed_list.append(
-                {
-                    "index": index,
-                    "store_identifier": store_identifier,
-                    "item_code": item_code,
-                    "site_id": site_id,
-                    "message": str(exc),
-                    "product_id": fail_row.id if fail_row else None,
-                    "sync_state": _SYNC_FAIL,
-                    "sync_state_desc": _clip_sync_desc(str(exc)),
-                }
-            )
             logger.exception(
-                "商品同步异常 store_identifier=%s item_code=%s",
+                "商品同步异常 store_identifier=%s item_code=%s product_id=%s",
                 store_identifier,
                 item_code,
+                fail_row.id if fail_row else None,
             )
+            raise
         finally:
             logger.info("当前同步进度: %s/%s", index + 1, total)
 
@@ -496,8 +459,8 @@ def sync_products_from_file(
 
     1. 行内缺少 store_identifier / item_code：只记入失败响应，不写库
     2. 调 dh.item.get 成功：写入完整详情，sync_state=1
-    3. 敦煌 API 报错/异常：仍写入店铺+商品编码，sync_state=0，便于事后按状态排查
-    4. 返回耗时、成功/失败数及失败明细（含商品编码与异常信息）
+    3. 敦煌 API 报错/异常：仍写入店铺+商品编码，sync_state=0，然后原样抛出
+    4. 成功时返回耗时与成功明细；Excel 缺字段的行仍记入 failed，不中断
     """
     if not items:
         raise bad_request("items 不能为空")
@@ -566,25 +529,15 @@ def sync_products_from_file(
                 site_id=site_id,
                 clients=clients,
             )
-            failed_list.append(
-                {
-                    "index": index,
-                    "store_identifier": store_identifier,
-                    "item_code": item_code,
-                    "site_id": site_id,
-                    "product_id": fail_row.id if fail_row else None,
-                    "message": exc.message,
-                    "code": exc.code,
-                    "sync_state": _SYNC_FAIL if fail_row else None,
-                }
-            )
             logger.warning(
-                "文件同步失败 store_identifier=%s item_code=%s: %s",
+                "文件同步失败 store_identifier=%s item_code=%s product_id=%s: %s",
                 store_identifier,
                 item_code,
+                fail_row.id if fail_row else None,
                 exc.message,
             )
-        except Exception as exc:  # noqa: BLE001
+            raise
+        except Exception:
             db.rollback()
             fail_row = _try_mark_sync_failed(
                 db,
@@ -593,22 +546,13 @@ def sync_products_from_file(
                 site_id=site_id,
                 clients=clients,
             )
-            failed_list.append(
-                {
-                    "index": index,
-                    "store_identifier": store_identifier,
-                    "item_code": item_code,
-                    "site_id": site_id,
-                    "product_id": fail_row.id if fail_row else None,
-                    "message": str(exc),
-                    "sync_state": _SYNC_FAIL if fail_row else None,
-                }
-            )
             logger.exception(
-                "文件同步异常 store_identifier=%s item_code=%s",
+                "文件同步异常 store_identifier=%s item_code=%s product_id=%s",
                 store_identifier,
                 item_code,
+                fail_row.id if fail_row else None,
             )
+            raise
         finally:
             logger.info("当前文件同步进度: %s/%s", index + 1, total)
 

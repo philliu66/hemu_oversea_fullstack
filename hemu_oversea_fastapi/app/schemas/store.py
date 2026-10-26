@@ -119,21 +119,6 @@ class StoreAuthorizePublic(BaseModel):
     authorize_url: str = Field(description="跳转平台授权页的完整 URL")
 
 
-class DhgateOauthCodePublic(BaseModel):
-    """联调：获取敦煌授权码，供随后调用 /oauth/dhgate/callback。"""
-
-    authorize_url: str | None = Field(
-        default=None,
-        description="发起授权时返回。参数与敦煌文档一致，不含店铺",
-    )
-    code: str | None = Field(
-        default=None,
-        description="敦煌回调带回的授权码，用于调用 /callback",
-    )
-    state: str | None = Field(default=None, description="与 code 一起传给 /callback")
-    redirect_uri: str = Field(description="本次授权使用的回调地址，须与敦煌应用配置一致")
-
-
 class StorePublic(BaseModel):
     """列表 / 创建 / 更新对外返回：不含密码与 token 细节。"""
 
