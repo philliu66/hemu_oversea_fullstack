@@ -8,6 +8,7 @@ from sqlalchemy.sql import ColumnElement
 
 from app.core.errors import bad_request, forbidden
 from app.core.roles import Role
+from app.models.store import Store
 from app.models.supplier import Supplier
 from app.models.user import User
 
@@ -82,11 +83,35 @@ def resolve_supplier_id(
     raise forbidden()
 
 
+def assert_store_in_actor_scope(db: Session, actor: User, store: Store) -> None:
+    """
+    店铺查看 / 授权的可见范围。
+
+    - 供应商门户：仅本账号绑定供应商下的店铺
+    - 平台管理员：任意店铺
+    - 平台员工：仅自己维护（created_by）的供应商下的店铺
+    """
+    supplier_id = store.supplier_id
+    if actor.role in SUPPLIER_PORTAL_ROLES:
+        if actor.supplier_id is None or supplier_id != actor.supplier_id:
+            raise forbidden("无权访问该店铺")
+        return
+    if actor.role == Role.PLATFORM_ADMIN.value:
+        return
+    if actor.role == Role.PLATFORM_STAFF.value:
+        if supplier_id is None:
+            raise forbidden("无权访问该店铺")
+        assert_supplier_accessible(db, actor, supplier_id)
+        return
+    raise forbidden("无权访问该店铺")
+
+
 def assert_supplier_data_writable(actor: User) -> None:
     """
     供应商侧业务数据（店铺/商品/模板/任务等）默认仅供应商可写。
 
-    平台角色仅允许查看，禁止新增/修改/删除（含授权、发布、执行等写操作）。
+    平台角色仅允许查看，禁止新增/修改/删除（含发布、执行等写操作）。
+    店铺授权不走此校验，见 assert_store_in_actor_scope。
     供应商管理、人员管理等平台自有能力不走此校验。
     """
     if actor.role in PLATFORM_ROLES:

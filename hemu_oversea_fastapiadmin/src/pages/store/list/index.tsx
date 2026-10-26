@@ -132,6 +132,11 @@ const StoreList: React.FC = () => {
     ]),
   );
 
+  const canAuthorizeStore = access.canWriteSupplierData || access.canPlatform;
+
+  const authorizeActionLabel = (oauthStatus: number) =>
+    oauthStatus === STORE_OAUTH_STATUS.UNAUTHORIZED ? '授权' : '重新授权';
+
   const renderOauthTag = (oauthStatus: number) => {
     if (!isOauthStatus(oauthStatus)) {
       return null;
@@ -276,6 +281,15 @@ const StoreList: React.FC = () => {
           <Button type="link" size="small" onClick={() => openView(record.id)}>
             {'查看'}
           </Button>
+          {canAuthorizeStore ? (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => void handleAuthorize(record.id)}
+            >
+              {authorizeActionLabel(record.oauth_status)}
+            </Button>
+          ) : null}
           {access.canWriteSupplierData ? (
             <>
               <Button
@@ -284,13 +298,6 @@ const StoreList: React.FC = () => {
                 onClick={() => openEdit(record.id)}
               >
                 {'编辑'}
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => void handleAuthorize(record.id)}
-              >
-                {'授权'}
               </Button>
               <Popconfirm
                 title={'确认删除该店铺？'}

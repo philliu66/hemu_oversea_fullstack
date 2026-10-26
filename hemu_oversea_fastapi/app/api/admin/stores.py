@@ -40,6 +40,7 @@ from app.services.commerce import (
 )
 from app.services.dhgate.dispute_labels import enrich_dispute_open_item
 from app.services.supplier_scope import (
+    assert_store_in_actor_scope,
     assert_supplier_data_writable,
     resolve_supplier_id,
 )
@@ -73,8 +74,11 @@ def list_stores(
 @router.post("/detail", response_model=ApiResponse[StoreDetailPublic])
 def detail_store(
     payload: StoreDetail,
+    current_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[StoreDetailPublic]:
+    store = store_service.get_store(db, payload.id)
+    assert_store_in_actor_scope(db, current_user, store)
     return success(store_service.get_store_detail(db, payload.id))
 
 
@@ -105,7 +109,8 @@ def create_store_authorize_url(
     db: Session = Depends(get_db),
 ) -> ApiResponse[StoreAuthorizePublic]:
     """按店铺类型生成平台授权链接（管理端登录后调用，前端再跳转）。"""
-    assert_supplier_data_writable(current_user)
+    store = store_service.get_store(db, payload.id)
+    assert_store_in_actor_scope(db, current_user, store)
     authorize_url, store_type = store_oauth.create_authorize_url(
         db,
         store_id=payload.id,

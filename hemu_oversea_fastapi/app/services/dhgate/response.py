@@ -88,6 +88,29 @@ def is_token_expired(data: dict) -> bool:
     )
 
 
+def is_refresh_token_expired(data: dict) -> bool:
+    """刷新接口明确表示 refresh_token 已过期或无效。"""
+    error = str(data.get("error") or "").strip().lower()
+    if error == "invalid_grant":
+        return True
+    text = f"{error} {format_status_error_message(data)}".lower()
+    if "refresh" not in text and "刷新" not in text:
+        return False
+    return any(
+        marker in text
+        for marker in (
+            "expir",
+            "invalid",
+            "not exist",
+            "does not exist",
+            "过期",
+            "失效",
+            "无效",
+            "不存在",
+        )
+    )
+
+
 def raise_if_error(data: dict) -> None:
     if is_success(data):
         return

@@ -13,15 +13,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.errors import bad_request, not_found
+from app.core.errors import AppError, bad_request, not_found
 from app.core.store_types import StoreType
 from app.models.store import Store
-from app.services.dhgate.response import raise_reauth_required
+from app.services.dhgate.response import is_refresh_token_expired, raise_reauth_required
 
 logger = logging.getLogger("app")
 
-# 敦煌文档：Refresh Token 有效期约 30 天
-_REFRESH_TOKEN_DEFAULT_DAYS = 30
+# 敦煌文档：access_token 有效期 1 天。refresh_token 响应不带到期时间，本地不推算。
+_ACCESS_TOKEN_DEFAULT_DAYS = 1
+# 官方 expires_in 是绝对过期时间（毫秒时间戳），示例 1378545787369。
+# 13 位毫秒时间戳自 2001-09 起不小于该值。
+_ABSOLUTE_EXPIRES_MS_MIN = 1_000_000_000_000
+# 介于该值与绝对时间戳之间时，按相对毫秒处理（例如 86400000 = 1 天）。
+_RELATIVE_EXPIRES_MS_MIN = 10_000_000
 
 _store_locks: dict[int, threading.Lock] = {}
 _locks_guard = threading.Lock()
@@ -44,11 +49,23 @@ def ensure_dhgate_config() -> None:
 
 
 def parse_expires_at(expires_in: int | str | None, *, now: datetime) -> datetime:
-    """敦煌 expires_in 单位为毫秒；若数值较小则按秒处理。"""
+    """解析敦煌 token 响应里的 expires_in，得到 access_token 到期时间。
+
+    官方返回示例::
+
+        {"expires_in": 1378545787369, "scope": "basic",
+         "refresh_token": "...", "access_token": "..."}
+
+    ``expires_in`` 是绝对过期时间，单位毫秒，不是剩余时长。
+    缺省时按文档中的 1 天估算。数值不足 13 位时：大于
+    ``_RELATIVE_EXPIRES_MS_MIN`` 按相对毫秒，否则按相对秒数。
+    """
     if expires_in is None:
-        return now + timedelta(days=1)
+        return now + timedelta(days=_ACCESS_TOKEN_DEFAULT_DAYS)
     value = int(expires_in)
-    if value > 10_000_000:
+    if value >= _ABSOLUTE_EXPIRES_MS_MIN:
+        return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
+    if value > _RELATIVE_EXPIRES_MS_MIN:
         return now + timedelta(milliseconds=value)
     return now + timedelta(seconds=value)
 
@@ -92,7 +109,10 @@ def _request_token(payload: dict[str, str]) -> dict:
             response.status_code,
             data,
         )
-        raise bad_request(f"敦煌 token 请求失败: {err}")
+        raise bad_request(
+            f"敦煌 token 请求失败: {err}",
+            data={"dhgate_response": data},
+        )
 
     if not data.get("access_token"):
         raise bad_request("敦煌未返回 access_token")
@@ -100,17 +120,33 @@ def _request_token(payload: dict[str, str]) -> dict:
 
 
 def apply_token_response(store: Store, token_data: dict, *, now: datetime) -> None:
+    """把敦煌 token 响应写入店铺。
+
+    access_token 到期时间取响应里的 ``expires_in``（绝对毫秒时间戳）。
+    refresh_token 只保存令牌本身；官方不返回到期时间，本地不推算。
+    """
     store.access_token = token_data["access_token"]
-    refresh_token = token_data.get("refresh_token")
-    if refresh_token:
-        store.refresh_token = refresh_token
+    incoming_refresh = token_data.get("refresh_token")
+    if isinstance(incoming_refresh, str):
+        incoming_refresh = incoming_refresh.strip() or None
+    else:
+        incoming_refresh = None
+    if incoming_refresh:
+        store.refresh_token = incoming_refresh
+    store.refresh_token_expires_at = None
     store.access_token_expires_at = parse_expires_at(
         token_data.get("expires_in"),
         now=now,
     )
-    store.refresh_token_expires_at = now + timedelta(days=_REFRESH_TOKEN_DEFAULT_DAYS)
     store.oauth_scope = token_data.get("scope") or settings.DHGATE_OAUTH_SCOPE
     store.oauth_authorized_at = now
+
+
+def _raise_if_refresh_token_expired(exc: AppError) -> None:
+    payload = exc.data if isinstance(exc.data, dict) else {}
+    response = payload.get("dhgate_response")
+    if isinstance(response, dict) and is_refresh_token_expired(response):
+        raise raise_reauth_required("敦煌授权已过期，请重新授权") from exc
 
 
 def refresh_access_token(db: Session, store: Store) -> Store:
@@ -118,26 +154,26 @@ def refresh_access_token(db: Session, store: Store) -> Store:
     if not store.refresh_token:
         raise raise_reauth_required("店铺缺少 refresh_token，请重新授权")
 
-    refresh_expires = _normalize_expires_at(store.refresh_token_expires_at)
     now = datetime.now(timezone.utc)
-    if refresh_expires is not None and refresh_expires < now:
-        raise raise_reauth_required("敦煌 refresh_token 已过期，请重新授权")
-
     lock = _get_store_lock(store.id)
     with lock:
         db.refresh(store)
         if not store.refresh_token:
             raise raise_reauth_required("店铺缺少 refresh_token，请重新授权")
 
-        token_data = _request_token(
-            {
-                "grant_type": "refresh_token",
-                "refresh_token": store.refresh_token,
-                "client_id": settings.DHGATE_APP_KEY,
-                "client_secret": settings.DHGATE_APP_SECRET,
-                "scope": settings.DHGATE_OAUTH_SCOPE,
-            }
-        )
+        try:
+            token_data = _request_token(
+                {
+                    "grant_type": "refresh_token",
+                    "refresh_token": store.refresh_token,
+                    "client_id": settings.DHGATE_APP_KEY,
+                    "client_secret": settings.DHGATE_APP_SECRET,
+                    "scope": settings.DHGATE_OAUTH_SCOPE,
+                }
+            )
+        except AppError as exc:
+            _raise_if_refresh_token_expired(exc)
+            raise
         apply_token_response(store, token_data, now=now)
         db.commit()
         db.refresh(store)
@@ -150,16 +186,49 @@ def ensure_valid_access_token(db: Session, store: Store) -> str:
     if not store.access_token:
         raise raise_reauth_required("店铺未授权敦煌，请先完成授权")
 
-    refresh_expires = _normalize_expires_at(store.refresh_token_expires_at)
     now = datetime.now(timezone.utc)
-    if refresh_expires is not None and refresh_expires < now:
-        raise raise_reauth_required("敦煌 refresh_token 已过期，请重新授权")
-
     access_expires = _normalize_expires_at(store.access_token_expires_at)
     buffer = timedelta(minutes=settings.DHGATE_TOKEN_REFRESH_BUFFER_MINUTES)
     if access_expires is None or access_expires <= now + buffer:
         store = refresh_access_token(db, store)
     return store.access_token  # type: ignore[return-value]
+
+
+# 联调取 code 的 state 前缀。token_hex 只有小写，用大写 C 与正式授权区分。
+_CODE_AUTHORIZE_STATE_PREFIX = "C"
+
+
+def code_redirect_uri() -> str:
+    """联调取 code 的 redirect_uri：把正式回调路径末尾的 /callback 换成 /code。"""
+    callback = settings.DHGATE_REDIRECT_URI
+    marker = "/callback"
+    if callback.endswith(marker):
+        return callback[: -len(marker)] + "/code"
+    return callback.rstrip("/") + "/code"
+
+
+def _token_redirect_uri(state: str | None) -> str:
+    """换 token 时的 redirect_uri 必须与签发 code 时一致。"""
+    if state and state.startswith(_CODE_AUTHORIZE_STATE_PREFIX):
+        return code_redirect_uri()
+    return settings.DHGATE_REDIRECT_URI
+
+
+def create_code_authorize_url() -> tuple[str, str]:
+    """按敦煌文档生成授权地址，只换 code，不关联店铺。"""
+    ensure_dhgate_config()
+    state = _CODE_AUTHORIZE_STATE_PREFIX + secrets.token_hex(8)
+    redirect_uri = code_redirect_uri()
+    query = urlencode(
+        {
+            "client_id": settings.DHGATE_APP_KEY,
+            "response_type": "code",
+            "redirect_uri": redirect_uri,
+            "scope": settings.DHGATE_OAUTH_SCOPE,
+            "state": state,
+        }
+    )
+    return f"{settings.DHGATE_AUTHORIZE_URL}?{query}", state
 
 
 def create_authorize_url_for_store(
@@ -227,17 +296,29 @@ def _find_store_by_state(db: Session, state: str) -> Store:
     return store
 
 
-def _exchange_code_for_token(code: str) -> dict:
+def _exchange_code_for_token(code: str, *, redirect_uri: str) -> dict:
     return _request_token(
         {
             "grant_type": "authorization_code",
             "code": code,
             "client_id": settings.DHGATE_APP_KEY,
             "client_secret": settings.DHGATE_APP_SECRET,
-            "redirect_uri": settings.DHGATE_REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "scope": settings.DHGATE_OAUTH_SCOPE,
         }
     )
+
+
+def _load_store_for_code_callback(db: Session, store_id: int | None) -> Store:
+    """联调 code 未落在店铺上，换 token 时由调用方指定写入哪家店。"""
+    if store_id is None:
+        raise bad_request("请传入 store_id，指定要把 token 写入的店铺")
+    store = db.get(Store, store_id)
+    if store is None or store.is_deleted:
+        raise not_found("店铺不存在")
+    if store.store_type != StoreType.DHGATE.value:
+        raise bad_request("当前店铺不是敦煌类型，无法走敦煌授权")
+    return store
 
 
 def handle_oauth_callback(
@@ -245,6 +326,7 @@ def handle_oauth_callback(
     *,
     code: str | None,
     state: str | None,
+    store_id: int | None = None,
 ) -> Store:
     """校验 state、用 code 换 token，并写入店铺。"""
     if not code:
@@ -252,13 +334,21 @@ def handle_oauth_callback(
     if not state:
         raise bad_request("缺少 state")
 
-    store = _find_store_by_state(db, state)
-    token_data = _exchange_code_for_token(code)
+    from_code_api = state.startswith(_CODE_AUTHORIZE_STATE_PREFIX)
+    if from_code_api:
+        store = _load_store_for_code_callback(db, store_id)
+    else:
+        store = _find_store_by_state(db, state)
+    token_data = _exchange_code_for_token(
+        code,
+        redirect_uri=_token_redirect_uri(state),
+    )
 
     now = datetime.now(timezone.utc)
     apply_token_response(store, token_data, now=now)
-    store.oauth_pending_state = None
-    store.oauth_pending_expires_at = None
+    if store.oauth_pending_state == state:
+        store.oauth_pending_state = None
+        store.oauth_pending_expires_at = None
     db.commit()
     db.refresh(store)
     logger.info("敦煌 OAuth 授权成功 store_id=%s", store.id)
