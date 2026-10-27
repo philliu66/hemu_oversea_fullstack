@@ -13,6 +13,7 @@ class UserLoginLog(Base):
         Index("ix_user_login_logs_login_at", "login_at"),
         Index("ix_user_login_logs_audience_login_at", "audience", "login_at"),
         Index("ix_user_login_logs_refresh_jti", "refresh_jti"),
+        Index("ix_user_login_logs_supplier_login_at", "supplier_id", "login_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -21,6 +22,10 @@ class UserLoginLog(Base):
         nullable=True,
     )
     username: Mapped[str] = mapped_column(String(50))
+    supplier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     audience: Mapped[str] = mapped_column(String(20))
     login_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     logout_at: Mapped[datetime | None] = mapped_column(

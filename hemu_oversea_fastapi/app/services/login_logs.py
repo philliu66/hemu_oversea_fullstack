@@ -24,6 +24,7 @@ def open_session(
     row = UserLoginLog(
         user_id=user.id,
         username=user.username,
+        supplier_id=user.supplier_id,
         audience=audience,
         login_at=now,
         logout_at=None,
@@ -212,6 +213,7 @@ def _to_public(row: UserLoginLog) -> LoginLogPublic:
         id=row.id,
         user_id=row.user_id,
         username=row.username,
+        supplier_id=row.supplier_id,
         audience=row.audience,
         login_at=row.login_at,
         logout_at=row.logout_at,

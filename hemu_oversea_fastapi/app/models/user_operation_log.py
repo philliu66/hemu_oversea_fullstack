@@ -15,6 +15,7 @@ class UserOperationLog(Base):
         Index("ix_user_operation_logs_action_created", "action", "created_at"),
         Index("ix_user_operation_logs_resource", "resource_type", "resource_id"),
         Index("ix_user_operation_logs_created_at", "created_at"),
+        Index("ix_user_operation_logs_supplier_created", "supplier_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

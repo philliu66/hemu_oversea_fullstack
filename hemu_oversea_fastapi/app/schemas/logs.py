@@ -22,6 +22,10 @@ class LoginLogPublic(BaseModel):
     id: int
     user_id: int | None
     username: str
+    supplier_id: int | None = Field(
+        default=None,
+        description="登录时用户所属供应商；平台账号为空",
+    )
     audience: str
     login_at: datetime
     logout_at: datetime | None
