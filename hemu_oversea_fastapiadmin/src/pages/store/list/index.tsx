@@ -14,6 +14,7 @@ import {
   STORE_TYPE_LABEL,
   STORE_TYPES,
   type StoreOauthStatusValue,
+  type StoreTypeValue,
 } from '@/constants/store';
 import {
   deleteStore,
@@ -27,10 +28,10 @@ import {
   resolveRequestSupplierId,
 } from '@/utils/portalScope';
 import { openAuthorizeWindow } from '../openAuthorizeWindow';
-import {
-  StoreFormDrawer,
-  type StoreDrawerMode,
-} from './StoreFormDrawer';
+import { type StoreDrawerMode, StoreFormDrawer } from './StoreFormDrawer';
+import { StoreTypePickDrawer } from './StoreTypePickDrawer';
+import { TiktokAuthorizeDrawer } from './TiktokAuthorizeDrawer';
+import { TiktokStoreViewDrawer } from './TiktokStoreViewDrawer';
 
 type StoreTableParams = {
   current?: number;
@@ -58,6 +59,9 @@ const StoreList: React.FC = () => {
   const [drawerMode, setDrawerMode] = useState<StoreDrawerMode>('create');
   const [activeId, setActiveId] = useState<number>();
   const [selectedSupplierId, setSelectedSupplierId] = useState<number>();
+  const [typePickOpen, setTypePickOpen] = useState(false);
+  const [tiktokAuthOpen, setTiktokAuthOpen] = useState(false);
+  const [tiktokViewId, setTiktokViewId] = useState<number>();
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -78,18 +82,12 @@ const StoreList: React.FC = () => {
 
       if (status === 'success') {
         actionRef.current?.reload();
-        message.success(
-          msg ||
-            '授权成功',
-        );
+        message.success(msg || '授权成功');
         return;
       }
 
       if (status === 'fail') {
-        message.error(
-          msg ||
-            '授权失败',
-        );
+        message.error(msg || '授权失败');
       }
     };
     window.addEventListener('message', onMessage);
@@ -101,13 +99,26 @@ const StoreList: React.FC = () => {
       message.warning('请先选择供应商');
       return;
     }
+    setTypePickOpen(true);
+  };
+
+  const handlePickStoreType = (storeType: StoreTypeValue) => {
+    setTypePickOpen(false);
+    if (storeType === 'tiktok') {
+      setTiktokAuthOpen(true);
+      return;
+    }
     setActiveId(undefined);
     setDrawerMode('create');
     setDrawerOpen(true);
   };
 
-  const openView = (id: number) => {
-    setActiveId(id);
+  const openView = (record: StorePublic) => {
+    if (record.store_type === 'tiktok') {
+      setTiktokViewId(record.id);
+      return;
+    }
+    setActiveId(record.id);
     setDrawerMode('view');
     setDrawerOpen(true);
   };
@@ -152,16 +163,12 @@ const StoreList: React.FC = () => {
     try {
       const data = await fetchStoreAuthorizeUrl(storeId);
       if (!data.authorize_url) {
-        message.error(
-          '未获取到授权链接',
-        );
+        message.error('未获取到授权链接');
         return;
       }
       const popup = openAuthorizeWindow(data.authorize_url);
       if (!popup) {
-        message.warning(
-          '浏览器拦截了弹窗，请允许后重试',
-        );
+        message.warning('浏览器拦截了弹窗，请允许后重试');
       }
     } catch {
       // 错误已由全局拦截器处理
@@ -212,7 +219,7 @@ const StoreList: React.FC = () => {
           <Button
             type="link"
             style={{ paddingInline: 0 }}
-            onClick={() => openView(entity.id)}
+            onClick={() => openView(entity)}
           >
             {entity.name}
           </Button>
@@ -264,8 +271,7 @@ const StoreList: React.FC = () => {
               color: 'rgba(0, 0, 0, 0.45)',
             }}
           >
-            {'授权到期'}
-            ：{formatDateTime(record.refresh_token_expires_at)}
+            {'授权到期'}：{formatDateTime(record.refresh_token_expires_at)}
           </div>
         </div>
       ),
@@ -278,7 +284,7 @@ const StoreList: React.FC = () => {
       width: 180,
       render: (_, record) => (
         <Space size={0} wrap>
-          <Button type="link" size="small" onClick={() => openView(record.id)}>
+          <Button type="link" size="small" onClick={() => openView(record)}>
             {'查看'}
           </Button>
           {canAuthorizeStore ? (
@@ -290,32 +296,32 @@ const StoreList: React.FC = () => {
               {authorizeActionLabel(record.oauth_status)}
             </Button>
           ) : null}
+          {access.canWriteSupplierData && record.store_type !== 'tiktok' ? (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => openEdit(record.id)}
+            >
+              {'编辑'}
+            </Button>
+          ) : null}
           {access.canWriteSupplierData ? (
-            <>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => openEdit(record.id)}
-              >
-                {'编辑'}
+            <Popconfirm
+              title={'确认删除该店铺？'}
+              onConfirm={async () => {
+                try {
+                  await deleteStore(record.id);
+                  message.success('删除成功');
+                  actionRef.current?.reload();
+                } catch {
+                  // 错误已由全局拦截器处理
+                }
+              }}
+            >
+              <Button type="link" size="small" danger>
+                {'删除'}
               </Button>
-              <Popconfirm
-                title={'确认删除该店铺？'}
-                onConfirm={async () => {
-                  try {
-                    await deleteStore(record.id);
-                    message.success('删除成功');
-                    actionRef.current?.reload();
-                  } catch {
-                    // 错误已由全局拦截器处理
-                  }
-                }}
-              >
-                <Button type="link" size="small" danger>
-                  {'删除'}
-                </Button>
-              </Popconfirm>
-            </>
+            </Popconfirm>
           ) : null}
         </Space>
       ),
@@ -397,6 +403,22 @@ const StoreList: React.FC = () => {
             ? () => setDrawerMode('edit')
             : undefined
         }
+        lockStoreType={drawerMode === 'create'}
+      />
+      <StoreTypePickDrawer
+        open={typePickOpen}
+        onClose={() => setTypePickOpen(false)}
+        onPick={handlePickStoreType}
+      />
+      <TiktokAuthorizeDrawer
+        open={tiktokAuthOpen}
+        supplierId={resolveRequestSupplierId(currentUser, selectedSupplierId)}
+        onClose={() => setTiktokAuthOpen(false)}
+      />
+      <TiktokStoreViewDrawer
+        open={tiktokViewId !== undefined}
+        storeId={tiktokViewId}
+        onClose={() => setTiktokViewId(undefined)}
       />
     </PageContainer>
   );

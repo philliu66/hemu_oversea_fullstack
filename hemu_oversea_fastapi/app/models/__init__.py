@@ -28,6 +28,7 @@ from app.models.shipping_template_dh import ShippingTemplateDh
 from app.models.sku_attr_template_dh import SkuAttrTemplateDh
 from app.models.sku_base_info_dh import SkuBaseInfoDh
 from app.models.store import Store
+from app.models.store_tts import StoreTts, StoreTtsOauthPending
 from app.models.supplier import Supplier
 from app.models.supplier_inspection_schedule import SupplierInspectionSchedule
 from app.models.user import User
@@ -58,6 +59,8 @@ __all__ = [
     "SkuAttrTemplateDh",
     "SkuBaseInfoDh",
     "Store",
+    "StoreTts",
+    "StoreTtsOauthPending",
     "Supplier",
     "SupplierInspectionSchedule",
     "SupplierPermission",

@@ -24,6 +24,8 @@ from app.schemas.store import (
     StorePublic,
     StoreShippingTemplatePublic,
     StoreTemplateListRequest,
+    StoreTiktokAuthorize,
+    StoreTiktokAuthorizePublic,
     StoreUpdate,
 )
 from app.schemas.store_inspection import (
@@ -34,6 +36,7 @@ from app.schemas.store_inspection import (
 )
 from app.services import products as product_service
 from app.services import store_oauth, stores as store_service
+from app.services import tiktok_oauth
 from app.services.commerce import (
     summarize_supplier_dispute_open,
     summarize_supplier_punish,
@@ -120,6 +123,31 @@ def create_store_authorize_url(
         StoreAuthorizePublic(
             store_id=payload.id,
             store_type=store_type,
+            authorize_url=authorize_url,
+        )
+    )
+
+
+@router.post(
+    "/tiktok/authorize-url",
+    response_model=ApiResponse[StoreTiktokAuthorizePublic],
+)
+def create_tiktok_authorize_url(
+    payload: StoreTiktokAuthorize,
+    current_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[StoreTiktokAuthorizePublic]:
+    """首次授权 TikTok：不先建店铺，回调按返回的店铺自动建档。"""
+    assert_supplier_data_writable(current_user)
+    supplier_id = resolve_supplier_id(db, current_user, payload.supplier_id)
+    authorize_url = tiktok_oauth.create_authorize_url_for_supplier(
+        db,
+        supplier_id=supplier_id,
+        actor_id=current_user.id,
+    )
+    return success(
+        StoreTiktokAuthorizePublic(
+            store_type="tiktok",
             authorize_url=authorize_url,
         )
     )

@@ -55,6 +55,7 @@ export const AdminStoreApi = {
   DETAIL: '/api/v1/admin/stores/detail',
   BASE_DISCOUNT: '/api/v1/admin/stores/base-discount/get',
   AUTHORIZE_URL: '/api/v1/admin/stores/authorize-url',
+  TIKTOK_AUTHORIZE_URL: '/api/v1/admin/stores/tiktok/authorize-url',
   CREATE: '/api/v1/admin/stores/create',
   UPDATE: '/api/v1/admin/stores/update',
   DELETE: '/api/v1/admin/stores/delete',

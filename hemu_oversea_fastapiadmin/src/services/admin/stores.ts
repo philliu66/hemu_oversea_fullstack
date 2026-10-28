@@ -17,6 +17,7 @@ import type {
   StoreListParams,
   StorePublic,
   StoreShippingTemplatePublic,
+  StoreTiktokAuthorizePublic,
   StoreUpdateParams,
 } from '@/types/api';
 import { unwrapApiData } from '@/utils/http';
@@ -109,6 +110,25 @@ export async function fetchStoreAuthorizeUrl(
   return requireData(
     unwrapApiData<StoreAuthorizePublic>(res),
     '获取授权链接失败',
+  );
+}
+
+/** POST /api/v1/admin/stores/tiktok/authorize-url */
+export async function fetchTiktokAuthorizeUrl(
+  supplierId?: number,
+  options?: RequestOptions,
+) {
+  const res = await request<ApiResponse<StoreTiktokAuthorizePublic>>(
+    AdminStoreApi.TIKTOK_AUTHORIZE_URL,
+    {
+      method: 'POST',
+      data: supplierId ? { supplier_id: supplierId } : {},
+      ...options,
+    },
+  );
+  return requireData(
+    unwrapApiData<StoreTiktokAuthorizePublic>(res),
+    '获取 TikTok 授权链接失败',
   );
 }
 

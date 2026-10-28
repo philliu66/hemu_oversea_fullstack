@@ -148,3 +148,18 @@ alwaysApply: true
 - 全部店铺都没有纠纷：标题为「纠纷订单（0）」，表内一行「暂无数据」，邮件仍发送。
 - 部分店铺有纠纷：表里只有有订单的那些店。
 - 某一店出现其它敦煌错误（含 token 刷新失败）：整次巡检失败，不发这份报告；`mail_send_logs` 与巡检设置记为失败。处罚表与纠纷表各自独立，纠纷为空不影响处罚表。
+
+---
+
+## TikTok 店铺授权
+
+`stores` 仍是店铺名册。TikTok 的 token、`shop_cipher`、`shop_id`、区域写在 `store_tts`，一家站点一行。不另建授权表。
+
+- 新建时先选类型。敦煌仍走原来的建店表单。TikTok 不填店铺资料，点授权后按 `GET /authorization/202309/shops` 返回的店铺自动插入 `stores`（`store_type=tiktok`）和 `store_tts`。
+- 返回几家就建几家。同一 `shop_id` 已属于当前供应商则更新；已属于其他供应商则整次失败，不抢店。这次没返回的旧店不删除。
+- `shop_id` 在未删除的 `store_tts` 中全局唯一，一家店只属于一个供应商。
+- 跨境多家国家站的 token 内容相同。刷新 access token 时，按同一 `supplier_id` + 同一 `open_id` 更新这些 `store_tts` 行，不要只改当前这一家。
+- 授权状态：敦煌看 `stores` 上的 token；TikTok 看 `store_tts.access_token` 和它的到期时间。
+- 点授权到回调完成之间，用 `store_tts_oauth_pending` 暂存 `state` 和供应商。回调校验后删除。没有 `state` 不能把新店挂到正确的供应商。
+- 首次授权只允许供应商发起。平台可以给已有 TikTok 店铺重新授权。TikTok 店铺不提供手工编辑。
+

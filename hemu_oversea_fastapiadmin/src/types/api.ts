@@ -170,6 +170,12 @@ export type StorePublic = {
   oauth_status: StoreOauthStatus | number;
   /** refresh_token 到期时间 */
   refresh_token_expires_at: string | null;
+  /** TikTok 店铺区域 */
+  platform_region?: string | null;
+  /** TikTok 店铺代码 */
+  platform_shop_code?: string | null;
+  /** TikTok 卖家类型：LOCAL / CROSS_BORDER */
+  platform_seller_type?: string | null;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -207,6 +213,12 @@ export type StoreShippingTemplatePublic = {
 /** POST /api/v1/admin/stores/authorize-url 返回 */
 export type StoreAuthorizePublic = {
   store_id: number;
+  store_type: string;
+  authorize_url: string;
+};
+
+/** POST /api/v1/admin/stores/tiktok/authorize-url 返回 */
+export type StoreTiktokAuthorizePublic = {
   store_type: string;
   authorize_url: string;
 };

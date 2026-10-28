@@ -3,14 +3,15 @@ from decimal import Decimal
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.deps import Pagination
-from app.core.errors import conflict, not_found
+from app.core.errors import bad_request, conflict, not_found
 from app.core.store_types import StoreType
 from app.models.aftersale_template_dh import AftersaleTemplateDh
 from app.models.shipping_template_dh import ShippingTemplateDh
 from app.models.store import Store
+from app.models.store_tts import StoreTts
 from app.models.supplier import Supplier
 from app.schemas.common import PageData
 from app.schemas.store import (
@@ -37,11 +38,39 @@ def _conflict_from_integrity(exc: IntegrityError) -> Exception:
     return conflict("店铺信息冲突")
 
 
+def _active_tts(store: Store) -> StoreTts | None:
+    for row in store.tts_rows:
+        if row.deleted_at is None:
+            return row
+    return None
+
+
+def _oauth_fields(
+    store: Store,
+) -> tuple[int, datetime | None, str | None, str | None, str | None]:
+    """敦煌读 stores 自己的 token；TikTok 读 store_tts。"""
+    if store.store_type != StoreType.TIKTOK.value:
+        return store.oauth_status, store.refresh_token_expires_at, None, None, None
+    row = _active_tts(store)
+    if row is None:
+        return 0, None, None, None, None
+    return (
+        row.oauth_status,
+        row.refresh_token_expires_at,
+        row.region,
+        row.shop_code,
+        row.seller_type,
+    )
+
+
 def _to_public(
     store: Store,
     *,
     supplier_name: str | None = None,
 ) -> StorePublic:
+    oauth_status, refresh_expires, region, shop_code, seller_type = _oauth_fields(
+        store
+    )
     return StorePublic(
         id=store.id,
         supplier_id=store.supplier_id,
@@ -50,8 +79,11 @@ def _to_public(
         name=store.name,
         identifier=store.identifier,
         base_discount=store.base_discount,
-        oauth_status=store.oauth_status,
-        refresh_token_expires_at=store.refresh_token_expires_at,
+        oauth_status=oauth_status,
+        refresh_token_expires_at=refresh_expires,
+        platform_region=region,
+        platform_shop_code=shop_code,
+        platform_seller_type=seller_type,
         created_by=store.creator.username if store.creator else None,
         updated_by=store.updater.username if store.updater else None,
         created_at=store.created_at,
@@ -64,6 +96,9 @@ def _to_detail_public(
     *,
     supplier_name: str | None = None,
 ) -> StoreDetailPublic:
+    oauth_status, refresh_expires, region, shop_code, seller_type = _oauth_fields(
+        store
+    )
     return StoreDetailPublic(
         id=store.id,
         supplier_id=store.supplier_id,
@@ -74,8 +109,11 @@ def _to_detail_public(
         base_discount=store.base_discount,
         account=store.account,
         password=store.password,
-        oauth_status=store.oauth_status,
-        refresh_token_expires_at=store.refresh_token_expires_at,
+        oauth_status=oauth_status,
+        refresh_token_expires_at=refresh_expires,
+        platform_region=region,
+        platform_shop_code=shop_code,
+        platform_seller_type=seller_type,
         created_by=store.creator.username if store.creator else None,
         updated_by=store.updater.username if store.updater else None,
         created_at=store.created_at,
@@ -95,6 +133,7 @@ def _load_store_with_actors(db: Session, store_id: int) -> Store:
         .options(
             joinedload(Store.creator),
             joinedload(Store.updater),
+            selectinload(Store.tts_rows),
         )
         .where(Store.id == store_id, Store.deleted_at.is_(None))
     )
@@ -116,6 +155,8 @@ def create_store(
     base_discount: Decimal = Decimal("0"),
 ) -> StorePublic:
     get_supplier(db, supplier_id)
+    if store_type == StoreType.TIKTOK:
+        raise bad_request("TikTok 店铺请通过授权创建")
     store = Store(
         supplier_id=supplier_id,
         store_type=store_type.value,
@@ -171,6 +212,7 @@ def list_stores(
         .options(
             joinedload(Store.creator),
             joinedload(Store.updater),
+            selectinload(Store.tts_rows),
         )
         .where(*filters)
     )
@@ -225,6 +267,8 @@ def update_store(
     base_discount: Decimal | None = None,
 ) -> StorePublic:
     store = _get_alive_store(db, store_id)
+    if store.store_type == StoreType.TIKTOK.value or store_type == StoreType.TIKTOK:
+        raise bad_request("TikTok 店铺不支持手工编辑，请重新授权")
     if store_type is not None:
         store.store_type = store_type.value
     if name is not None:
@@ -253,8 +297,17 @@ def update_store(
 
 def soft_delete_store(db: Session, *, store_id: int, actor_id: int) -> None:
     store = _get_alive_store(db, store_id)
-    store.deleted_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    store.deleted_at = now
     store.updated_by = actor_id
+    tts_rows = db.scalars(
+        select(StoreTts).where(
+            StoreTts.store_id == store.id,
+            StoreTts.deleted_at.is_(None),
+        )
+    ).all()
+    for row in tts_rows:
+        row.deleted_at = now
     db.commit()
 
 

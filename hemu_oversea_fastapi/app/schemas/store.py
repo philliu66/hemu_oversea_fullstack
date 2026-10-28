@@ -119,6 +119,18 @@ class StoreAuthorizePublic(BaseModel):
     authorize_url: str = Field(description="跳转平台授权页的完整 URL")
 
 
+class StoreTiktokAuthorize(BaseModel):
+    supplier_id: int | None = Field(
+        default=None,
+        description="供应商 ID。供应商身份忽略；平台身份必填",
+    )
+
+
+class StoreTiktokAuthorizePublic(BaseModel):
+    store_type: str = Field(description="店铺类型：tiktok")
+    authorize_url: str = Field(description="跳转 TikTok 授权页的完整 URL")
+
+
 class StorePublic(BaseModel):
     """列表 / 创建 / 更新对外返回：不含密码与 token 细节。"""
 
@@ -137,6 +149,15 @@ class StorePublic(BaseModel):
     refresh_token_expires_at: datetime | None = Field(
         default=None,
         description="refresh_token 到期时间",
+    )
+    platform_region: str | None = Field(default=None, description="TikTok 店铺区域")
+    platform_shop_code: str | None = Field(
+        default=None,
+        description="TikTok 店铺代码",
+    )
+    platform_seller_type: str | None = Field(
+        default=None,
+        description="TikTok 卖家类型：LOCAL / CROSS_BORDER",
     )
     created_by: str | None = Field(description="创建人用户名")
     updated_by: str | None = Field(description="更新人用户名")
@@ -164,6 +185,15 @@ class StoreDetailPublic(BaseModel):
     refresh_token_expires_at: datetime | None = Field(
         default=None,
         description="refresh_token 到期时间",
+    )
+    platform_region: str | None = Field(default=None, description="TikTok 店铺区域")
+    platform_shop_code: str | None = Field(
+        default=None,
+        description="TikTok 店铺代码",
+    )
+    platform_seller_type: str | None = Field(
+        default=None,
+        description="TikTok 卖家类型：LOCAL / CROSS_BORDER",
     )
     created_by: str | None = Field(description="创建人用户名")
     updated_by: str | None = Field(description="更新人用户名")

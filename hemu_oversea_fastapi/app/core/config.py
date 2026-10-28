@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     DHGATE_OAUTH_STATE_TTL_MINUTES: int = 10
     DHGATE_TOKEN_REFRESH_BUFFER_MINUTES: int = 5
 
+    # TikTok Shop 卖家授权
+    TIKTOK_APP_KEY: str = ""
+    TIKTOK_APP_SECRET: str = ""
+    TIKTOK_SERVICE_ID: str = ""
+    TIKTOK_AUTHORIZE_URL: str = "https://services.tiktokshop.com/open/authorize"
+    TIKTOK_AUTH_BASE_URL: str = "https://auth.tiktok-shops.com"
+    TIKTOK_API_BASE_URL: str = "https://open-api.tiktokglobalshop.com"
+    TIKTOK_OAUTH_STATE_TTL_MINUTES: int = 10
+
     # 阿里云 RAM（邮件推送 DirectMail 等共用）
     ALIYUN_RAM_ACCESS_KEY_ID: str = ""
     ALIYUN_RAM_ACCESS_KEY_SECRET: str = ""

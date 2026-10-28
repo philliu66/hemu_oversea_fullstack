@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.store_tts import StoreTts
     from app.models.supplier import Supplier
     from app.models.user import User
 
@@ -105,6 +106,10 @@ class Store(Base):
     updater: Mapped["User | None"] = relationship(
         "User",
         foreign_keys=[updated_by],
+    )
+    tts_rows: Mapped[list["StoreTts"]] = relationship(
+        "StoreTts",
+        back_populates="store",
     )
 
     @property

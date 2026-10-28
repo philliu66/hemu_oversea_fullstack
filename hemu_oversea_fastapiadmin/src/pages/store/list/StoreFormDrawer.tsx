@@ -54,6 +54,7 @@ export function StoreFormDrawer({
   onClose,
   onSuccess,
   onSwitchToEdit,
+  lockStoreType = false,
 }: {
   open: boolean;
   mode: StoreDrawerMode;
@@ -63,6 +64,8 @@ export function StoreFormDrawer({
   onClose: () => void;
   onSuccess: () => void;
   onSwitchToEdit?: () => void;
+  /** 从类型选择进入敦煌新建时锁定类型，避免改成 TikTok */
+  lockStoreType?: boolean;
 }) {
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
@@ -97,7 +100,7 @@ export function StoreFormDrawer({
     }
     if (isCreate) {
       form.setFieldsValue({
-        storeType: undefined,
+        storeType: lockStoreType ? 'dhgate' : undefined,
         name: undefined,
         identifier: undefined,
         baseDiscount: 0,
@@ -136,9 +139,7 @@ export function StoreFormDrawer({
       })
       .catch(() => {
         if (!cancelled) {
-          message.error(
-            '未找到该店铺',
-          );
+          message.error('未找到该店铺');
         }
       })
       .finally(() => {
@@ -149,7 +150,7 @@ export function StoreFormDrawer({
     return () => {
       cancelled = true;
     };
-  }, [form, isCreate, message, open, storeId]);
+  }, [form, isCreate, lockStoreType, message, open, storeId]);
 
   const title = useMemo(() => {
     if (mode === 'create') {
@@ -184,9 +185,7 @@ export function StoreFormDrawer({
           password: values.password,
           supplier_id: supplierId,
         });
-        message.success(
-          '创建成功',
-        );
+        message.success('创建成功');
       } else if (storeId) {
         await updateStore({
           id: storeId,
@@ -197,9 +196,7 @@ export function StoreFormDrawer({
           account: values.account.trim(),
           password: values.password,
         });
-        message.success(
-          '保存成功',
-        );
+        message.success('保存成功');
       }
       onSuccess();
       handleClose();
@@ -234,9 +231,7 @@ export function StoreFormDrawer({
         <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
           {readOnly ? (
             <>
-              <Button onClick={handleClose}>
-                {'关闭'}
-              </Button>
+              <Button onClick={handleClose}>{'关闭'}</Button>
               {onSwitchToEdit ? (
                 <Button type="primary" onClick={onSwitchToEdit}>
                   {'编辑'}
@@ -245,9 +240,7 @@ export function StoreFormDrawer({
             </>
           ) : (
             <>
-              <Button onClick={handleClose}>
-                {'取消'}
-              </Button>
+              <Button onClick={handleClose}>{'取消'}</Button>
               <Button
                 type="primary"
                 loading={submitting}
@@ -262,9 +255,7 @@ export function StoreFormDrawer({
     >
       <Spin spinning={loading}>
         <Form form={form} layout="vertical" preserve={false}>
-          <div className="mb-4 text-base font-medium">
-            {'店铺信息'}
-          </div>
+          <div className="mb-4 text-base font-medium">{'店铺信息'}</div>
           <Form.Item
             name="storeType"
             label={'店铺类型'}
@@ -281,7 +272,7 @@ export function StoreFormDrawer({
           >
             <Select
               options={storeTypeOptions}
-              disabled={readOnly}
+              disabled={readOnly || lockStoreType}
               placeholder={'请选择店铺类型'}
             />
           </Form.Item>
@@ -384,49 +375,32 @@ export function StoreFormDrawer({
                 autoComplete="new-password"
               />
             ) : (
-              <Input.Password
-                maxLength={255}
-                autoComplete="new-password"
-              />
+              <Input.Password maxLength={255} autoComplete="new-password" />
             )}
           </Form.Item>
 
           {!isCreate ? (
             <>
-              <Form.Item
-                label={'授权状态'}
-              >
-                {oauthNode}
-              </Form.Item>
-              <Form.Item
-                label={'授权到期'}
-              >
+              <Form.Item label={'授权状态'}>{oauthNode}</Form.Item>
+              <Form.Item label={'授权到期'}>
                 <Input
                   disabled
                   value={formatDateTime(meta.refresh_token_expires_at) || '-'}
                 />
               </Form.Item>
-              <Form.Item
-                label={'创建人'}
-              >
+              <Form.Item label={'创建人'}>
                 <Input disabled value={meta.created_by || '-'} />
               </Form.Item>
-              <Form.Item
-                label={'更新人'}
-              >
+              <Form.Item label={'更新人'}>
                 <Input disabled value={meta.updated_by || '-'} />
               </Form.Item>
-              <Form.Item
-                label={'创建时间'}
-              >
+              <Form.Item label={'创建时间'}>
                 <Input
                   disabled
                   value={formatDateTime(meta.created_at) || '-'}
                 />
               </Form.Item>
-              <Form.Item
-                label={'更新时间'}
-              >
+              <Form.Item label={'更新时间'}>
                 <Input
                   disabled
                   value={formatDateTime(meta.updated_at) || '-'}
