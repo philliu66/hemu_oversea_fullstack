@@ -1045,6 +1045,44 @@ export type MissionHotsaleDataExtractFailItem = {
   reason: string;
 };
 
+export type LoginLogPublic = {
+  id: number;
+  user_id: number | null;
+  username: string;
+  nickname: string | null;
+  email: string | null;
+  phone: string | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  audience: string;
+  login_at: string;
+  logout_at: string | null;
+  logout_reason: string | null;
+  last_seen_at: string;
+  online_seconds: number;
+  ip: string | null;
+  created_at: string;
+};
+
+export type OperationLogPublic = {
+  id: number;
+  actor_user_id: number | null;
+  actor_username: string;
+  nickname: string | null;
+  email: string | null;
+  phone: string | null;
+  actor_role: string;
+  org_type: string;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  summary: string;
+  status: string;
+  created_at: string;
+};
+
 export type MissionHotsaleDataExtractResult = {
   success_count: number;
   fail_count: number;

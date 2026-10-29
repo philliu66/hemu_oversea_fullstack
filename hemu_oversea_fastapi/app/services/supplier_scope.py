@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
@@ -104,6 +104,44 @@ def assert_store_in_actor_scope(db: Session, actor: User, store: Store) -> None:
         assert_supplier_accessible(db, actor, supplier_id)
         return
     raise forbidden("无权访问该店铺")
+
+
+def log_supplier_scope_filters(
+    db: Session,
+    actor: User,
+    supplier_id: int | None,
+    supplier_column: ColumnElement[bool],
+) -> list[ColumnElement[bool]]:
+    """登录 / 操作日志的供应商范围。
+
+    供应商门户固定看本供应商。平台未传供应商时：管理员看全部，
+    平台员工看自己维护的供应商，以及没有供应商的平台账号日志。
+    传入 supplier_id 时只看该供应商，并校验可见性。
+    """
+    if actor.role in SUPPLIER_PORTAL_ROLES:
+        if actor.supplier_id is None:
+            raise bad_request("当前账号未绑定供应商")
+        return [supplier_column == actor.supplier_id]
+    if actor.role == Role.PLATFORM_ADMIN.value:
+        if supplier_id is None:
+            return []
+        assert_supplier_accessible(db, actor, supplier_id)
+        return [supplier_column == supplier_id]
+    if actor.role == Role.PLATFORM_STAFF.value:
+        if supplier_id is not None:
+            assert_supplier_accessible(db, actor, supplier_id)
+            return [supplier_column == supplier_id]
+        visible_ids = select(Supplier.id).where(
+            Supplier.deleted_at.is_(None),
+            Supplier.created_by == actor.id,
+        )
+        return [
+            or_(
+                supplier_column.is_(None),
+                supplier_column.in_(visible_ids),
+            )
+        ]
+    raise forbidden()
 
 
 def assert_supplier_data_writable(actor: User) -> None:

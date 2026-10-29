@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     TIKTOK_AUTH_BASE_URL: str = "https://auth.tiktok-shops.com"
     TIKTOK_API_BASE_URL: str = "https://open-api.tiktokglobalshop.com"
     TIKTOK_OAUTH_STATE_TTL_MINUTES: int = 10
+    # 测试店铺授权回调不带 state 时，用这个值匹配 store_tts_oauth_pending.state。
+    # 正式授权回调自带 state，此项留空。
+    TIKTOK_AUTH_TEST_STORE_STATE: str = ""
 
     # 阿里云 RAM（邮件推送 DirectMail 等共用）
     ALIYUN_RAM_ACCESS_KEY_ID: str = ""

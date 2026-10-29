@@ -1,11 +1,7 @@
 """敦煌官方 API 联调（单店铺，仅调试）。
 
-路径：/api/v1/common/testAPI/dhgate（地址不变）
-多店编排见：/api/v1/common/testAPI/dhgate/commerce
-  → OpenAPI：common:testAPI:dhgate:commerce
-
-单店接口按官方文档模块打 OpenAPI 标签（便于 /docs 分组调试）：
-- album / base / category / logistics / order / product / data / value-added / public
+路径：/api/v1/common/testAPI/dhgate
+OpenAPI 标签：common:testAPI:dhgate。/docs 中单店接口在前，多店编排整体在最后。
 
 所有接口统一通过 success_with_dhgate_raw 返回：
 - result: 业务结果
@@ -75,19 +71,9 @@ from app.services.dhgate import (
 from app.services.measures_units_dh import sync_measures_units_dh
 from app.services.product_categories_dh import sync_product_categories_dh
 
-# OpenAPI 子标签：对齐 dhgate_API.md / 官方卖家 API 划分（路径不变）
-_TAG_ALBUM = "common:testAPI:dhgate:album"
-_TAG_BASE = "common:testAPI:dhgate:base"
-_TAG_CATEGORY = "common:testAPI:dhgate:category"
-_TAG_LOGISTICS = "common:testAPI:dhgate:logistics"
-_TAG_ORDER = "common:testAPI:dhgate:order"
-_TAG_PRODUCT = "common:testAPI:dhgate:product"
-_TAG_DATA = "common:testAPI:dhgate:data"
-_TAG_VALUE_ADDED = "common:testAPI:dhgate:value-added"
-_TAG_PUBLIC = "common:testAPI:dhgate:public"
-
 router = APIRouter(
     prefix="/dhgate",
+    tags=["common:testAPI:dhgate"],
     # dependencies=[Depends(get_current_account)],
 )
 
@@ -115,8 +101,7 @@ def success_with_dhgate_raw(
 @router.post(
     "/punish-brand/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_BASE],
-    summary="[联调] dh.punish.brand.list.get",
+    summary="[联调][单店][处罚] 第三方投诉处罚列表（dh.punish.brand.list.get$1.0）",
 )
 def test_list_punish_brand(
     payload: PunishBrandListTestRequest,
@@ -151,8 +136,7 @@ def test_list_punish_brand(
 @router.post(
     "/punish/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_BASE],
-    summary="[联调] dh.punish.list.get",
+    summary="[联调][单店][处罚] 卖家处罚记录（dh.punish.list.get$1.0）",
 )
 def test_list_punish(
     payload: PunishListTestRequest,
@@ -191,8 +175,7 @@ def test_list_punish(
 @router.post(
     "/dispute/processing/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_ORDER],
-    summary="[联调][v1] dh.dispute.processing.list$1.0（进行中纠纷订单列表）",
+    summary="[联调][单店][纠纷][v1] 进行中纠纷订单列表（dh.dispute.processing.list$1.0）",
 )
 def test_list_dispute_processing(
     payload: DisputeProcessingListTestRequest,
@@ -233,8 +216,7 @@ def test_list_dispute_processing(
 @router.post(
     "/order/disputeopen/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_ORDER],
-    summary="[联调][v2] dh.order.disputeopen.list$2.0（纠纷开启订单列表）",
+    summary="[联调][单店][纠纷][v2] 纠纷开启订单列表（dh.order.disputeopen.list$2.0）",
 )
 def test_list_order_dispute_open(
     payload: OrderDisputeOpenListTestRequest,
@@ -287,8 +269,7 @@ def test_list_order_dispute_open(
 @router.post(
     "/wis/core-info",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_DATA],
-    summary="[联调] dh.wis.core.info$1.0（数据概览核心指标）",
+    summary="[联调][单店][数据] 数据概览核心指标（dh.wis.core.info$1.0）",
 )
 def test_wis_core_info(
     payload: WisCoreInfoTestRequest,
@@ -328,8 +309,7 @@ def test_wis_core_info(
 @router.post(
     "/wis/detail-page",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_DATA],
-    summary="[联调] dh.wis.detail.page$1.0（商品分析-产品详情）",
+    summary="[联调][单店][数据] 商品分析-产品详情（dh.wis.detail.page$1.0）",
 )
 def test_wis_detail_page(
     payload: WisDetailPageTestRequest,
@@ -372,8 +352,7 @@ def test_wis_detail_page(
 @router.post(
     "/wis/keywordtop10",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_DATA],
-    summary="[联调] dh.wis.keywordtop10.info$1.0（关键词 TOP）",
+    summary="[联调][单店][数据] 关键词 TOP（dh.wis.keywordtop10.info$1.0）",
 )
 def test_wis_keywordtop10(
     payload: WisKeywordTop10TestRequest,
@@ -411,8 +390,7 @@ def test_wis_keywordtop10(
 @router.post(
     "/seller/ad/order-report",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_VALUE_ADDED],
-    summary="[联调] dh.seller.ad.order.report.page$1.0（广告消耗-订单维度）",
+    summary="[联调][单店][广告] 广告消耗-订单维度（dh.seller.ad.order.report.page$1.0）",
 )
 def test_seller_ad_order_report(
     payload: SellerAdReportTestRequest,
@@ -454,8 +432,7 @@ def test_seller_ad_order_report(
 @router.post(
     "/seller/ad/prod-report",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_VALUE_ADDED],
-    summary="[联调] dh.seller.ad.prod.report.page$1.0（广告消耗-产品维度）",
+    summary="[联调][单店][广告] 广告消耗-产品维度（dh.seller.ad.prod.report.page$1.0）",
 )
 def test_seller_ad_prod_report(
     payload: SellerAdReportTestRequest,
@@ -497,8 +474,7 @@ def test_seller_ad_prod_report(
 @router.post(
     "/category/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_CATEGORY],
-    summary="[联调] dh.category.list$2.0（边拉边入库，已存在跳过）",
+    summary="[联调][单店][类目] 发布类目递归入库（dh.category.list$2.0）",
 )
 def test_list_categories(
     payload: CategoryListTestRequest,
@@ -535,8 +511,7 @@ def test_list_categories(
 @router.post(
     "/measures/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_PUBLIC],
-    summary="[联调] dh.base.measures.get$1.0（清空后全量入库 measures_unit_dh）",
+    summary="[联调][单店][公共] 计件单位全量入库（dh.base.measures.get$1.0）",
 )
 def test_sync_measures_units(
     payload: MeasuresListTestRequest,
@@ -565,8 +540,7 @@ def test_sync_measures_units(
 @router.post(
     "/categorys/commissions",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_CATEGORY],
-    summary="[联调] dh.categorys.commissions$1.0（清空后全量入库 commissions_rate_dh）",
+    summary="[联调][单店][类目] 类目佣金率全量入库（dh.categorys.commissions$1.0）",
 )
 def test_sync_commission_rates(
     payload: CommissionRateListTestRequest,
@@ -595,8 +569,7 @@ def test_sync_commission_rates(
 @router.post(
     "/category/get",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_CATEGORY],
-    summary="[联调] dh.category.get$2.0（类目详情/属性）",
+    summary="[联调][单店][类目] 类目详情与属性（dh.category.get$2.0）",
 )
 def test_get_category(
     payload: CategoryGetTestRequest,
@@ -626,8 +599,7 @@ def test_get_category(
 @router.post(
     "/category/path/get",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_CATEGORY],
-    summary="[联调] dh.category.path.get$2.0（获取类目路径）",
+    summary="[联调][单店][类目] 类目路径（dh.category.path.get$2.0）",
 )
 def test_get_category_path(
     payload: CategoryPathGetTestRequest,
@@ -655,8 +627,7 @@ def test_get_category_path(
 @router.post(
     "/item/get",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_PRODUCT],
-    summary="[联调] dh.item.get$2.0（产品详情）",
+    summary="[联调][单店][商品] 产品详情（dh.item.get$2.0）",
 )
 def test_get_item(
     payload: ItemGetTestRequest,
@@ -691,8 +662,7 @@ def test_get_item(
 @router.post(
     "/item/shelf",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_PRODUCT],
-    summary="[联调] 商品上架/下架（dh.item.upshelf.list / downshelf.list）",
+    summary="[联调][单店][商品] 上架/下架（dh.item.upshelf.list / downshelf.list$2.0）",
 )
 def test_item_shelf(
     payload: ItemShelfTestRequest,
@@ -745,8 +715,7 @@ def test_item_shelf(
 @router.post(
     "/item/group/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_PRODUCT],
-    summary="[联调] dh.item.group.list$2.0（获取产品组列表）",
+    summary="[联调][单店][产品组] 产品组列表（dh.item.group.list$2.0）",
 )
 def test_list_item_groups(
     payload: ItemGroupListTestRequest,
@@ -787,8 +756,7 @@ def test_list_item_groups(
 @router.post(
     "/item/html/get",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_PRODUCT],
-    summary="[联调] dh.product.html.get$1.0（产品长描）",
+    summary="[联调][单店][商品] 产品长描（dh.item.html.get / dh.product.html.get）",
 )
 def test_get_item_html(
     payload: ItemGetTestRequest,
@@ -822,8 +790,7 @@ def test_get_item_html(
 @router.post(
     "/item/img/tweak",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_ALBUM],
-    summary="[联调] 微调产品主图并上传（dh.album.img.upload$2.1）",
+    summary="[联调][单店][相册] 微调产品主图并上传（dh.album.img.upload$2.1）",
 )
 async def test_tweak_main_image(
     db: Session = Depends(get_db),
@@ -899,8 +866,7 @@ async def test_tweak_main_image(
 @router.post(
     "/item/aftersale/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_PRODUCT],
-    summary="[联调] dh.item.aftersale.list$2.0（获取售后模板列表）",
+    summary="[联调][单店][售后] 售后模板列表（dh.item.aftersale.list$2.0）",
 )
 def test_list_item_aftersale(
     payload: ItemAftersaleListTestRequest,
@@ -923,8 +889,7 @@ def test_list_item_aftersale(
 @router.post(
     "/shipping/template/list",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_LOGISTICS],
-    summary="[联调] dh.shipping.template.list$2.0（获取运费模板列表）",
+    summary="[联调][单店][物流] 运费模板列表（dh.shipping.template.list$2.0）",
 )
 def test_list_shipping_templates(
     payload: ShippingTemplateListTestRequest,
@@ -960,8 +925,7 @@ def _fission_raw_bundle(
 @router.post(
     "/item/fission/add",
     response_model=ApiResponse[dict[str, Any]],
-    tags=[_TAG_PRODUCT],
-    summary="[联调] 裂变发布商品（源店 dh.item.get + 目标店 dh.item.add$2.0）",
+    summary="[联调][单店][商品] 裂变发布（源店 dh.item.get + 目标店 dh.item.add$2.0）",
 )
 def test_fission_add_item(
     payload: ItemFissionAddTestRequest,

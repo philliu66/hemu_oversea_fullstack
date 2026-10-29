@@ -1,7 +1,7 @@
 """敦煌多店铺编排联调（仅调试）。
 
 路径：/api/v1/common/testAPI/dhgate/commerce
-OpenAPI 标签：common:testAPI:dhgate:commerce
+OpenAPI 标签：common:testAPI:dhgate。/docs 中整组排在全部单店接口之后。
 用于验证敦煌店铺多店汇总 / 同步逻辑，非正式业务接口。
 """
 
@@ -44,7 +44,7 @@ from app.services.shipping_templates_dh import sync_supplier_shipping_templates_
 
 router = APIRouter(
     prefix="/dhgate/commerce",
-    tags=["common:testAPI:dhgate:commerce"],
+    tags=["common:testAPI:dhgate"],
     # dependencies=[Depends(get_current_account)],
 )
 
@@ -67,7 +67,7 @@ def _success_with_multi_store_raw(summary: Any) -> ApiResponse[dict[str, Any]]:
 @router.post(
     "/punish/summary",
     response_model=ApiResponse[dict[str, Any]],
-    summary="[联调] 敦煌多店铺处罚信息汇总",
+    summary="[联调][多店][处罚] 处罚信息汇总",
 )
 def test_punish_summary(
     payload: PunishSummaryTestRequest,
@@ -112,7 +112,7 @@ def test_punish_summary(
 @router.post(
     "/dispute/processing/summary",
     response_model=ApiResponse[dict[str, Any]],
-    summary="[联调][v1] 敦煌多店铺进行中纠纷订单汇总",
+    summary="[联调][多店][纠纷][v1] 进行中纠纷订单汇总",
 )
 def test_dispute_processing_summary(
     payload: DisputeProcessingSummaryTestRequest,
@@ -156,7 +156,7 @@ def test_dispute_processing_summary(
 @router.post(
     "/order/disputeopen/summary",
     response_model=ApiResponse[dict[str, Any]],
-    summary="[联调][v2] 敦煌多店铺纠纷开启订单汇总",
+    summary="[联调][多店][纠纷][v2] 纠纷开启订单汇总",
 )
 def test_dispute_open_summary(
     payload: DisputeOpenSummaryTestRequest,
@@ -203,7 +203,7 @@ def test_dispute_open_summary(
 @router.post(
     "/item/group/sync",
     response_model=ApiResponse[dict[str, Any]],
-    summary="[联调] dh.item.group.list$2.0 多店铺产品分组同步入库",
+    summary="[联调][多店][产品组] 产品分组同步入库（dh.item.group.list$2.0）",
 )
 def test_sync_product_groups(
     payload: ProductGroupSyncTestRequest,
@@ -233,7 +233,7 @@ def test_sync_product_groups(
 @router.post(
     "/shipping/template/sync",
     response_model=ApiResponse[dict[str, Any]],
-    summary="[联调] dh.shipping.template.list$2.0 多店铺运费模板同步入库",
+    summary="[联调][多店][物流] 运费模板同步入库（dh.shipping.template.list$2.0）",
 )
 def test_sync_shipping_templates(
     payload: ShippingTemplateSyncTestRequest,
@@ -262,7 +262,7 @@ def test_sync_shipping_templates(
 @router.post(
     "/item/aftersale/sync",
     response_model=ApiResponse[dict[str, Any]],
-    summary="[联调] dh.item.aftersale.list$2.0 多店铺售后模板同步入库",
+    summary="[联调][多店][售后] 售后模板同步入库（dh.item.aftersale.list$2.0）",
 )
 def test_sync_aftersale_templates(
     payload: AftersaleTemplateSyncTestRequest,
@@ -291,20 +291,35 @@ def test_sync_aftersale_templates(
 @router.post(
     "/product/sync",
     response_model=ApiResponse[dict[str, Any]],
-    summary="[联调] 敦煌多店铺商品详情同步入库",
+    summary="[联调][多店][商品] 商品详情同步入库（dh.item.get$2.0）",
 )
 def test_product_sync(
     payload: ProductSyncTestRequest,
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict[str, Any]]:
     """
-    按 store_identifier + item_code 批量拉取 dh.item.get 并写入 product_dh 及相关子表。
+    按店铺标识 + 商品编码批量拉取产品详情并写入 product_dh。
 
-    - store_identifier 对应 stores.identifier，内部解析店铺与 access_token
-    - 可跨店铺一次传入多个商品
-    - site_id 默认 EN
-    - 同步成功的商品 is_seed=1
-    - 敦煌接口失败时原样抛出，不按成功响应返回
+    ## 官方（每条）
+    - method：`dh.item.get`，version=`2.0`
+    - `store_identifier` 对应 `stores.identifier`，用来解析店铺与 access_token
+    - 可一次传入多家店的多个商品；同店同编码同站点会覆盖旧数据
+
+    ## 业务入参
+    | 字段 | 必填 | 说明 |
+    | --- | --- | --- |
+    | items[].store_identifier | 是 | 店铺唯一标识 |
+    | items[].item_code | 是 | 商品编码 itemCode |
+    | items[].site_id | 否 | `EN`(默认) / `RU` / `ES` / `ID` |
+
+    ## 入库与失败
+    - 成功：写入完整详情，`is_seed=1`
+    - 敦煌接口或处理失败：该条记 `sync_state=0` 后整次接口失败，不按成功返回
+
+    ## 返回
+    - `success` / `failed`、`success_count` / `failed_count`、`raw_calls`
+
+    单店联调：`/testAPI/dhgate/item/get`。从 Excel 提取后同步见 `/product/syncfromfile`。
     """
     result = sync_products_dh(
         db,
@@ -316,7 +331,7 @@ def test_product_sync(
 @router.post(
     "/product/syncfromfile",
     response_model=ApiResponse[dict[str, Any]],
-    summary="[联调] 从 Excel 提取后多店铺商品详情同步入库",
+    summary="[联调][多店][商品] 从 Excel 同步商品详情（dh.item.get$2.0）",
 )
 async def test_product_sync_from_file(
     db: Session = Depends(get_db),
@@ -352,16 +367,30 @@ async def test_product_sync_from_file(
     ),
 ) -> ApiResponse[dict[str, Any]]:
     """
-    从 Excel 提取店铺标识与商品编码后同步入库：
+    从 Excel 提取店铺标识与商品编码，再按条调用 `dh.item.get$2.0` 写入 product_dh。
 
-    1. 按 extract_field_info 提取行（须含 store_identifier / item_code）
-    2. 行内缺少店铺或商品编码：仅在响应 failed 中体现，不写库
-    3. 调 dh.item.get 成功：写入完整详情，sync_state=1
-    4. 敦煌 API 报错/数据异常：写入 sync_state=0 后原样抛出
-    5. is_autocheck=1 时仅处理库中尚不存在的商品
+    ## 提取规则
+    | 字段 | 默认 | 说明 |
+    | --- | --- | --- |
+    | file | 必填 | `.xlsx` / `.xlsm` |
+    | extract_field_info | A=店铺、B=商品编码 | JSON，须含 `store_identifier` 与 `item_code` |
+    | start_row | 2 | 1 起；默认跳过表头，无表头时设为 1 |
+    | row_count | 0 | 0=全部；超出实际行数不报错 |
+    | sheet_index | 1 | 0=全部工作表；1 起为指定表（1=第一个） |
+    | is_autocheck | 0 | 1=只同步库中尚不存在的商品 |
 
-    响应：elapsed_ms、success_count、failed_count；
-    failed 含 item_code / store_identifier / message（及可选 product_id）。
+    ## 入库与失败
+    1. 行内缺少店铺或商品编码：只记入 `failed`，不写库，不中断其它行
+    2. `dh.item.get` 成功：写入完整详情，`sync_state=1`
+    3. 敦煌报错或数据异常：写入 `sync_state=0` 后整次接口失败
+    4. 文件中没有有效店铺+商品编码：直接失败
+
+    ## 返回
+    - `elapsed_ms`、`success_count`、`failed_count`
+    - `failed[]`：`item_code` / `store_identifier` / `message`（及可选 `product_id`）
+    - `is_autocheck=1` 时另有 `missing_count`、`missing_items`；没有待补商品时成功数为 0
+
+    直接传商品列表见 `/product/sync`；单店详情见 `/testAPI/dhgate/item/get`。
     """
     field_map = utils_file_service.parse_extract_field_info(extract_field_info)
     if "store_identifier" not in field_map or "item_code" not in field_map:

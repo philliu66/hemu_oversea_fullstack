@@ -2,7 +2,7 @@
 
 > 数据来源：官方文档站 [Partner Center](https://partner.tiktokshop.com/docv2/page/tts-developer-guide) 及各接口详情页（文档站为 SPA，正文需浏览器/Playwright 渲染后抓取）。
 > **用途**：给 AI / 开发者做本仓库 `testAPI/tiktok`（规划中）联调对照——接口做什么、关键参数必传什么、响应关键字段、模块间如何串。
-> **版本策略**：与敦煌网不同，TikTok 的接口版本是**日期制**（如 `202309`、`202507`），URL 路径形如 `/{模块}/{日期版本}/{资源}`；新旧版本并存，本手册默认收录主流稳定版本，升级新版本时在附录「版本对照」登记。
+> **版本策略**：接口版本是**日期制**（如 `202309`、`202509`），路径形如 `/{模块}/{日期版本}/{资源}`。下文路径以全量抓取稿 `tts_API.md` 里当前收录的接口为准；同一能力若文档站已换新日期版本，不要继续用旧路径。字段与枚举只使用该接口页写出的值。
 > **统一入口**：
 > - 业务 API：`https://open-api.tiktokglobalshop.com`（US 区应用使用对应 US 域名，以应用所在区控制台标注为准）
 > - 授权/Token：`https://auth.tiktok-shops.com`（US 区对应 US 授权域名，以控制台为准）
@@ -17,19 +17,21 @@
 TikTok Shop 开放平台（Partner API）面向卖家、服务商（Partner）与达人（Creator）三类角色，覆盖商品、订单、履约、物流、售后、财务、达人分销、数据分析等域。与敦煌网手册（`dhgate_API.md`）对照，理解上有四个关键差异：
 
 1. **授权体系更重**：OAuth2 授权码模式 + 每请求 HMAC 签名双保险；敦煌网只有简单公共参数。
-2. **多店铺/多区域隔离**：一个 access_token 只属于一个店铺（一个国家站点）；跨店铺、跨区域调用需要各自独立的 token，且店铺级接口必须带 `shop_cipher`（店铺密文）。
+2. **多店铺/多区域隔离**：一次卖家授权拿到的 access_token 可以覆盖该卖家授权给应用的多家店（`Get Authorized Shops` 返回 `shops` 列表）。跨境卖家 `seller_type=CROSS_BORDER` 会有多个国家站。店铺级接口用对应店的 `shop_cipher` 指定店铺，不要把 A 店的 cipher 配到 B 店的请求上。达人 token、服务商 token 与卖家 token 不能混用。
 3. **推拉结合**：平台有成熟的 Webhook 事件推送（订单状态、售后、包裹、商品审核、授权变化等），敦煌网是纯拉模式。生产建议「Webhook 实时 + 定时轮询兜底」双轨。
 4. **强 scope 控制**：每个接口需要应用申请并获卖家授权的 scope；scope 不够时报 105005，需卖家重新授权。
 
-### 0.2 三类角色与 token
+### 0.2 角色与 token
 
 | 角色 | 授权入口 | user_type | 说明 |
 | --- | --- | --- | --- |
 | Seller（卖家） | `services.{region}.tiktokshop.com/open/authorize?service_id=...` | 0 | 本仓库主要场景：店铺授权后操作商品/订单/履约 |
-| Creator（达人） | `https://shop.tiktok.com/alliance/creator/auth?app_key=...&state=...` | 1 | 达人分销/联盟数据，token 与卖家 token **互不通用** |
-| Partner（服务商/MCN） | 同卖家入口但选 partner 类型 | 3 | 代多卖家管理，使用 `category_asset_cipher` 标识资产 |
+| Creator（达人） | `https://shop.tiktok.com/alliance/creator/auth?app_key=...&state=...` | 1 | 达人分销/联盟数据，token 与卖家 token 不可混用 |
+| Partner（旧） | 以换 token 回包为准 | 2 | 旧版 Partner |
+| Partner（当前） | 服务商授权入口，见 Partner authorization guide | 3 | Affiliate Partner / TAP；用 `category_asset_cipher` 标识类目资产 |
+| Global Selling 卖家 | 以换 token 回包为准 | 4、5 | 4 为跨境 / Global Selling；5 为当前 Global Selling 类型 |
 
-> ⚠️ 三类授权的端点和参数不同，token 不可混用；回调换 token 后必须校验 `user_type` 是否为预期值。
+> 换 token 后必须核对 `user_type`。达人集成应得到 `1`，Affiliate Partner（TAP）应得到 `3`。收到表外取值时，说明授权走错了入口。
 
 ### 0.3 典型链路（优先级）
 
@@ -39,7 +41,7 @@ TikTok Shop 开放平台（Partner API）面向卖家、服务商（Partner）�
   ├─ 商品：categories → rules/attributes → product.create → product.search
   ├─ 履约：order.search → order.detail → package.search → package.ship
   ├─ 售后：return.search → return.approve/reject；cancellation.approve/reject
-  ├─ 财务：finance.payments → finance.transactions（对账）
+  ├─ 财务：finance/202309/statements → finance/202501/.../statement_transactions
   └─ 事件：event.webhooks 配置回调 + 每次推送验签
 ```
 
@@ -52,7 +54,7 @@ flowchart TD
     E --> F["fulfillment: packages/search → ship"]
     E --> G["return_refund: approve/reject"]
     D --> H["webhook: ORDER_STATUS_CHANGE 实时推送"]
-    F --> I["finance: payments/transactions 对账"]
+    F --> I["finance: statements / statement_transactions"]
 ```
 
 ---
@@ -64,39 +66,41 @@ flowchart TD
 | 参数 | 类型 | 必须 | 说明 |
 | --- | --- | --- | --- |
 | `app_key` | String | 是 | 应用唯一标识（Partner Center 建应用获得） |
-| `timestamp` | int | 是 | Unix 时间戳（秒，GMT/UTC+0）；与服务器偏差过大将被拒，务必 NTP 对时（建议 ±5 分钟内） |
+| `timestamp` | int | 是 | 10 位 Unix 秒（GMT/UTC+0）。有效区间是 **[当前时间 − 5 分钟, 当前时间 + 30 秒]**。超出报 `36009004` |
 | `sign` | String | 是 | 签名，算法见 1.3 |
-| `access_token` | String | 视接口 | 少数接口允许放 query（如 authorization/202309/shops）；多数接口放请求头 |
+| `shop_cipher` | String | 视接口 | 店铺密文。店铺级接口在详情要求时放入 query，并参与签名。来自 Get Authorized Shops 的 `cipher` |
 
 ### 1.2 请求头
 
 | Header | 必须 | 说明 |
 | --- | --- | --- |
-| `content-type` | 是 | `application/json` |
-| `x-tts-access-token` | 是（授权接口） | Get Access Token 返回的 access_token；按 user_type 区分卖家(0)/达人(1)/服务商(3) |
+| `content-type` | 是 | `application/json`；上传二进制时按该接口要求用 `multipart/form-data` |
+| `x-tts-access-token` | 是（202309 及以后的业务接口） | Get Access Token 返回的 access_token，放在这个请求头里。签名覆盖 path、query（去掉 `sign`）和原始 body |
 
 ### 1.3 签名算法（sign）
 
 > 以官方 [Sign your API request](https://partner.tiktokshop.com/docv2/page/sign-your-api-request) 页为准，此处为实操步骤摘要。
 
-1. 取全部 **query 参数**，剔除 `sign` 与 `access_token`；
-2. 按 key 的**字典序**排序，拼接为 `k1v1k2v2...` 形式；
-3. **POST/PUT/PATCH 请求**：把**原始请求 body 字符串**（未经反序列化，与实际发送内容逐字节一致）追加到拼串末尾；
-4. 在拼串**前后各拼接一次 `app_secret`**，得到待签名明文：`app_secret + k1v1k2v2... + body + app_secret`；
-5. 以 `app_secret` 为密钥做 **HMAC-SHA256**，输出**小写十六进制**字符串即为 `sign`。
+1. 取全部 **query 参数**，剔除 `sign` 与 `access_token`。`shop_cipher` 若在 query 里，要留在待签名参数中。`x-tts-access-token` 不参与签名。
+2. 按 key 的**字典序**排序，拼接为 `k1v1k2v2...`。
+3. 把上一步结果接在 **API path** 后面（不含域名、不含 query）：`path + k1v1k2v2...`。Get Authorized Shops 的 path 是 `/authorization/202309/shops`。
+4. `content-type` 为 `multipart/form-data` 时不拼接 body；其它请求接上**实际发送的原始 body 字节**。按发出去的字节签名，不要先解析再重新序列化。没有 body 则跳过。
+5. 前后各包一次 `app_secret`：`app_secret + path + k1v1k2v2... + body + app_secret`。
+6. 以 `app_secret` 为密钥做 **HMAC-SHA256**，输出**小写十六进制**即为 `sign`。
 
 ```python
 import hashlib, hmac
 
-def tts_sign(app_secret: str, params: dict, body: str | None = None) -> str:
+def tts_sign(app_secret: str, path: str, params: dict, body: str | None = None) -> str:
     raw = "".join(f"{k}{params[k]}" for k in sorted(params) if k not in ("sign", "access_token"))
+    sign_string = f"{path}{raw}"
     if body:
-        raw += body
-    msg = f"{app_secret}{raw}{app_secret}"
+        sign_string += body
+    msg = f"{app_secret}{sign_string}{app_secret}"
     return hmac.new(app_secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
 ```
 
-> ⚠️ body 必须用「将要发送的原始字节」参与签名；若先签名后重新序列化（key 顺序、空格变化），签名必错——这是最常见的联调故障。
+> body 必须是即将发出的原始字符串。先签名再改 JSON 的键顺序或空格，签名会失败。官网示例明文：`e59af819cc/authorization/202309/shopsapp_key29a39dtimestamp1623812664e59af819cc`。
 
 ### 1.4 响应包络
 
@@ -108,13 +112,13 @@ def tts_sign(app_secret: str, params: dict, body: str | None = None) -> str:
 
 ### 1.5 分页
 
-列表接口普遍使用 **page_token / cursor 游标分页**（不是页码）：首页不传 `page_token`，之后传上一页响应里的 `next_page_token` / `cursor`；时间范围过滤参数成对出现（`xxx_ge` / `xxx_lt`），**显式固定时间窗**以保证翻页结果稳定（默认窗口一般 3 个月，显式范围最长约 92 天，以各接口文档为准）。
+列表接口用 **`page_token`**。`page_size` 与 `page_token` 在 **query**。首页不传 `page_token`，下一页把响应里的 `next_page_token` 原样传回；为空表示没有下一页。翻页时筛选和排序保持不变。时间过滤常成对出现（`xxx_ge` 配 `xxx_lt` 或 `xxx_le`）：只传一边时，另一边按该接口说明默认。时间窗以该接口页为准。
 
 ### 1.6 错误码与限流
 
 - 常见错误码：`105005` scope 不足（App 或 token 未授权该接口）；`36004004` auth_code 无效/已使用；`36009033` IP 不在白名单；`36009003` 平台内部错误；完整清单见官网 [Common errors](https://partner.tiktokshop.com/docv2/page/common-errors)。
-- 每个接口文档页标注 Rate Limit（按应用/店铺维度计）；超限返回 429 与相应错误码，按 `Retry-After` 退避重试。
-- **幂等性**：TikTok 的写操作不保证幂等，**POST/PUT/DELETE 失败后不要盲目自动重试**（GET 可安全重试）；重试前先查询确认当前状态。
+- 限流同时看 HTTP `429` 和业务码 `36009002`。有 `Retry-After` 就把它当作最短等待；没有则指数退避加抖动。不要立刻高频重试。
+- 写接口要自己带幂等（如 Approve Return 的 `idempotency_key`）。收到 429 / `36009002` 时，只有这次写操作具备幂等保护才重试。GET 可以按退避重试。
 
 ---
 
@@ -180,7 +184,7 @@ def tts_sign(app_secret: str, params: dict, body: str | None = None) -> str:
 | `app_key` | 是 | 应用标识 |
 | `app_secret` | 是 | 应用密钥 |
 | `auth_code` | 是 | 回调返回的 `code`（单次、30 分钟内） |
-| `grant_type` | 是 | 固定值 `authorized_code`（⚠️ 不是标准的 `authorization_code`，官方拼写如此） |
+| `grant_type` | 是 | 固定值 `authorized_code` |
 
 **响应 `data` 关键字段**
 
@@ -234,23 +238,27 @@ curl -G "https://auth.tiktok-shops.com/api/v2/token/refresh" \
 - **HTTP**：`GET /authorization/202309/shops`（业务域）
 - **关联**：所有店铺级接口的 `shop_cipher` 均来源于此；多店编排按本接口结果建映射
 
-**Query 参数**：`app_key`、`timestamp`、`sign`、`access_token`（query 传入）
+**Query**：`app_key`、`timestamp`、`sign`。access token 放请求头 `x-tts-access-token`。
 
-**响应 `data.shops[]` 关键字段**
+**响应 `data.shops[]`**
 
-| 字段 | 说明 |
-| --- | --- |
-| `id` | shop_id（int） |
-| `name` | 店铺名 |
-| `region` | 国家/区域码（如 US、GB） |
-| `cipher` | **shop_cipher**，店铺级接口必传 |
-| `seller_warehouse` | 卖家仓库信息（含仓库 id，供商品库存/发货使用） |
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 店铺内部 ID |
+| `name` | string | 店铺名 |
+| `region` | string | 区域，如 `GB` |
+| `seller_type` | string | `CROSS_BORDER`（多国多店）或 `LOCAL`（单店） |
+| `cipher` | string | **shop_cipher**。店铺级接口的 query 原样传入 |
+| `code` | string | Seller Center 上的店铺代码 |
+
+仓库 ID 不在这个接口里，用 `GET /logistics/202309/warehouses`。
 
 ```bash
 TS=$(date +%s)
 curl -G "https://open-api.tiktokglobalshop.com/authorization/202309/shops" \
+  -H "x-tts-access-token: $TOKEN" \
   --data-urlencode "app_key=KEY" --data-urlencode "timestamp=$TS" \
-  --data-urlencode "access_token=TOKEN" --data-urlencode "sign=$SIGN"
+  --data-urlencode "sign=$SIGN"
 ```
 
 ### 2.5 编码规范（本仓库约定）
@@ -268,7 +276,7 @@ curl -G "https://open-api.tiktokglobalshop.com/authorization/202309/shops" \
 | Topic | 说明 |
 | --- | --- |
 | `SELLER_DEAUTHORIZATION` | 卖家主动解绑，立即停用该店 token 并告警 |
-| `UPCOMING_AUTHORIZATION_EXPIRATION` | 授权 30 天内到期，提醒续约/重新授权 |
+| `UPCOMING_AUTHORIZATION_EXPIRATION` | 到期前 30 天开始推送，之后每天 0:00 再推，直到重新授权 |
 
 ---
 
@@ -278,38 +286,44 @@ curl -G "https://open-api.tiktokglobalshop.com/authorization/202309/shops" \
 
 ### 3.1 商品 API（Product）
 
-- **模块说明**：类目/属性/规则 → 创建/编辑商品 → 库存/状态管理。商品上架有平台审核（`audit_status`）。
-- **模块关联**：创建前需要 `categories`（类目树）+ `rules`（类目规则）+ `attributes`（必填属性）+ 仓库 `warehouse_id`（来自授权店铺的 seller_warehouse 或 logistics 仓库接口）；图片等媒体经独立上传接口获得 uri 后引用。
-- **核心纪律（官方 Solution Guide）**：Edit Product 前必须先 Get Product 取全量、合并修改再提交（与敦煌网 item.update 同理）；Webhook 不是最终事实来源，重要状态以 Get Product 查询结果为准。
+- **模块说明**：类目/属性/规则 → 创建/编辑商品 → 库存/状态管理。审核状态看 `audit.status` 的完整枚举。
+- **模块关联**：创建前取类目、规则、属性；仓库 ID 来自 `GET /logistics/202309/warehouses`。图片先走 Upload Product Image，把返回的 URI 填进 `main_images[].uri`。
+- **编辑**：全量编辑用 Edit Product（202509）。改完内容会重新送审；只改 `price` / `inventory` 不用重审，会马上生效。Webhook 不是最终事实，状态以 Get Product 为准。美国、欧盟、东南亚的类目接口必须传 `category_version=v2`（7 级类目树），其它区域默认 `v1`（3 级）。
 
-| 接口 | HTTP | path（202309） |
+| 接口 | HTTP | path |
 | --- | --- | --- |
 | Get Categories | GET | `/product/202309/categories` |
 | Recommend Category | POST | `/product/202309/categories/recommend` |
 | Get Category Rules | GET | `/product/202309/categories/{category_id}/rules` |
 | Get Attributes | GET | `/product/202309/categories/{category_id}/attributes` |
 | Create Product | POST | `/product/202309/products` |
-| Edit Product | PUT | `/product/202309/products/{product_id}` |
-| Partial Edit Product | PATCH | `/product/202309/products/{product_id}/partial_edit` |
+| Edit Product | PUT | `/product/202509/products/{product_id}` |
+| Partial Edit Product | POST | `/product/202509/products/{product_id}/partial_edit` |
 | Get Product | GET | `/product/202309/products/{product_id}` |
-| Search Products | POST | `/product/202309/products/search` |
+| Search Products | POST | `/product/202502/products/search` |
 | Update Inventory | POST | `/product/202309/products/{product_id}/inventory/update` |
 | Deactivate / Activate | POST | `/product/202309/products/deactivate`、`/product/202309/products/activate` |
 
 #### 3.1.1 Get Categories
 
-- **做什么**：按父类目查询子类目树；`category_id` 不传返回一级类目（对应敦煌网 `dh.category.list`）
-- **关联**：结果 `id` 作为 Recommend/Rules/Attributes/Create 的 `category_id`
+- **做什么**：拉取当前店铺可用类目。类目经常变，不要长期缓存后再拿去发品。
+- **关联**：响应 `categories[].id` 用作后续 rules / attributes / create 的 `category_id`。根类目的 `parent_id` 是 `"0"`。只有 `is_leaf=true` 且权限允许的类目才能创建商品。
 
 | Query 参数 | 必须 | 说明 |
 | --- | --- | --- |
-| `category_id` | 否 | 父类目 ID；空=一级类目 |
+| `category_version` | 视区域 | 美国、欧盟、东南亚必须 `v2`；其它区域默认 `v1` |
+| `locale` | 否 | BCP-47，如 `en-US`；不传用店铺默认语言 |
+| `keyword` | 否 | 按 `local_name` 过滤 |
+| `listing_platform` | 否 | `TIKTOK_SHOP`（默认）或 `TOKOPEDIA`。印尼双平台上架时两边各查一次，取交集 |
+| `include_prohibited_categories` | 否 | 仅 BR、MX、EU、SEA。`true` 时带上禁止类目 |
+
+`permission_statuses`：`AVAILABLE`、`INVITE_ONLY`（受限，需资质申请）、`NON_MAIN_CATEGORY`、`PROHIBITED`。
 
 ```bash
 curl -G "https://open-api.tiktokglobalshop.com/product/202309/categories" \
   -H "x-tts-access-token: $TOKEN" \
   --data-urlencode "app_key=$KEY" --data-urlencode "timestamp=$TS" \
-  --data-urlencode "shop_cipher=$CIPHER" --data-urlencode "sign=$SIGN"
+  --data-urlencode "category_version=v2" --data-urlencode "sign=$SIGN"
 ```
 
 #### 3.1.2 Recommend Category
@@ -317,7 +331,7 @@ curl -G "https://open-api.tiktokglobalshop.com/product/202309/categories" \
 - **做什么**：按商品标题/描述/图片推荐 TikTok 类目（对应敦煌网发布前置选类目的自动化）
 - **关联**：推荐结果需运营确认后再进入 rules/attributes/create
 
-**Body 关键参数**：`product_name`（必填）、`description`、`images[]`
+**Body 关键参数**：`product_title`（必填）、`description`、图片相关字段。美国、欧盟、东南亚同样要传 `category_version=v2`。文案语言必须与目标市场一致。
 
 #### 3.1.3 Get Category Rules / Get Attributes
 
@@ -326,8 +340,8 @@ curl -G "https://open-api.tiktokglobalshop.com/product/202309/categories" \
 
 #### 3.1.4 Create Product
 
-- **做什么**：发布商品（`save_mode=LISTING` 直接提交审核，或 `DRAFT` 存草稿）
-- **关联**：`category_id` ← Categories；`warehouse_id` ← 授权店铺仓库；`main_images[].uri` ← 媒体上传接口
+- **做什么**：发布本地店商品。`save_mode=LISTING`（默认）直接送审上架；`save_mode=AS_DRAFT` 存草稿。该页要求美国、东南亚店铺传 `category_version=v2`。美国卖家也可在 `INVITE_ONLY` 类目建品，但仍需在 Seller Center 资质中心另申请，否则审核通过后状态会停在 `PENDING` / `audit.status=PRE_APPROVED`。
+- **关联**：`category_id` ← Categories 的叶子类目；`warehouse_id` ← Get Warehouse List；`main_images[].uri` ← Upload Product Image（`use_case=MAIN_IMAGE`）
 - **响应**：`product_id`、`sku_id` 列表；提交后进入审核，状态以 Get Product 为准
 
 **Body 关键参数（摘）**
@@ -361,21 +375,24 @@ curl -X POST "https://open-api.tiktokglobalshop.com/product/202309/products?app_
 
 #### 3.1.5 Edit / Partial Edit / Get Product
 
-- **Edit（PUT）**：全量编辑——先 Get 取全量、合并改动后提交；响应含 `audit_status`（`AUDITING`=审核中 / `APPROVED`=通过 / `NONE`=不适用，如草稿/冻结态）。
-- **Partial Edit（PATCH）**：定向修改内容字段；**不要用它改价格或库存**（库存走 Update Inventory，价格随 SKU 编辑）。
-- **Get（GET）**：权威状态查询（审核结果、驳回原因、最终 SKU 映射）；Webhook 收到商品变更后以本接口复核。
+- **Edit（PUT `/product/202509/products/{product_id}`）**：改描述、品牌、图片等。商品不能处于 `FREEZE` 或 `DELETED`。内容变更会生成 v2 重新送审；审核不通过则线上仍保持 v1。`price`、`inventory` 的修改不重审，立即生效。
+- **Partial Edit（POST `/product/202509/products/{product_id}/partial_edit`）**：只提交要改的字段，审核规则与 Edit 相同，同样可以直接改 `price` / `inventory`。库存数量也可以单独走 Update Inventory。
+- **Get（GET `/product/202309/products/{product_id}`）**：权威状态。`audit.status`：`NONE`（未送审、草稿、冻结或下架）、`AUDITING`、`FAILED`、`PRE_APPROVED`（审核过了但前置条件未满足）、`APPROVED`。
 
 ```bash
-curl -X PUT "https://open-api.tiktokglobalshop.com/product/202309/products/{product_id}?app_key=$KEY&timestamp=$TS&shop_cipher=$CIPHER&sign=$SIGN" \
+curl -X PUT "https://open-api.tiktokglobalshop.com/product/202509/products/{product_id}?app_key=$KEY&timestamp=$TS&shop_cipher=$CIPHER&sign=$SIGN" \
   -H "content-type: application/json" -H "x-tts-access-token: $TOKEN" \
   -d '{ ...全量商品对象（Get 后合并修改）... }'
 ```
 
 #### 3.1.6 Search Products
 
-- **做什么**：按 `product_ids` / `product_name` / `status` 等条件分页检索店内商品（对应敦煌网 `dh.item.list`）
+- **做什么**：按条件查店内商品的关键字段。要全量详情再拿返回的 product ID 调 Get Product。
+- **HTTP**：`POST /product/202502/products/search`
 
-**Body 关键参数**：`product_ids[]`、`product_name`、`status`（如 LIVE/DRAFT/DEACTIVATED）、`page_size`、`cursor`；响应含 `products[]` 与 `next_page_token`。
+**Query**：`page_size`（必填，1–100）、`page_token`（首页不传）。
+
+**Body**：`status`（单个 string，默认 `ALL`。取值 `ALL` / `DRAFT` / `PENDING` / `FAILED` / `ACTIVATE` / `SELLER_DEACTIVATED` / `PLATFORM_DEACTIVATED` / `FREEZE` / `DELETED`）、`seller_skus`、`create_time_ge` / `create_time_le`、`update_time_ge` / `update_time_le`。`status` 只过滤商品基础版本。响应有 `products[]` 与 `next_page_token`。
 
 #### 3.1.7 Update Inventory
 
@@ -390,7 +407,7 @@ curl -X POST "https://open-api.tiktokglobalshop.com/product/202309/products/{pro
 
 ### 3.2 订单 API（Order）
 
-- **模块说明**：订单检索与详情。订单状态机：`UNPAID → AWAITING_SHIPMENT → AWAITING_COLLECTION → IN_TRANSIT → DELIVERED → COMPLETED`，异常分支 `ON_HOLD`（风控/补充信息）/ `CANCEL`。
+- **模块说明**：订单检索与详情。状态取值：`UNPAID`、`ON_HOLD`（支付后的犹豫期，买家可不经卖家同意取消，此状态不能履约）、`AWAITING_SHIPMENT`、`PARTIALLY_SHIPPING`、`AWAITING_COLLECTION`、`IN_TRANSIT`、`DELIVERED`、`COMPLETED`、`CANCELLED`。
 - **模块关联**：状态变化主要靠 Webhook `ORDER_STATUS_CHANGE` 实时感知（见 3.7），API 轮询兜底；发货走 Fulfillment（3.3）；退款/取消走 Return & Refund（3.5）。
 
 | 接口 | HTTP | path |
@@ -405,63 +422,65 @@ curl -X POST "https://open-api.tiktokglobalshop.com/product/202309/products/{pro
 
 **Body 关键参数（摘）**
 
-| 参数 | 必须 | 说明 |
-| --- | --- | --- |
-| `create_time_ge` / `create_time_lt` | 二选一组 | Unix 秒；显式提供窗口翻页更稳（最长约 92 天） |
-| `update_time_ge` / `update_time_lt` | 二选一组 | 按更新时间增量拉取 |
-| `order_status[]` | 否 | `UNPAID/AWAITING_SHIPMENT/AWAITING_COLLECTION/IN_TRANSIT/DELIVERED/COMPLETED/CANCELLED` 等 |
-| `page_size` | 否 | 默认 20 |
-| `cursor` | 否 | 翻页游标 |
-
-**响应**：`orders[]`（id、status、create_time、行项目简略等）+ `next_page_token`。
+| 参数 | 位置 | 必须 | 说明 |
+| --- | --- | --- | --- |
+| `page_size` | query | 是 | 默认 20，范围 1–100 |
+| `page_token` | query | 否 | 上一页的 `next_page_token` |
+| `sort_field` | query | 否 | `create_time`（默认）或 `update_time` |
+| `sort_order` | query | 否 | `ASC` / `DESC`，默认 `DESC` |
+| `order_status` | body | 否 | **单个 string**，不是数组。取值见模块说明 |
+| `create_time_ge` / `create_time_lt` | body | 否 | 只传一边时，缺的 `lt` 默认现在，缺的 `ge` 默认店铺最早时间 |
+| `update_time_ge` / `update_time_lt` | body | 否 | 规则同上。更新时间可能因为数据刷新超出所选窗口 |
 
 ```bash
-curl -X POST "https://open-api.tiktokglobalshop.com/order/202309/orders/search?app_key=$KEY&timestamp=$TS&shop_cipher=$CIPHER&sign=$SIGN" \
+curl -X POST "https://open-api.tiktokglobalshop.com/order/202309/orders/search?app_key=$KEY&timestamp=$TS&shop_cipher=$CIPHER&page_size=50&sign=$SIGN" \
   -H "content-type: application/json" -H "x-tts-access-token: $TOKEN" \
-  -d '{ "order_status": ["AWAITING_SHIPMENT"], "update_time_ge": 1791222188, "update_time_lt": 1791229388, "page_size": 50 }'
+  -d '{ "order_status": "AWAITING_SHIPMENT", "update_time_ge": 1791222188, "update_time_lt": 1791229388 }'
 ```
 
 #### 3.2.2 Get Order Detail（202507）
 
-- **做什么**：批量查订单详情（收件人、支付、包裹、行项目、取消发起方），对应敦煌网 `dh.order.get`
-- **业务逻辑**：单次最多 50 个 order_id；`is_exchange_order=true` 时为换货补发单（`exchange_source_order_id` 指原单），需正常履约；US 区 4PL 订单收件人地址/电话可能脱敏。
+- **做什么**：按订单 ID 查详情（状态、收件地址、支付、价格税费、包裹），对应敦煌网 `dh.order.get`
+- **业务逻辑**：query 参数名是 `ids`，逗号分隔，最多 50 个。
 
 ```bash
 curl -G "https://open-api.tiktokglobalshop.com/order/202507/orders" \
   -H "x-tts-access-token: $TOKEN" \
   --data-urlencode "app_key=$KEY" --data-urlencode "timestamp=$TS" \
   --data-urlencode "shop_cipher=$CIPHER" --data-urlencode "sign=$SIGN" \
-  --data-urlencode "order_ids=576461413038785752,576461413038785753"
+  --data-urlencode "ids=576461413038785752,576461413038785753"
 ```
 
 ### 3.3 履约 API（Fulfillment）
 
 - **模块说明**：包裹维度发货——查询待发货包裹、申报发货（运单号+物流商）、更新物流信息、面单/报关文档。对应敦煌网 `dh.order.delivery.save` + 在线发货。
-- **模块关联**：`shipping_provider_id` ← Get Shipping Providers（3.4.2）；包裹合并/拆分、状态变化推送 `PACKAGE_UPDATE`。
+- **模块关联**：`shipping_provider_id` ← `GET /logistics/202309/delivery_options/{delivery_option_id}/shipping_providers`；包裹变化推送 `PACKAGE_UPDATE`。
 
-| 接口 | HTTP | path（202309） |
+| 接口 | HTTP | path |
 | --- | --- | --- |
 | Search Packages | POST | `/fulfillment/202309/packages/search` |
 | Ship Package | POST | `/fulfillment/202309/packages/{package_id}/ship` |
 | Update Shipping Info | POST | `/fulfillment/202309/packages/{package_id}/shipping_info/update` |
-| Get Shipping Documents | POST | `/fulfillment/202309/shipping_documents`（面单，参数以详情页为准） |
+| Get Package Shipping Document | GET | `/fulfillment/202309/packages/{package_id}/shipping_documents` |
 
 #### 3.3.1 Search Packages
 
-- **做什么**：按 `package_ids` / `order_ids` / 时间窗分页查包裹（待发货队列）
-- **响应**：`packages[]`（package_id、order_id、status、line_items、warehouse）+ 分页游标
+- **做什么**：按创建/更新时间和 `package_status` 分页查包裹
+- **Query**：`page_size` 必填（1–50）、`page_token`、`sort_field`（`create_time` / `update_time` / `order_pay_time`）、`sort_order`、跨境店带 `shop_cipher`
+- **Body**：`create_time_ge` / `create_time_lt`、`update_time_ge` / `update_time_lt`、`package_status`（`TO_FULFILL` / `PROCESSING` / `FULFILLING` / `COMPLETED` / `CANCELLED`）
+- **响应**：`packages[]`（`id`、关联 `orders`、`status`）与 `next_page_token`
 
 #### 3.3.2 Ship Package（申报发货）
 
 - **做什么**：对卖家自发货（3PL）包裹申报发货（Tracking + 物流商），对应敦煌网 `delivery.save`
 - **业务逻辑**：仅 `AWAITING_SHIPMENT` 状态可发；SLA 内未发货会被平台处罚/接管，需监控滞留订单。
 
-**Body 关键参数**：`tracking_number`（必填）、`shipping_provider_id`（必填，来自物流商接口）、其余如 `is_oversize` 见详情页。
+平台物流用 `handover_method`（`PICKUP` / `DROP_OFF`）和 `pickup_slot`。卖家自发（`delivery_option=SEND_BY_SELLER`）把 `tracking_number`、`shipping_provider_id` 放在 `self_shipment` 里，这两项必填。
 
 ```bash
 curl -X POST "https://open-api.tiktokglobalshop.com/fulfillment/202309/packages/{package_id}/ship?app_key=$KEY&timestamp=$TS&shop_cipher=$CIPHER&sign=$SIGN" \
   -H "content-type: application/json" -H "x-tts-access-token: $TOKEN" \
-  -d '{ "tracking_number": "1Z999AA10123456784", "shipping_provider_id": "123456" }'
+  -d '{ "self_shipment": { "tracking_number": "1Z999AA10123456784", "shipping_provider_id": "6617675021119438849" } }'
 ```
 
 #### 3.3.3 Update Shipping Info
@@ -472,13 +491,13 @@ curl -X POST "https://open-api.tiktokglobalshop.com/fulfillment/202309/packages/
 
 | 接口 | HTTP | path | 说明 |
 | --- | --- | --- | --- |
-| Get Warehouse List | GET | `/logistics/202309/warehouses` | 卖家仓库列表，产出 `warehouse_id` |
-| Get Shipping Providers | GET | `/logistics/202309/shipping_providers` | 可用物流商列表（按包裹/区域查询），产出 `shipping_provider_id` |
-| Check Shipping Template Existence | GET | `/logistics/202606/...`（模板检查，202606 版） | 检查指定业务仓是否配置运费模板；需要 `shop_id`、`biz_warehouse_id` |
+| Get Warehouse List | GET | `/logistics/202309/warehouses` | 仓库列表，产出 `warehouse_id` |
+| Get Shipping Providers | GET | `/logistics/202309/delivery_options/{delivery_option_id}/shipping_providers` | 某个配送方式下的承运商。TikTok 履约的配送方式没有可选承运商，调用会报错 |
+| Check Shipping Template Existence | GET | `/logistics/202606/seller_template/template_exist` | query：`biz_warehouse_id` 必填，`shop_id` 可选。该页仍把 `access_token` 写在 query |
 
 #### 3.4.1 Get Warehouse List
 
-- **关联**：响应中的仓库 ID → Create Product 的 `inventory[].warehouse_id`；与授权店铺接口返回的 seller_warehouse 对齐。
+- **关联**：响应中的仓库 ID → Create Product 的 `inventory[].warehouse_id`。Get Authorized Shops 不返回仓库。
 
 ```bash
 curl -G "https://open-api.tiktokglobalshop.com/logistics/202309/warehouses" \
@@ -489,37 +508,40 @@ curl -G "https://open-api.tiktokglobalshop.com/logistics/202309/warehouses" \
 
 #### 3.4.2 Get Shipping Providers
 
-- **做什么**：查询某包裹/区域可用的物流承运商及 `shipping_provider_id`
-- **关联**：Ship Package 前必调；具体 query 参数（package_id/shipment 等）以详情页为准。
+- **做什么**：按 `delivery_option_id` 查承运商，得到 `shipping_provider_id`
+- **关联**：卖家自发货前先调。path 带 `delivery_option_id`。
 
 ### 3.5 售后 API（Return & Refund）
 
 - **模块说明**：退货退款审批、买家取消审批、RMA/换货。对应敦煌网 `applymoney.* / dispute*`。
 - **模块关联**：状态推送 `RETURN_STATUS_CHANGE`、`CANCELLATION_STATUS_CHANGE`；换货（EXCHANGE）会产生 `rma_id` 并自动创建 0 元换货 outbound 订单（订单接口标记 `is_exchange_order`）。
-- **业务逻辑**：审批有响应时限，超时可能被平台自动同意；`return_type` 枚举含 `REFUND / REPLACEMENT / RETURN_AND_REFUND / EXCHANGE`。
+- **业务逻辑**：`return_type` 为 `REFUND`、`RETURN_AND_REFUND`、`REPLACEMENT`、`EXCHANGE`。
 
-| 接口 | HTTP | path（202309） |
+| 接口 | HTTP | path |
 | --- | --- | --- |
-| Search Returns | POST | `/return_refund/202309/returns/search` |
+| Search Returns | POST | `/return_refund/202602/returns/search` |
 | Approve Return | POST | `/return_refund/202309/returns/{return_id}/approve` |
-| Reject Return | POST | `/return_refund/202309/returns/{return_id}/reject` |
-| Get Decision Eligibility | GET | `/return_refund/202309/returns/{return_id}/decision_eligibility`（可审批/可选决策） |
+| Reject Return | POST | `/return_refund/202606/returns/{return_id}/reject` |
+| Get Decision Eligibility | GET | `/return_refund/202601/decision_eligibility` |
 | Approve Cancellation | POST | `/return_refund/202309/cancellations/{cancel_id}/approve` |
 | Reject Cancellation | POST | `/return_refund/202309/cancellations/{cancel_id}/reject` |
 
 #### 3.5.1 Search Returns
 
-- **Body 关键参数**：`return_ids[]`、`order_ids[]`、`return_status`、`create_time_ge/lt`、`page_size`、`cursor`
-- **响应 `returns[]`**：return_id、order_id、return_type、return_status、sku_info 等
+- **Query**：`page_size`（默认 10，范围 10–50）、`page_token`、`sort_field`（`create_time` / `update_time`）、`sort_order`
+- **Body**：`return_ids`、`order_ids`、`return_types`、`return_status`（均为数组）、`create_time_ge` / `create_time_le`（只传一边时，缺的上界默认现在，缺的下界默认店铺最早时间）
+- **响应**：`return_orders[]`，含 `return_id`、`order_id`、`return_type`、`return_status`
 
 #### 3.5.2 Approve / Reject Return
 
-- **业务逻辑**：仅退款（REFUND_ONLY）需带退款原因码；退货退款需提供取件物流信息（参数视 return_type，详见详情页）；Reject 需原因码。
+- **业务逻辑**：先用 Get Decision Eligibility 看当前单允许哪些 `decision`。query 是 `return_or_cancel_id`（必填）和可选的 `check_decisions`，不是路径里的 `{return_id}`。Approve 可选 query `idempotency_key`。Reject 走 202606，原因和图片按该页必填项提交。
+
+`decision` 取值：`APPROVE_REFUND`、`APPROVE_RETURN`、`APPROVE_RECEIVED_PACKAGE`、`APPROVE_REPLACEMENT`、`ISSUE_REPLACEMENT_REFUND`、`OFFER_PARTIAL_REFUND`、`DIRECT_REFUND`。`buyer_keep_item` 只在 `APPROVE_RETURN` 时有效。`OFFER_PARTIAL_REFUND` 时 `partial_refund.currency` 与 `partial_refund.amount` 必填。
 
 ```bash
 curl -X POST "https://open-api.tiktokglobalshop.com/return_refund/202309/returns/{return_id}/approve?app_key=$KEY&timestamp=$TS&shop_cipher=$CIPHER&sign=$SIGN" \
   -H "content-type: application/json" -H "x-tts-access-token: $TOKEN" \
-  -d '{ "refund_only_reason": 1 }'
+  -d '{ "decision": "APPROVE_RETURN" }'
 ```
 
 ### 3.6 财务 API（Finance）
@@ -527,29 +549,32 @@ curl -X POST "https://open-api.tiktokglobalshop.com/return_refund/202309/returns
 - **模块说明**：结算账单、货款流水。对应敦煌网较弱的对账域。
 - **模块关联**：与订单/售后状态联动核对（订单结算状态受退货期影响）。
 
-| 接口 | HTTP | path（202309） | 说明 |
+| 接口 | HTTP | path | 说明 |
 | --- | --- | --- | --- |
-| Get Payments | GET | `/finance/202309/payments` | 分页查询结算单（payment）列表 |
-| Get Transactions | GET | `/finance/202309/transactions` | 按 `payment_id` 查该结算单内的交易明细 |
+| Get Statements | GET | `/finance/202309/statements` | 结算单列表 |
+| Get Payments | GET | `/finance/202605/payments` | 自动付款记录。东南亚不可用。`sort_field` 必填，只支持 `create_time` |
+| Get Transactions by Statement | GET | `/finance/202501/statements/{statement_id}/statement_transactions` | 结算单内交易明细 |
+| Get Transactions by Order | GET | `/finance/202501/orders/{order_id}/statement_transactions` | 订单维度交易明细 |
 
 ```bash
-curl -G "https://open-api.tiktokglobalshop.com/finance/202309/payments" \
+curl -G "https://open-api.tiktokglobalshop.com/finance/202605/payments" \
   -H "x-tts-access-token: $TOKEN" \
   --data-urlencode "app_key=$KEY" --data-urlencode "timestamp=$TS" \
-  --data-urlencode "shop_cipher=$CIPHER" --data-urlencode "sign=$SIGN" \
-  --data-urlencode "page_size=20"
+  --data-urlencode "shop_cipher=$CIPHER" --data-urlencode "sort_field=create_time" \
+  --data-urlencode "page_size=20" --data-urlencode "sign=$SIGN"
 ```
 
 ### 3.7 事件 API（Webhook）
 
-- **模块说明**：在应用配置（或经 API）登记 HTTPS 回调地址与订阅 topic；每条事件推送必须**验签**。
-- **验签方式**：对**原始请求 body**（逐字节）以 `app_key + app_secret` 按官方规则计算签名，与请求头 `authorization` 比对；验签失败返回 401。处理端必须用 raw body（如 Express 的 `express.raw()` / FastAPI 的 `await request.body()`），不可先解析 JSON 再验。
-- **响应要求**：收到事件尽快返回 2xx（如 200），业务处理异步化；平台对未响应的推送会重试。
+- **模块说明**：用 Update Shop Webhook 给一家店登记 HTTPS 地址和单个 `event_type`。Body 是 `address` 与 `event_type`。
+- **验签**：`Authorization` 头是小写十六进制 HMAC-SHA256，没有 `Bearer`。`signature_base_string = app_key + raw_request_body`，密钥是 `app_secret`。必须用收到的原始 body，不能先解析再重新序列化。签名不对就拒绝处理。
+- **响应要求**：尽快返回 2xx，业务异步处理。
 
-| 接口 | HTTP | path（202309） | 说明 |
+| 接口 | HTTP | path | 说明 |
 | --- | --- | --- | --- |
-| Get Webhooks | GET | `/event/202309/webhooks` | 查询应用已配置的回调地址与已订阅 topic |
-| Update Webhooks | PUT | `/event/202309/webhooks` | 更新回调地址/订阅 topic；Body：`address`、`topics[]` |
+| Get Shop Webhooks | GET | `/event/202309/webhooks` | 查看该店已订的 topic 和回调地址 |
+| Update Shop Webhook | PUT | `/event/202309/webhooks` | Body：`address`、`event_type`（单个） |
+| Delete Shop Webhook | DELETE | `/event/202309/webhooks` | 取消某个 topic |
 
 **常用 Topic 一览**
 
@@ -563,14 +588,12 @@ curl -G "https://open-api.tiktokglobalshop.com/finance/202309/payments" \
 | `SELLER_DEAUTHORIZATION` / `UPCOMING_AUTHORIZATION_EXPIRATION` | 授权变化 | 见 2.6 |
 
 ```python
-# FastAPI 验签示意（规则以官方 Webhooks 文档为准）
-@app.post("/webhooks/tiktok")
-async def tiktok_webhook(request: Request):
-    raw = await request.body()
-    if not verify_tiktok_signature(raw, request.headers.get("authorization", "")):
-        raise HTTPException(status_code=401)
-    process_async(raw)   # 异步处理，立即返回
-    return Response(status_code=200)
+import hashlib, hmac
+
+def verify_tiktok_webhook(app_key: str, app_secret: str, raw: bytes, authorization: str) -> bool:
+    base = app_key.encode() + raw
+    digest = hmac.new(app_secret.encode(), base, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(digest, authorization.strip())
 ```
 
 ### 3.8 其他模块（按需展开）
@@ -595,7 +618,7 @@ async def tiktok_webhook(request: Request):
 flowchart TD
     A["生成授权链接 service_id"] --> B["卖家授权 → 回调 code + state"]
     B --> C["token/get 换 access_token"]
-    C --> D["authorization/202309/shops<br/>拿 shop_id / shop_cipher / 仓库"]
+    C --> D["authorization/202309/shops<br/>拿 shops[].id / cipher"]
     D --> E["落库店铺映射 + 启动刷新任务"]
 ```
 
@@ -605,9 +628,9 @@ flowchart TD
 flowchart TD
     A["categories 类目树 / recommend"] --> B["rules + attributes 建品模板"]
     B --> C["媒体上传获得 uri"]
-    C --> D["warehouse: seller_warehouse 对齐"]
+    C --> D["logistics/202309/warehouses"]
     D --> E["Create Product"]
-    E --> F["Get Product 轮询 audit_status"]
+    E --> F["Get Product 看 audit.status"]
     F --> G["APPROVED → 上架可售"]
 ```
 
@@ -619,7 +642,7 @@ flowchart TD
 flowchart TD
     A["webhook ORDER_STATUS_CHANGE<br/>或 orders/search 轮询"] --> B["order/202507/orders 详情"]
     B --> C["packages/search 待发货包裹"]
-    C --> D["shipping_providers 选物流商"]
+    C --> D["delivery_options/{id}/shipping_providers"]
     D --> E["package/ship 申报发货"]
     E --> F["trackinfo / PACKAGE_UPDATE 跟踪"]
     B --> G["cancellation / return 审批"]
@@ -629,7 +652,7 @@ flowchart TD
 
 ### 4.4 对账
 
-`finance/payments` 拉结算单 → `finance/transactions` 按单查明细 → 与订单（收入）、售后（退款）三方核对；达人佣金走 Affiliate CAP 订单接口。
+`GET /finance/202309/statements` 拉结算单，明细走 `GET /finance/202501/statements/{statement_id}/statement_transactions` 或按订单的 `GET /finance/202501/orders/{order_id}/statement_transactions`。付款记录用 `GET /finance/202605/payments`（东南亚不可用）。达人佣金走 Affiliate 订单接口。
 
 ---
 
@@ -644,20 +667,21 @@ flowchart TD
 | 36004004 | auth_code 无效/已使用/过期 | 重新发起授权，code 单次 30 分钟 |
 | 36009033 | 请求 IP 不在应用白名单 | 控制台更新 IP 白名单 |
 | 36009003 | 平台内部错误 | 退避重试；持续失败提工单 |
-| 429 | 限流 | 按 Retry-After 退避 |
+| 36009004 | timestamp 超出有效窗口 | 用秒级 Unix 时间，窗口为当前时间前 5 分钟到后 30 秒 |
+| 36009002 | 限流（HTTP 同时可能是 429） | 按 `Retry-After` 退避；写操作只在有幂等键时重试 |
 
 ### 5.2 版本对照（本文收录版本）
 
 | 模块 | 版本 | 备注 |
 | --- | --- | --- |
-| authorization | 202309 | shops 查询 |
-| product | 202309 | create/edit/search/inventory |
-| order | 202309（search）/ 202507（detail） | detail 已有新版 202507 |
-| fulfillment | 202309 | packages/ship |
-| logistics | 202309 / 202606（模板检查） | |
-| return_refund | 202309 | |
-| finance | 202309 | |
-| event | 202309 | webhooks |
+| authorization | 202309 | shops |
+| product | 202309 创建/库存/上下架；202502 搜索；202509 编辑与局部编辑 | |
+| order | 202309 搜索；202507 详情（query `ids`） | |
+| fulfillment | 202309 | ship、面单 `GET .../packages/{package_id}/shipping_documents` |
+| logistics | 202309 仓库与承运商；202606 `seller_template/template_exist` | |
+| return_refund | 202309 同意退货与取消审批；202601 决策资格；202602 搜索；202606 拒绝退货 | |
+| finance | 202309 statements；202501 statement_transactions；202605 payments | |
+| event | 202309 | `address` + 单个 `event_type` |
 
 > 官方持续发布新日期版本（如 order 202507、logistics 202606、affiliate 202603）；升级版本时先读对应 Changelog，旧版本在废弃期后下线。
 
@@ -675,8 +699,8 @@ flowchart TD
 
 ### 5.4 维护说明
 
-- 官方文档站为 SPA，直接 HTTP 抓取拿不到正文；如需像 `dhgate_API.md` 一样做全量抓取，用 Playwright 渲染 `partner.tiktokshop.com/docv2/page/*` 后解析，抓取脚本可参照 `script/scrape_dhgate_open_docs.py` 改造。
-- 各接口的完整参数/枚举以官网详情页为准（本手册只收录联调高频字段）；发现字段缺失时优先查官网 + 实际回包校准，遵循「枚举勿编造」原则。
+- 全量英文稿在 `tts_API.md`，由 `script/scrape_tts_open_docs.py` 抓取、`script/generate_tts_api_md.py` 生成。本手册只保留联调用的路径、必填项和枚举。字段以 `tts_API.md` 对应接口页为准，不要补文档里没有的取值。
+- 文档站更新后先重跑抓取再改本手册。同一能力以抓取稿里带日期版本的现行 path 为准。
 
 ### 5.5 参考资料
 

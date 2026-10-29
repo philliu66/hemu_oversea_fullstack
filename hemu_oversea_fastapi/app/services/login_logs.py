@@ -1,14 +1,16 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import Pagination
 from app.core.security import Audience
+from app.models.supplier import Supplier
 from app.models.user import User
 from app.models.user_login_log import UserLoginLog
 from app.schemas.common import PageData
 from app.schemas.logs import LoginLogPublic, LoginLogStatItem
+from app.services.supplier_scope import log_supplier_scope_filters
 
 
 def open_session(
@@ -107,6 +109,9 @@ def close_open_sessions(
 def list_login_logs(
     db: Session,
     *,
+    actor: User,
+    keyword: str | None,
+    supplier_id: int | None,
     user_id: int | None,
     username: str | None,
     audience: str | None,
@@ -123,19 +128,45 @@ def list_login_logs(
         login_at_from=login_at_from,
         login_at_to=login_at_to,
     )
-    count_stmt = select(func.count()).select_from(UserLoginLog)
-    list_stmt = select(UserLoginLog)
+    filters.extend(
+        log_supplier_scope_filters(
+            db,
+            actor,
+            supplier_id,
+            UserLoginLog.supplier_id,
+        )
+    )
+    keyword_filter = _keyword_filter(keyword)
+    if keyword_filter is not None:
+        filters.append(keyword_filter)
+
+    count_stmt = (
+        select(func.count(UserLoginLog.id))
+        .select_from(UserLoginLog)
+        .outerjoin(User, User.id == UserLoginLog.user_id)
+    )
+    list_stmt = select(UserLoginLog, User).outerjoin(
+        User,
+        User.id == UserLoginLog.user_id,
+    )
     if filters:
         count_stmt = count_stmt.where(*filters)
         list_stmt = list_stmt.where(*filters)
     total = db.scalar(count_stmt) or 0
-    rows = db.scalars(
+    pairs = db.execute(
         list_stmt.order_by(UserLoginLog.login_at.desc(), UserLoginLog.id.desc())
         .offset(pagination.offset)
         .limit(pagination.page_size)
     ).all()
+    supplier_names = _load_supplier_names(
+        db,
+        {row.supplier_id for row, _user in pairs if row.supplier_id is not None},
+    )
     return PageData(
-        items=[_to_public(row) for row in rows],
+        items=[
+            _to_public(row, user=user, supplier_names=supplier_names)
+            for row, user in pairs
+        ],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -145,6 +176,8 @@ def list_login_logs(
 def stats_login_logs(
     db: Session,
     *,
+    actor: User,
+    supplier_id: int | None,
     grain: str,
     audience: str | None,
     login_at_from: datetime | None,
@@ -158,6 +191,14 @@ def stats_login_logs(
         ip=None,
         login_at_from=login_at_from,
         login_at_to=login_at_to,
+    )
+    filters.extend(
+        log_supplier_scope_filters(
+            db,
+            actor,
+            supplier_id,
+            UserLoginLog.supplier_id,
+        )
     )
     stats_stmt = select(
         trunc,
@@ -204,7 +245,33 @@ def _list_filters(
     return filters
 
 
-def _to_public(row: UserLoginLog) -> LoginLogPublic:
+def _keyword_filter(keyword: str | None):
+    text = (keyword or "").strip()
+    if not text:
+        return None
+    pattern = f"%{text}%"
+    return or_(
+        User.nickname.ilike(pattern),
+        User.email.ilike(pattern),
+        User.phone.ilike(pattern),
+    )
+
+
+def _load_supplier_names(db: Session, supplier_ids: set[int]) -> dict[int, str]:
+    if not supplier_ids:
+        return {}
+    rows = db.execute(
+        select(Supplier.id, Supplier.name).where(Supplier.id.in_(supplier_ids))
+    ).all()
+    return {row.id: row.name for row in rows}
+
+
+def _to_public(
+    row: UserLoginLog,
+    *,
+    user: User | None,
+    supplier_names: dict[int, str],
+) -> LoginLogPublic:
     end_at = row.logout_at or row.last_seen_at
     login_at = _as_utc(row.login_at)
     end_at_utc = _as_utc(end_at)
@@ -213,7 +280,13 @@ def _to_public(row: UserLoginLog) -> LoginLogPublic:
         id=row.id,
         user_id=row.user_id,
         username=row.username,
+        nickname=user.nickname if user is not None else None,
+        email=user.email if user is not None else None,
+        phone=user.phone if user is not None else None,
         supplier_id=row.supplier_id,
+        supplier_name=(
+            supplier_names.get(row.supplier_id) if row.supplier_id is not None else None
+        ),
         audience=row.audience,
         login_at=row.login_at,
         logout_at=row.logout_at,

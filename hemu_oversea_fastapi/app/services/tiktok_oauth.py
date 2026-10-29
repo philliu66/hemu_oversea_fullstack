@@ -474,6 +474,15 @@ def _success_message(shops: list[TiktokShopPayload]) -> str:
     return f"已同步 {len(shops)} 家店铺：{shown}{suffix}"
 
 
+def _resolve_callback_state(state: str | None) -> str | None:
+    """正式回调用 TikTok 带回的 state。测试店铺不带 state 时，改用环境变量里预留的值。"""
+    text = (state or "").strip()
+    if text and text not in {"null", "None"}:
+        return text
+    fallback = settings.TIKTOK_AUTH_TEST_STORE_STATE.strip()
+    return fallback or None
+
+
 def handle_oauth_callback(
     db: Session,
     *,
@@ -484,7 +493,7 @@ def handle_oauth_callback(
     if not code or code in {"null", "None"}:
         raise bad_request("缺少授权码 code")
 
-    supplier_id, actor_id = _consume_pending(db, state)
+    supplier_id, actor_id = _consume_pending(db, _resolve_callback_state(state))
     try:
         token_data = _exchange_code(code)
         _require_seller(token_data)

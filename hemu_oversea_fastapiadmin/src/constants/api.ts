@@ -120,6 +120,12 @@ export const AdminTemplateApi = {
   SKU_ATTR_LOOKUP: '/api/v1/admin/templates/dh/sku-attr-templates/lookup',
 } as const;
 
+/** 管理端系统日志 */
+export const AdminLogsApi = {
+  LOGIN_LIST: '/api/v1/admin/logs/login/list',
+  OPERATION_LIST: '/api/v1/admin/logs/operation/list',
+} as const;
+
 /** 管理端 SKU 相关路径 */
 export const AdminSkuApi = {
   BASE_INFO_LIST: '/api/v1/admin/sku/dh/base-info/list',

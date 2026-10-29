@@ -235,6 +235,26 @@ export default [
     ],
   },
   {
+    path: '/system',
+    name: '系统设置',
+    icon: 'setting',
+    routeId: 'system',
+    access: 'canAccessRoute',
+    routes: [
+      {
+        path: '/system',
+        redirect: '/system/logs',
+      },
+      {
+        path: '/system/logs',
+        name: '系统日志',
+        component: './system/logs',
+        routeId: 'system.logs',
+        access: 'canAccessRoute',
+      },
+    ],
+  },
+  {
     path: '/dev',
     name: '开发文档',
     component: './Dev',
