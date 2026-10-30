@@ -1,3 +1,4 @@
+from datetime import date as Date
 from datetime import datetime
 from typing import Any, Literal
 
@@ -43,9 +44,20 @@ class LoginLogPublic(BaseModel):
     login_at: datetime
     logout_at: datetime | None
     logout_reason: str | None
-    last_seen_at: datetime
+    last_seen_at: datetime = Field(description="最后一次计入的接口时间")
+    active_until: datetime | None = Field(
+        default=None,
+        description="本段活跃截止。未结束为空；空闲结束时为最后请求加上空闲分钟",
+    )
+    idle_minutes: int | None = Field(
+        default=None,
+        description="结束本段时采用的空闲阈值（分钟）",
+    )
+    activity_status: Literal["active", "idle", "ended"] = Field(
+        description="active 活跃中，idle 非活跃但未结束，ended 已结束",
+    )
     online_seconds: int = Field(
-        description="停留秒数。已登出时为登录到登出；未登出时估算到最近活跃",
+        description="活跃秒数。已结束时为登录到活跃截止；未结束时为登录到最后请求",
     )
     ip: str | None
     user_agent: str | None
@@ -72,6 +84,73 @@ class LoginLogStatItem(BaseModel):
     bucket: datetime = Field(description="时间桶起点")
     login_count: int
     unique_user_count: int
+
+
+class LoginActivityUserQuery(BaseModel):
+    supplier_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="供应商 ID。平台账号必填；供应商账号忽略此值",
+    )
+
+
+class LoginActivityUserOption(BaseModel):
+    id: int
+    username: str
+    nickname: str
+    email: str | None = None
+    phone: str | None = None
+
+
+class LoginActivitySummaryQuery(BaseModel):
+    user_id: int = Field(ge=1, description="用户 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="供应商 ID。平台账号必填，且须与该用户所属供应商一致",
+    )
+    time_from: datetime = Field(description="开始时间（含）")
+    time_to: datetime = Field(description="结束时间（不含该时刻之后）")
+
+
+class LoginActivityDay(BaseModel):
+    date: Date
+    active_minutes: int = Field(description="当天活跃分钟，四舍五入")
+
+
+class LoginActivitySummary(BaseModel):
+    user_id: int
+    nickname: str
+    username: str
+    time_from: datetime
+    time_to: datetime
+    total_minutes: int
+    days: list[LoginActivityDay]
+
+
+class LoginActivityTimelineQuery(BaseModel):
+    user_id: int = Field(ge=1, description="用户 ID")
+    supplier_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="供应商 ID。平台账号必填，且须与该用户所属供应商一致",
+    )
+    time_from: datetime = Field(description="开始时间（含）")
+    time_to: datetime = Field(description="结束时间")
+
+
+class LoginActivitySpan(BaseModel):
+    start: datetime
+    end: datetime
+    active_minutes: int
+    activity_status: Literal["active", "idle", "ended"]
+
+
+class LoginActivityTimeline(BaseModel):
+    time_from: datetime
+    time_to: datetime
+    total_minutes: int
+    spans: list[LoginActivitySpan]
 
 
 class OperationLogList(BaseModel):

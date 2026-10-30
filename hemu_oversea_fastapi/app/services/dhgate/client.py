@@ -13,7 +13,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.errors import bad_request
+from app.core.errors import AppError, bad_request
 from app.models.store import Store
 from app.services.dhgate.oauth import (
     DHGATE_HTTP_HEADERS,
@@ -191,9 +191,33 @@ class DhgateClient:
                 method,
                 api_url,
             )
+            self._record_call(
+                method=method,
+                version=version,
+                http_method=http_method,
+                request_params=request_params,
+                http_status=0,
+                response_body={"error": str(exc)},
+            )
             raise bad_request(f"请求敦煌 API 失败: {exc}") from exc
 
-        data = parse_http_response(response)
+        try:
+            data = parse_http_response(response)
+        except AppError as exc:
+            body_text = ""
+            try:
+                body_text = response.text[:4000]
+            except Exception:  # noqa: BLE001
+                body_text = ""
+            self._record_call(
+                method=method,
+                version=version,
+                http_method=http_method,
+                request_params=request_params,
+                http_status=response.status_code,
+                response_body={"parse_error": exc.message, "body": body_text},
+            )
+            raise
         self._record_call(
             method=method,
             version=version,

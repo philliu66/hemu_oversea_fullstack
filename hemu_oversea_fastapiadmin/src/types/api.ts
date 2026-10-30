@@ -1059,9 +1059,49 @@ export type LoginLogPublic = {
   logout_at: string | null;
   logout_reason: string | null;
   last_seen_at: string;
+  active_until: string | null;
+  idle_minutes: number | null;
+  activity_status: 'active' | 'idle' | 'ended';
   online_seconds: number;
   ip: string | null;
   created_at: string;
+};
+
+export type LoginActivityUserOption = {
+  id: number;
+  username: string;
+  nickname: string;
+  email: string | null;
+  phone: string | null;
+};
+
+export type LoginActivityDay = {
+  date: string;
+  active_minutes: number;
+};
+
+export type LoginActivitySummary = {
+  user_id: number;
+  nickname: string;
+  username: string;
+  time_from: string;
+  time_to: string;
+  total_minutes: number;
+  days: LoginActivityDay[];
+};
+
+export type LoginActivitySpan = {
+  start: string;
+  end: string;
+  active_minutes: number;
+  activity_status: LoginLogPublic['activity_status'];
+};
+
+export type LoginActivityTimeline = {
+  time_from: string;
+  time_to: string;
+  total_minutes: number;
+  spans: LoginActivitySpan[];
 };
 
 export type OperationLogPublic = {

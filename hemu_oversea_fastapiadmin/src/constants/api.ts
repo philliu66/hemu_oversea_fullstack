@@ -123,6 +123,9 @@ export const AdminTemplateApi = {
 /** 管理端系统日志 */
 export const AdminLogsApi = {
   LOGIN_LIST: '/api/v1/admin/logs/login/list',
+  LOGIN_ACTIVITY_USERS: '/api/v1/admin/logs/login/activity/users',
+  LOGIN_ACTIVITY_SUMMARY: '/api/v1/admin/logs/login/activity/summary',
+  LOGIN_ACTIVITY_TIMELINE: '/api/v1/admin/logs/login/activity/timeline',
   OPERATION_LIST: '/api/v1/admin/logs/operation/list',
 } as const;
 

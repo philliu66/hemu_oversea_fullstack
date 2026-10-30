@@ -120,6 +120,18 @@ alwaysApply: true
 
 ---
 
+## 登录日志切段
+
+一行是一段连续活跃，不是一次开关浏览器，也不是一次换票。
+
+- 已登录接口和换票用同一套判断，看距离该未结束行的 `last_seen_at`。不足 `LOGIN_LOG_TOUCH_MINUTES`（默认 5）不写库；达到节流、未到空闲只更新 `last_seen_at`；达到 `LOGIN_LOG_IDLE_MINUTES`（默认 15）则结束旧行并新开一行。
+- 换票先做上面的判断，再轮换 `refresh_jti`。access 到期本身不新开记录。
+- 空闲结束时 `last_seen_at` 保持最后一次计入的请求，`active_until = last_seen_at + 空闲分钟`，`logout_reason = idle`。活跃时长用 `active_until - login_at`。未结束时用 `last_seen_at - login_at`。
+- 密码登录、主动退出、全部退出、改密码立刻结束，不看阈值，也不改 `last_seen_at`。被新的密码登录踢掉时，`active_until` 取关闭时刻和「最后请求 + 空闲分钟」里较早的那个。全部退出和改密码不先切段。
+- 不做定时收口。人离开后不再请求时，行保持未结束，列表按间隔显示非活跃。
+
+---
+
 ## 敦煌开放平台调用失败
 
 业务接口只要调用了敦煌开放平台（`dop/router` 及换 token），敦煌返回错误时，该业务接口即为失败，并把敦煌 body 里的 `message` 作为错误提示返回。HTTP 200 不能单独当成成功；body 的 `code` 不是成功码（`00000000` / `0`），或 HTTP 状态大于等于 400，都按失败处理。

@@ -139,15 +139,21 @@ def refresh_for_audience(
     if user.role not in _AUDIENCE_ROLES[audience]:
         raise unauthorized()
 
-    old_jti = payload.jti
-    session.revoked_at = now
-    tokens, new_jti = issue_tokens(db, user, audience, ip=ip, user_agent=user_agent)
-    login_logs.touch_session(
+    login_logs.note_activity(
         db,
-        old_jti=old_jti,
-        new_jti=new_jti,
+        user=user,
+        audience=audience,
         ip=ip,
         user_agent=user_agent,
+        refresh_jti=payload.jti,
+    )
+    session.revoked_at = now
+    tokens, new_jti = issue_tokens(db, user, audience, ip=ip, user_agent=user_agent)
+    login_logs.rotate_open_jti(
+        db,
+        user_id=user.id,
+        audience=audience,
+        new_jti=new_jti,
     )
     db.commit()
     return tokens

@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_WINDOW_MINUTES: int = 15
+    # 登录日志：距上次计入的活跃不足该分钟数则不写库
+    LOGIN_LOG_TOUCH_MINUTES: int = 5
+    # 登录日志：距上次计入的活跃达到该分钟数则结束本段并新开
+    LOGIN_LOG_IDLE_MINUTES: int = 15
     CAPTCHA_LENGTH: int = 4
     CAPTCHA_EXPIRE_SECONDS: int = 300
     BOOTSTRAP_PASSWORD: str = "123456"

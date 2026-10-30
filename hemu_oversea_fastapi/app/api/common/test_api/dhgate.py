@@ -7,11 +7,17 @@ OpenAPI 标签：common:testAPI:dhgate。/docs 中单店接口在前，多店编
 - result: 业务结果
 - raw: 最近一次敦煌原始响应
 - raw_calls: 本次请求内全部调用明细
+
+敦煌调用失败时，错误响应 data 里同样带上 raw 与 raw_calls。
 """
 
 from __future__ import annotations
 
+import inspect
 import time
+from collections.abc import Callable
+from contextvars import ContextVar
+from functools import wraps
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
@@ -78,10 +84,75 @@ router = APIRouter(
 )
 
 
+_tracked_clients: ContextVar[list[DhgateClient] | None] = ContextVar(
+    "dhgate_single_test_clients",
+    default=None,
+)
+
+
+def _remember_client(client: DhgateClient) -> DhgateClient:
+    bucket = _tracked_clients.get()
+    if bucket is not None:
+        bucket.append(client)
+    return client
+
+
 def _test_client(db: Session, store_id: int) -> DhgateClient:
     client = get_dhgate_client(db, store_id)
     client.clear_call_history()
-    return client
+    return _remember_client(client)
+
+
+def _raw_bundle(clients: list[DhgateClient]) -> dict[str, Any]:
+    raw_calls: list[dict[str, Any]] = []
+    last_raw: dict[str, Any] | None = None
+    for client in clients:
+        raw_calls.extend(client.call_history)
+        if client.last_raw is not None:
+            last_raw = client.last_raw
+    return {"raw": last_raw, "raw_calls": raw_calls}
+
+
+def _error_with_raw_calls(exc: AppError, clients: list[DhgateClient]) -> AppError:
+    """失败响应补上本次已发生的敦煌原始调用；调用方已自行放入时不覆盖。"""
+    if not clients:
+        return exc
+    data = dict(exc.data) if isinstance(exc.data, dict) else {}
+    if "raw_calls" in data:
+        return exc
+    data.update(_raw_bundle(clients))
+    return AppError(exc.status_code, exc.code, exc.message, data)
+
+
+def _expose_raw_on_error(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """单店联调：敦煌报错时把 raw / raw_calls 放进错误 data。"""
+
+    if inspect.iscoroutinefunction(fn):
+        @wraps(fn)
+        async def async_wrapped(*args: Any, **kwargs: Any) -> Any:
+            bucket: list[DhgateClient] = []
+            token = _tracked_clients.set(bucket)
+            try:
+                return await fn(*args, **kwargs)
+            except AppError as exc:
+                raise _error_with_raw_calls(exc, bucket) from exc
+            finally:
+                _tracked_clients.reset(token)
+
+        return async_wrapped
+
+    @wraps(fn)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        bucket: list[DhgateClient] = []
+        token = _tracked_clients.set(bucket)
+        try:
+            return fn(*args, **kwargs)
+        except AppError as exc:
+            raise _error_with_raw_calls(exc, bucket) from exc
+        finally:
+            _tracked_clients.reset(token)
+
+    return wrapped
 
 
 def success_with_dhgate_raw(
@@ -103,6 +174,7 @@ def success_with_dhgate_raw(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][处罚] 第三方投诉处罚列表（dh.punish.brand.list.get$1.0）",
 )
+@_expose_raw_on_error
 def test_list_punish_brand(
     payload: PunishBrandListTestRequest,
     db: Session = Depends(get_db),
@@ -138,6 +210,7 @@ def test_list_punish_brand(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][处罚] 卖家处罚记录（dh.punish.list.get$1.0）",
 )
+@_expose_raw_on_error
 def test_list_punish(
     payload: PunishListTestRequest,
     db: Session = Depends(get_db),
@@ -177,6 +250,7 @@ def test_list_punish(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][纠纷][v1] 进行中纠纷订单列表（dh.dispute.processing.list$1.0）",
 )
+@_expose_raw_on_error
 def test_list_dispute_processing(
     payload: DisputeProcessingListTestRequest,
     db: Session = Depends(get_db),
@@ -218,6 +292,7 @@ def test_list_dispute_processing(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][纠纷][v2] 纠纷开启订单列表（dh.order.disputeopen.list$2.0）",
 )
+@_expose_raw_on_error
 def test_list_order_dispute_open(
     payload: OrderDisputeOpenListTestRequest,
     db: Session = Depends(get_db),
@@ -271,6 +346,7 @@ def test_list_order_dispute_open(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][数据] 数据概览核心指标（dh.wis.core.info$1.0）",
 )
+@_expose_raw_on_error
 def test_wis_core_info(
     payload: WisCoreInfoTestRequest,
     db: Session = Depends(get_db),
@@ -311,6 +387,7 @@ def test_wis_core_info(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][数据] 商品分析-产品详情（dh.wis.detail.page$1.0）",
 )
+@_expose_raw_on_error
 def test_wis_detail_page(
     payload: WisDetailPageTestRequest,
     db: Session = Depends(get_db),
@@ -354,6 +431,7 @@ def test_wis_detail_page(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][数据] 关键词 TOP（dh.wis.keywordtop10.info$1.0）",
 )
+@_expose_raw_on_error
 def test_wis_keywordtop10(
     payload: WisKeywordTop10TestRequest,
     db: Session = Depends(get_db),
@@ -392,6 +470,7 @@ def test_wis_keywordtop10(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][广告] 广告消耗-订单维度（dh.seller.ad.order.report.page$1.0）",
 )
+@_expose_raw_on_error
 def test_seller_ad_order_report(
     payload: SellerAdReportTestRequest,
     db: Session = Depends(get_db),
@@ -434,6 +513,7 @@ def test_seller_ad_order_report(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][广告] 广告消耗-产品维度（dh.seller.ad.prod.report.page$1.0）",
 )
+@_expose_raw_on_error
 def test_seller_ad_prod_report(
     payload: SellerAdReportTestRequest,
     db: Session = Depends(get_db),
@@ -476,6 +556,7 @@ def test_seller_ad_prod_report(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][类目] 发布类目递归入库（dh.category.list$2.0）",
 )
+@_expose_raw_on_error
 def test_list_categories(
     payload: CategoryListTestRequest,
     db: Session = Depends(get_db),
@@ -513,6 +594,7 @@ def test_list_categories(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][公共] 计件单位全量入库（dh.base.measures.get$1.0）",
 )
+@_expose_raw_on_error
 def test_sync_measures_units(
     payload: MeasuresListTestRequest,
     db: Session = Depends(get_db),
@@ -542,6 +624,7 @@ def test_sync_measures_units(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][类目] 类目佣金率全量入库（dh.categorys.commissions$1.0）",
 )
+@_expose_raw_on_error
 def test_sync_commission_rates(
     payload: CommissionRateListTestRequest,
     db: Session = Depends(get_db),
@@ -571,6 +654,7 @@ def test_sync_commission_rates(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][类目] 类目详情与属性（dh.category.get$2.0）",
 )
+@_expose_raw_on_error
 def test_get_category(
     payload: CategoryGetTestRequest,
     db: Session = Depends(get_db),
@@ -601,6 +685,7 @@ def test_get_category(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][类目] 类目路径（dh.category.path.get$2.0）",
 )
+@_expose_raw_on_error
 def test_get_category_path(
     payload: CategoryPathGetTestRequest,
     db: Session = Depends(get_db),
@@ -629,6 +714,7 @@ def test_get_category_path(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][商品] 产品详情（dh.item.get$2.0）",
 )
+@_expose_raw_on_error
 def test_get_item(
     payload: ItemGetTestRequest,
     db: Session = Depends(get_db),
@@ -664,6 +750,7 @@ def test_get_item(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][商品] 上架/下架（dh.item.upshelf.list / downshelf.list$2.0）",
 )
+@_expose_raw_on_error
 def test_item_shelf(
     payload: ItemShelfTestRequest,
     db: Session = Depends(get_db),
@@ -717,6 +804,7 @@ def test_item_shelf(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][产品组] 产品组列表（dh.item.group.list$2.0）",
 )
+@_expose_raw_on_error
 def test_list_item_groups(
     payload: ItemGroupListTestRequest,
     db: Session = Depends(get_db),
@@ -758,6 +846,7 @@ def test_list_item_groups(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][商品] 产品长描（dh.item.html.get / dh.product.html.get）",
 )
+@_expose_raw_on_error
 def test_get_item_html(
     payload: ItemGetTestRequest,
     db: Session = Depends(get_db),
@@ -792,6 +881,7 @@ def test_get_item_html(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][相册] 微调产品主图并上传（dh.album.img.upload$2.1）",
 )
+@_expose_raw_on_error
 async def test_tweak_main_image(
     db: Session = Depends(get_db),
     store_id: int = Form(
@@ -868,6 +958,7 @@ async def test_tweak_main_image(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][售后] 售后模板列表（dh.item.aftersale.list$2.0）",
 )
+@_expose_raw_on_error
 def test_list_item_aftersale(
     payload: ItemAftersaleListTestRequest,
     db: Session = Depends(get_db),
@@ -891,6 +982,7 @@ def test_list_item_aftersale(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][物流] 运费模板列表（dh.shipping.template.list$2.0）",
 )
+@_expose_raw_on_error
 def test_list_shipping_templates(
     payload: ShippingTemplateListTestRequest,
     db: Session = Depends(get_db),
@@ -927,6 +1019,7 @@ def _fission_raw_bundle(
     response_model=ApiResponse[dict[str, Any]],
     summary="[联调][单店][商品] 裂变发布（源店 dh.item.get + 目标店 dh.item.add$2.0）",
 )
+@_expose_raw_on_error
 def test_fission_add_item(
     payload: ItemFissionAddTestRequest,
     db: Session = Depends(get_db),
@@ -993,6 +1086,7 @@ def test_fission_add_item(
     def _target_client() -> DhgateClient:
         client = get_dhgate_client(db, payload.target_store_id)
         client.clear_call_history()
+        _remember_client(client)
         target_holder["client"] = client
         return client
 

@@ -1,10 +1,11 @@
-from fastapi import Depends, Query
+from fastapi import Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.errors import forbidden, unauthorized
+from app.core.request_meta import client_meta
 from app.core.roles import (
     ADMIN_PORTAL_ROLES,
     APP_PORTAL_ROLES,
@@ -17,6 +18,7 @@ from app.services import permissions as perm_service
 _bearer = HTTPBearer(auto_error=False)
 _STAFF_ROLE_VALUES = {role.value for role in ADMIN_PORTAL_ROLES}
 _APP_ROLE_VALUES = {role.value for role in APP_PORTAL_ROLES}
+_SKIP_ACTIVITY_SUFFIXES = ("/auth/logout-all", "/auth/password")
 
 
 class Pagination(BaseModel):
@@ -39,11 +41,13 @@ def _user_from_access(
     creds: HTTPAuthorizationCredentials | None,
     db: Session,
     audience: Audience | tuple[Audience, ...],
+    request: Request | None = None,
 ) -> User:
     if creds is None or not creds.credentials:
         raise unauthorized()
     try:
-        user_id = int(decode_token(creds.credentials, "access", audience).subject)
+        payload = decode_token(creds.credentials, "access", audience)
+        user_id = int(payload.subject)
     except (TokenError, ValueError):
         raise unauthorized()
 
@@ -52,35 +56,62 @@ def _user_from_access(
         raise unauthorized()
     if not user.is_active:
         raise unauthorized("账号已停用")
+    if request is not None and payload.audience in {"admin", "app"}:
+        _note_login_activity(request, db, user, payload.audience)
     return user
 
 
+def _note_login_activity(
+    request: Request,
+    db: Session,
+    user: User,
+    audience: Audience,
+) -> None:
+    path = request.url.path.rstrip("/")
+    if path.endswith(_SKIP_ACTIVITY_SUFFIXES):
+        return
+    from app.services import login_logs
+
+    ip, user_agent = client_meta(request)
+    if login_logs.note_activity(
+        db,
+        user=user,
+        audience=audience,
+        ip=ip,
+        user_agent=user_agent,
+    ):
+        db.commit()
+
+
 def get_current_app_user(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    user = _user_from_access(creds, db, "app")
+    user = _user_from_access(creds, db, "app", request)
     if user.role not in _APP_ROLE_VALUES:
         raise unauthorized()
     return user
 
 
 def get_current_admin_user(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    user = _user_from_access(creds, db, "admin")
+    user = _user_from_access(creds, db, "admin", request)
     if user.role not in _STAFF_ROLE_VALUES:
         raise unauthorized()
     return user
 
 
 def get_current_account(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
     """App 或管理端 access 均可。用于 /common 下两端同权接口。"""
-    return _user_from_access(creds, db, ("app", "admin"))
+    return _user_from_access(creds, db, ("app", "admin"), request)
 
 
 def require_roles(*roles: Role):
